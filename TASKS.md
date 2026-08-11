@@ -25,7 +25,7 @@
 - [x] T-112 Motore entropia + soglia configurabile — done: test
       (regressione risolta: ERR-2026-08-11-06, test demo isolato da esempio tracciato)
 - [x] T-113 Scan della history Git — done: test su repo fixture
-- [ ] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
+- [x] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
 - [ ] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
 
 ## ⏳ Backlog — W2..W4
