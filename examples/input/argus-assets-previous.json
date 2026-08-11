@@ -1,0 +1,60 @@
+[
+  {
+    "asset_id": "AST-2026-00001",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-04T09:00:00Z",
+    "hostname": "olympusdemocorp.example",
+    "ip_addresses": [
+      "203.0.113.5"
+    ],
+    "last_seen": "2026-08-04T09:00:00Z",
+    "metadata": {
+      "spf": "v=spf1 include:_spf.olympusdemocorp.example ~all"
+    },
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "dns-recon"
+    ]
+  },
+  {
+    "asset_id": "AST-2026-00002",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-04T09:00:00Z",
+    "hostname": "www.olympusdemocorp.example",
+    "ip_addresses": [],
+    "last_seen": "2026-08-04T09:00:00Z",
+    "metadata": {},
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "certificate-transparency"
+    ]
+  },
+  {
+    "asset_id": "AST-2026-00003",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-04T09:00:00Z",
+    "hostname": "mail.olympusdemocorp.example",
+    "ip_addresses": [],
+    "last_seen": "2026-08-04T09:00:00Z",
+    "metadata": {},
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "certificate-transparency"
+    ]
+  }
+]

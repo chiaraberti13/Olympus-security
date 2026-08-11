@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from olympus.argus.assets import build_assets, export_assets, load_assets
 from olympus.argus.ct import CrtShClient, CtQueryError, CtRecon, enumerate_subdomains
+from olympus.argus.demo_data import DEMO_DOMAIN, DemoCtClient, DemoResolver
 from olympus.argus.diff import diff_snapshots
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
@@ -22,6 +23,8 @@ app = typer.Typer(
 
 DEFAULT_SCOPE_PATH = Path("examples/input/argus-scope.json")
 DEFAULT_BLOCK_LOG_PATH = Path("examples/output/argus-blocked.log")
+DEMO_ASSETS_OUTPUT_PATH = Path("examples/output/argus-assets.json")
+DEMO_PREVIOUS_ASSETS_PATH = Path("examples/input/argus-assets-previous.json")
 
 
 @app.command()
@@ -96,6 +99,28 @@ def diff_command(
 
 @app.command()
 def demo() -> None:
-    """Run a self-contained demo on the synthetic 'Olympus Demo Corp' dataset."""
-    # NOTE: scaffold only. The development loop implements this command.
-    typer.echo("argus: demo not implemented yet (scaffold).")
+    """Run the full Argus pipeline on the synthetic 'Olympus Demo Corp' dataset.
+
+    Fully offline and deterministic: DNS and Certificate Transparency are
+    served from :mod:`olympus.argus.demo_data` instead of the network, but
+    every other step (scope enforcement, recon, asset export, change
+    monitoring) is the real production code path used by ``argus scan``.
+    """
+    typer.echo(f"argus: demo — passive recon on {DEMO_DOMAIN} (Olympus Demo Corp, synthetic)")
+    enforce_scope(DEMO_DOMAIN, DEFAULT_SCOPE_PATH, DEFAULT_BLOCK_LOG_PATH)
+
+    dns_result = scan_domain(DEMO_DOMAIN, DemoResolver())
+    ct_result = enumerate_subdomains(DEMO_DOMAIN, DemoCtClient())
+
+    recon_output = dns_result.to_dict()
+    recon_output["subdomains"] = ct_result.subdomains
+    typer.echo(json.dumps(recon_output, indent=2, sort_keys=True))
+
+    assets = build_assets(dns_result, ct_result)
+    export_assets(assets, DEMO_ASSETS_OUTPUT_PATH)
+    typer.echo(f"argus: wrote {len(assets)} asset(s) to {DEMO_ASSETS_OUTPUT_PATH}")
+
+    previous_assets = load_assets(DEMO_PREVIOUS_ASSETS_PATH)
+    change_report = diff_snapshots(previous_assets, assets)
+    typer.echo(f"argus: change monitoring vs {DEMO_PREVIOUS_ASSETS_PATH}:")
+    typer.echo(json.dumps(change_report.to_dict(), indent=2, sort_keys=True))

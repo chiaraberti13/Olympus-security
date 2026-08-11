@@ -27,14 +27,19 @@ def test_export_schemas_outputs_valid_json() -> None:
 
 
 def test_tool_demo_stub_runs() -> None:
-    result = runner.invoke(app, ["argus", "demo"])
+    result = runner.invoke(app, ["helios", "demo"])
     assert result.exit_code == 0
     assert "not implemented" in result.stdout
 
 
-def test_all_tool_demos_run() -> None:
+def test_argus_demo_runs_the_real_pipeline() -> None:
+    result = runner.invoke(app, ["argus", "demo"])
+    assert result.exit_code == 0, result.output
+    assert "olympusdemocorp.example" in result.stdout
+
+
+def test_remaining_tool_demos_are_still_stubs() -> None:
     for tool in (
-        "argus",
         "helios",
         "artemis",
         "proteus",

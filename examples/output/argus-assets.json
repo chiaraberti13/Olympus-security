@@ -1,0 +1,81 @@
+[
+  {
+    "asset_id": "AST-2026-00031",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-11T13:09:11.244661Z",
+    "hostname": "olympusdemocorp.example",
+    "ip_addresses": [
+      "203.0.113.10",
+      "2001:db8::10"
+    ],
+    "last_seen": "2026-08-11T13:09:11.244664Z",
+    "metadata": {
+      "dmarc": "v=DMARC1; p=reject; rua=mailto:dmarc@olympusdemocorp.example",
+      "mx_records": "10 mail.olympusdemocorp.example",
+      "spf": "v=spf1 include:_spf.olympusdemocorp.example ~all"
+    },
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "dns-recon"
+    ]
+  },
+  {
+    "asset_id": "AST-2026-00032",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-11T13:09:11.244687Z",
+    "hostname": "mail.olympusdemocorp.example",
+    "ip_addresses": [],
+    "last_seen": "2026-08-11T13:09:11.244688Z",
+    "metadata": {},
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "certificate-transparency"
+    ]
+  },
+  {
+    "asset_id": "AST-2026-00033",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-11T13:09:11.244701Z",
+    "hostname": "vpn.olympusdemocorp.example",
+    "ip_addresses": [],
+    "last_seen": "2026-08-11T13:09:11.244702Z",
+    "metadata": {},
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "certificate-transparency"
+    ]
+  },
+  {
+    "asset_id": "AST-2026-00034",
+    "asset_type": "domain",
+    "criticality": "medium",
+    "first_seen": "2026-08-11T13:09:11.244713Z",
+    "hostname": "www.olympusdemocorp.example",
+    "ip_addresses": [],
+    "last_seen": "2026-08-11T13:09:11.244714Z",
+    "metadata": {},
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "certificate-transparency"
+    ]
+  }
+]
