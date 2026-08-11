@@ -68,3 +68,17 @@
   combinato
 - Fix: asserzioni sui messaggi di errore spostate su `result.output` invece di `result.stdout`
 - Test di regressione / Regression test: `pytest` nel gate CI
+
+### ERR-2026-08-11-05 — `argus scan` va in crash se il lookup CT (crt.sh) fallisce
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-102, smoke test manuale di `olympus argus scan --domain` in questo
+  ambiente (egress verso crt.sh bloccato dalla policy del proxy: 403 sul CONNECT)
+- Sintomo / Symptom: `CtQueryError` non catturato in `argus/cli.py` → traceback completo,
+  comando termina con exit code 1, e la recon DNS (comunque valida) viene persa
+- Causa / Cause: la lookup CT è stata trattata come dipendenza rigida invece che come fonte
+  OSINT ausiliaria e best-effort; nessun modulo offensivo deve smettere di funzionare per un
+  problema di rete su una singola fonte passiva
+- Fix: `scan` ora cattura `CtQueryError`, stampa un warning su stderr e continua con
+  `subdomains: []`, preservando l'output DNS/MX/SPF/DMARC già raccolto
+- Test di regressione / Regression test: `test_scan_survives_ct_lookup_failure` in
+  `test_argus_cli_scan.py`

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from olympus.argus.ct import CrtShClient, CtQueryError, enumerate_subdomains
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
@@ -44,8 +45,19 @@ def scan(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    result = scan_domain(domain, DnspythonResolver())
-    typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    dns_result = scan_domain(domain, DnspythonResolver())
+
+    subdomains: list[str] = []
+    try:
+        subdomains = enumerate_subdomains(domain, CrtShClient()).subdomains
+    except CtQueryError as exc:
+        # CT lookup is an auxiliary, best-effort source: a network hiccup or
+        # a blocked egress must not fail the whole (otherwise valid) DNS scan.
+        typer.echo(f"argus: warning: certificate transparency lookup failed: {exc}", err=True)
+
+    output = dns_result.to_dict()
+    output["subdomains"] = subdomains
+    typer.echo(json.dumps(output, indent=2, sort_keys=True))
 
 
 @app.command()
