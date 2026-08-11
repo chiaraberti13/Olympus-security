@@ -7,7 +7,8 @@ from pathlib import Path
 
 import typer
 
-from olympus.argus.ct import CrtShClient, CtQueryError, enumerate_subdomains
+from olympus.argus.assets import build_assets, export_assets
+from olympus.argus.ct import CrtShClient, CtQueryError, CtRecon, enumerate_subdomains
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
@@ -34,6 +35,11 @@ def scan(
         "--log",
         help="Path to the out-of-scope audit log.",
     ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        help="If set, also export discovered hosts as core.Asset JSON to this path.",
+    ),
 ) -> None:
     """Run passive DNS/MX/SPF/DMARC recon against a single in-scope domain."""
     try:
@@ -47,17 +53,22 @@ def scan(
 
     dns_result = scan_domain(domain, DnspythonResolver())
 
-    subdomains: list[str] = []
+    ct_result = CtRecon(domain=domain)
     try:
-        subdomains = enumerate_subdomains(domain, CrtShClient()).subdomains
+        ct_result = enumerate_subdomains(domain, CrtShClient())
     except CtQueryError as exc:
         # CT lookup is an auxiliary, best-effort source: a network hiccup or
         # a blocked egress must not fail the whole (otherwise valid) DNS scan.
         typer.echo(f"argus: warning: certificate transparency lookup failed: {exc}", err=True)
 
-    output = dns_result.to_dict()
-    output["subdomains"] = subdomains
-    typer.echo(json.dumps(output, indent=2, sort_keys=True))
+    result = dns_result.to_dict()
+    result["subdomains"] = ct_result.subdomains
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+    if output is not None:
+        assets = build_assets(dns_result, ct_result)
+        export_assets(assets, output)
+        typer.echo(f"argus: wrote {len(assets)} asset(s) to {output}", err=True)
 
 
 @app.command()

@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from olympus.argus import cli as argus_cli
 from olympus.argus.ct import CtQueryError
 from olympus.cli import app
+from olympus.core.models import Asset
 
 runner = CliRunner()
 
@@ -91,6 +92,37 @@ def test_scan_survives_ct_lookup_failure(
     assert payload["domain"] == DOMAIN
     assert payload["a_records"] == ["203.0.113.10"]
     assert payload["subdomains"] == []
+
+
+def test_scan_with_output_exports_valid_core_assets(tmp_path: Path) -> None:
+    scope_path = _write_scope(tmp_path / "scope.json")
+    log_path = tmp_path / "blocked.log"
+    assets_path = tmp_path / "out" / "argus-assets.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "argus",
+            "scan",
+            "--domain",
+            DOMAIN,
+            "--scope",
+            str(scope_path),
+            "--log",
+            str(log_path),
+            "--output",
+            str(assets_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert assets_path.exists()
+
+    raw = json.loads(assets_path.read_text(encoding="utf-8"))
+    assets = [Asset.model_validate(item) for item in raw]
+    hostnames = {asset.hostname for asset in assets}
+    assert DOMAIN in hostnames
+    assert f"www.{DOMAIN}" in hostnames
 
 
 def test_scan_out_of_scope_domain_is_blocked_and_logged(tmp_path: Path) -> None:
