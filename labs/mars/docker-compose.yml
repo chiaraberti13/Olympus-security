@@ -1,0 +1,9 @@
+# Mars — cyber range (scaffold). The development loop (W4) builds the segmented
+# target environment and the purple-team scenarios. Synthetic data only.
+services:
+  target-web:
+    image: nginx:alpine
+    # Placeholder target. Replaced by the W4 vulnerable-by-design app.
+    networks: [dmz]
+networks:
+  dmz:
