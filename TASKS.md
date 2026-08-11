@@ -21,7 +21,7 @@
 - [x] T-105 README modulo bilingue + `argus demo` reale — done: demo esce 0
 
 ### Hermes (🔵 Secret scanner)
-- [ ] T-111 Motore regex + prefissi noti (AWS, GitHub, JWT...) — done: test veri/falsi positivi
+- [x] T-111 Motore regex + prefissi noti (AWS, GitHub, JWT...) — done: test veri/falsi positivi
 - [ ] T-112 Motore entropia + soglia configurabile — done: test
 - [ ] T-113 Scan della history Git — done: test su repo fixture
 - [ ] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
