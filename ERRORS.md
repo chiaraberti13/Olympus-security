@@ -26,3 +26,45 @@
 - Causa / Cause: mancavano test su ValidationReport e sui comandi `demo`
 - Fix: aggiunti test_core_errors + loop sui demo; pragma no-cover su entry-point
 - Test di regressione / Regression test: coverage ora 98.7% nel gate CI
+
+### ERR-2026-08-11-01 — `make check` verde solo per caso: `mypy`/`pytest` di PATH isolati dal venv
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-101, primo `make check` in questo ambiente
+- Sintomo / Symptom: `mypy .` → "No module named 'pydantic'"; `pytest` → "unrecognized arguments
+  --cov=...". I binari `mypy`/`pytest` su `$PATH` risolvevano a installazioni `uv tool` isolate,
+  non all'ambiente Python dove `pip install -e ".[dev]"` aveva installato le dipendenze
+- Causa / Cause: `Makefile` invocava `mypy`/`pytest`/`ruff` per nome, dipendendo dall'ordine di
+  `$PATH` invece che dall'interprete del progetto
+- Fix: `Makefile` ora usa `$(PYTHON) -m {ruff,mypy,pytest}` (variabile `PYTHON ?= python`),
+  indipendente da `$PATH`
+- Test di regressione / Regression test: `make check` verde in questo ambiente
+
+### ERR-2026-08-11-02 — Ruff B008: `typer.Option(...)` come default di funzione
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-101, `argus scan --domain/--scope/--log`
+- Sintomo / Symptom: `ruff check` segnala B008 sulle chiamate `typer.Option()` nei default
+- Causa / Cause: B008 non conosce di default il pattern idiomatico di Typer (chiamata
+  intenzionale a ogni definizione di comando, non un mutable-default reale)
+- Fix: `tool.ruff.lint.flake8-bugbear.extend-immutable-calls = ["typer.Option", "typer.Argument"]`
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-11-03 — Mypy strict: costruttori di eccezione `dnspython` non tipizzati
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-101, test di `DnspythonResolver` (NXDOMAIN/NoAnswer/Timeout)
+- Sintomo / Symptom: "Call to untyped function ... in typed context" pur avendo `dnspython`
+  un marker `py.typed`
+- Causa / Cause: `dns.resolver.NXDOMAIN.__init__`/`NoAnswer.__init__`/`Timeout.__init__` sono
+  dichiarati `(self, *args, **kwargs)` senza annotazioni — gap noto di tipizzazione upstream
+- Fix: `# type: ignore[no-untyped-call]` mirato sulle tre chiamate nei test, nessun impatto sul
+  codice di produzione
+- Test di regressione / Regression test: `mypy .` nel gate CI
+
+### ERR-2026-08-11-04 — CliRunner: `result.stdout` non contiene più `err=True` per difetto
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-101, test CLI di `argus scan` (blocco fuori scope, scope file mancante)
+- Sintomo / Symptom: `assert "out of scope" in result.stdout` fallisce con stdout vuoto
+- Causa / Cause: nella versione di Click/Typer installata, `CliRunner` non ha più il flag
+  `mix_stderr`: stdout e stderr sono catturati separatamente, ma `result.output` resta il flusso
+  combinato
+- Fix: asserzioni sui messaggi di errore spostate su `result.output` invece di `result.stdout`
+- Test di regressione / Regression test: `pytest` nel gate CI

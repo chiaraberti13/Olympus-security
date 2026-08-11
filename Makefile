@@ -1,16 +1,18 @@
 .PHONY: install lint type test check demo clean
 
+PYTHON ?= python
+
 install:
-	python -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev]"
 
 lint:
-	ruff check .
+	$(PYTHON) -m ruff check .
 
 type:
-	mypy .
+	$(PYTHON) -m mypy .
 
 test:
-	pytest
+	$(PYTHON) -m pytest
 
 check: lint type test   ## the single gate: "green or not done"
 

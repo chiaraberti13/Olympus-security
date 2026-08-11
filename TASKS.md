@@ -14,7 +14,7 @@
 
 ## 🔜 To do — W1 First value
 ### Argus (🔴 OSINT)
-- [ ] T-101 `argus scan --domain` recon passiva DNS/MX/SPF/DMARC — done: test + fixture
+- [x] T-101 `argus scan --domain` recon passiva DNS/MX/SPF/DMARC — done: test + fixture
 - [ ] T-102 Certificate Transparency + sottodomini passivi — done: test su fixture offline
 - [ ] T-103 Export `argus-assets.json` conforme a core.Asset — done: round-trip validato
 - [ ] T-104 Change monitoring (diff tra due snapshot) — done: test diff
