@@ -6,9 +6,11 @@ import json
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 
-from olympus.argus.assets import build_assets, export_assets
+from olympus.argus.assets import build_assets, export_assets, load_assets
 from olympus.argus.ct import CrtShClient, CtQueryError, CtRecon, enumerate_subdomains
+from olympus.argus.diff import diff_snapshots
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
@@ -69,6 +71,27 @@ def scan(
         assets = build_assets(dns_result, ct_result)
         export_assets(assets, output)
         typer.echo(f"argus: wrote {len(assets)} asset(s) to {output}", err=True)
+
+
+@app.command("diff")
+def diff_command(
+    previous: Path = typer.Option(
+        ..., "--previous", help="Older argus-assets.json snapshot."
+    ),
+    current: Path = typer.Option(
+        ..., "--current", help="Newer argus-assets.json snapshot."
+    ),
+) -> None:
+    """Compare two argus-assets.json snapshots and report added/removed/changed hosts."""
+    try:
+        previous_assets = load_assets(previous)
+        current_assets = load_assets(current)
+    except (OSError, ValueError, ValidationError) as exc:
+        typer.echo(f"argus: diff error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    result = diff_snapshots(previous_assets, current_assets)
+    typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
 
 
 @app.command()

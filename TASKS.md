@@ -17,7 +17,7 @@
 - [x] T-101 `argus scan --domain` recon passiva DNS/MX/SPF/DMARC — done: test + fixture
 - [x] T-102 Certificate Transparency + sottodomini passivi — done: test su fixture offline
 - [x] T-103 Export `argus-assets.json` conforme a core.Asset — done: round-trip validato
-- [ ] T-104 Change monitoring (diff tra due snapshot) — done: test diff
+- [x] T-104 Change monitoring (diff tra due snapshot) — done: test diff
 - [ ] T-105 README modulo bilingue + `argus demo` reale — done: demo esce 0
 
 ### Hermes (🔵 Secret scanner)
