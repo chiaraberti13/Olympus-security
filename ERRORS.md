@@ -82,3 +82,19 @@
   `subdomains: []`, preservando l'output DNS/MX/SPF/DMARC già raccolto
 - Test di regressione / Regression test: `test_scan_survives_ct_lookup_failure` in
   `test_argus_cli_scan.py`
+
+### ERR-2026-08-11-06 — `make check` sporcava l'albero git scrivendo su un file tracciato
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-112, `git status` mostrava `examples/output/argus-assets.json`
+  modificato dopo ogni `make check`, pur senza modifiche di codice intenzionali
+- Sintomo / Symptom: `test_argus_demo_runs_the_real_pipeline` (in `test_cli.py`) invoca
+  `olympus argus demo` che scrive per davvero in `examples/output/argus-assets.json`
+  (percorso di default hardcoded), sovrascrivendo l'esempio committato con timestamp freschi
+  a ogni esecuzione della test suite
+- Causa / Cause: il test esercita il comando demo reale (corretto, per T-105) ma non isola
+  la destinazione di scrittura dal file tracciato nel repo
+- Fix: il test ora fa monkeypatch di `argus_cli.DEMO_ASSETS_OUTPUT_PATH` verso `tmp_path`,
+  cosicché il comando scrive per davvero (comportamento reale preservato) ma non tocca più
+  l'esempio committato
+- Test di regressione / Regression test: `make check` ripetuto due volte consecutive lascia
+  `git status` pulito
