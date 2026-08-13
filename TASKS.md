@@ -74,7 +74,7 @@
 ### Proteus (🔴 Phishing sim, mai credenziali reali)
 - [x] T-161 Generatore campagna simulata (destinatari sintetici, nessun invio email reale)
       — done: test
-- [ ] T-162 Pagina di training statica (mai raccolta credenziali) + tracking click simulato
+- [x] T-162 Pagina di training statica (mai raccolta credenziali) + tracking click simulato
       — done: test
 - [ ] T-163 Scope/allowlist destinatari obbligatoria + blocco+log fuori scope — done: test
 - [ ] T-164 Export report campagna (Finding per destinatario) conforme a core — done: round-trip
