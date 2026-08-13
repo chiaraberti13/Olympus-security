@@ -64,7 +64,7 @@
 
 ### Minerva (🔵 IR/DFIR)
 - [x] T-151 Apertura incidente: aggrega Alert/Finding in un core.Incident — done: test
-- [ ] T-152 Chain of custody: log evidenze append-only con hash-chain a prova di manomissione
+- [x] T-152 Chain of custody: log evidenze append-only con hash-chain a prova di manomissione
       — done: test rilevamento manomissione
 - [ ] T-153 Transizioni di stato dell'incidente (macchina a stati, transizioni invalide rifiutate)
       — done: test transizioni valide/invalide
