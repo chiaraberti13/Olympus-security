@@ -63,7 +63,7 @@
 - [x] T-145 README modulo bilingue + `artemis demo` reale — done: demo esce 0
 
 ### Minerva (🔵 IR/DFIR)
-- [ ] T-151 Apertura incidente: aggrega Alert/Finding in un core.Incident — done: test
+- [x] T-151 Apertura incidente: aggrega Alert/Finding in un core.Incident — done: test
 - [ ] T-152 Chain of custody: log evidenze append-only con hash-chain a prova di manomissione
       — done: test rilevamento manomissione
 - [ ] T-153 Transizioni di stato dell'incidente (macchina a stati, transizioni invalide rifiutate)
