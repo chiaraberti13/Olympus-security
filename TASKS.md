@@ -60,7 +60,7 @@
       — done: test
 - [x] T-144 Content discovery (path comuni esposti: .git, .env, admin...) + scope obbligatorio
       con blocco+log — done: test
-- [ ] T-145 README modulo bilingue + `artemis demo` reale — done: demo esce 0
+- [x] T-145 README modulo bilingue + `artemis demo` reale — done: demo esce 0
 
 ### Minerva (🔵 IR/DFIR)
 - [ ] T-151 Apertura incidente: aggrega Alert/Finding in un core.Incident — done: test

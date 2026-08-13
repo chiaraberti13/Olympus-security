@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from olympus import __version__
 from olympus.apollo import cli as apollo_cli
 from olympus.argus import cli as argus_cli
+from olympus.artemis import cli as artemis_cli
 from olympus.cli import app
 from olympus.helios import cli as helios_cli
 from olympus.hermes import cli as hermes_cli
@@ -37,7 +38,7 @@ def test_export_schemas_outputs_valid_json() -> None:
 
 
 def test_tool_demo_stub_runs() -> None:
-    result = runner.invoke(app, ["artemis", "demo"])
+    result = runner.invoke(app, ["proteus", "demo"])
     assert result.exit_code == 0
     assert "not implemented" in result.stdout
 
@@ -98,9 +99,22 @@ def test_apollo_demo_runs_the_real_pipeline(
     assert (tmp_path / "apollo-alerts.json").exists()
 
 
+def test_artemis_demo_runs_the_real_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Redirect the demo's findings export away from the tracked examples/
+    # sample: running the test suite must never dirty the working tree.
+    monkeypatch.setattr(artemis_cli, "DEMO_OUTPUT_PATH", tmp_path / "artemis-findings.json")
+
+    result = runner.invoke(app, ["artemis", "demo"])
+
+    assert result.exit_code == 0, result.output
+    assert "olympusdemocorp.example" in result.stdout
+    assert (tmp_path / "artemis-findings.json").exists()
+
+
 def test_remaining_tool_demos_are_still_stubs() -> None:
     for tool in (
-        "artemis",
         "proteus",
         "minerva",
         "vulcan",
