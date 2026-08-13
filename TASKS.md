@@ -49,9 +49,44 @@
 - [x] T-135 README modulo bilingue + `apollo demo` reale — done: demo esce 0
 
 ## 🔜 To do — W3 Web, response, reporting
-Artemis (web recon) + Minerva (IR/DFIR); poi Proteus (phishing sim) + Vulcan (aggregazione
-finding + report di pentest). Core aggiunge Incident. Task puntuali da definire al prossimo
-giro del loop.
+### Core (⚙️ Incident)
+- [x] T-140 core.models Incident (lifecycle NEW→TRIAGED→CONTAINED→RESOLVED→CLOSED)
+      — done: test + export-schemas
+
+### Artemis (🔴 Web recon)
+- [ ] T-141 HttpClient iniettabile (protocol + adapter urllib) — done: test su client fake offline
+- [ ] T-142 Analisi header di sicurezza (CSP/HSTS/X-Frame-Options/...) → Finding — done: test
+- [ ] T-143 Rilevamento CORS misconfigurato (wildcard+credentials, origin riflessa) → Finding
+      — done: test
+- [ ] T-144 Content discovery (path comuni esposti: .git, .env, admin...) + scope obbligatorio
+      con blocco+log — done: test
+- [ ] T-145 README modulo bilingue + `artemis demo` reale — done: demo esce 0
+
+### Minerva (🔵 IR/DFIR)
+- [ ] T-151 Apertura incidente: aggrega Alert/Finding in un core.Incident — done: test
+- [ ] T-152 Chain of custody: log evidenze append-only con hash-chain a prova di manomissione
+      — done: test rilevamento manomissione
+- [ ] T-153 Transizioni di stato dell'incidente (macchina a stati, transizioni invalide rifiutate)
+      — done: test transizioni valide/invalide
+- [ ] T-154 Export/import report incidente conforme a core.Incident — done: round-trip validato
+- [ ] T-155 README modulo bilingue + `minerva demo` reale — done: demo esce 0
+
+### Proteus (🔴 Phishing sim, mai credenziali reali)
+- [ ] T-161 Generatore campagna simulata (destinatari sintetici, nessun invio email reale)
+      — done: test
+- [ ] T-162 Pagina di training statica (mai raccolta credenziali) + tracking click simulato
+      — done: test
+- [ ] T-163 Scope/allowlist destinatari obbligatoria + blocco+log fuori scope — done: test
+- [ ] T-164 Export report campagna (Finding per destinatario) conforme a core — done: round-trip
+      validato
+- [ ] T-165 README modulo bilingue + `proteus demo` reale — done: demo esce 0
+
+### Vulcan (🟣 Aggregazione + report pentest)
+- [ ] T-171 Aggregazione Asset/Finding/Alert da export multipli con deduplica — done: test
+- [ ] T-172 Scoring/ordinamento per rischio (CVSS + severità) — done: test
+- [ ] T-173 Generazione report di pentest (Markdown) da dati aggregati — done: test struttura
+- [ ] T-174 Export `vulcan-report.json` conforme a core — done: round-trip validato
+- [ ] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
 
 ## ⏳ Backlog — W4
 Mars (vedi PLAN.md).

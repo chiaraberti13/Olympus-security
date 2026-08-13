@@ -18,6 +18,7 @@ from olympus.core.enums import (
     EventType,
     EvidenceType,
     FindingStatus,
+    IncidentStatus,
     Severity,
     Source,
 )
@@ -126,3 +127,21 @@ class Alert(OlympusModel):
     evidence: list[Evidence] = Field(default_factory=list)
     first_seen: datetime = Field(default_factory=_utcnow)
     last_seen: datetime = Field(default_factory=_utcnow)
+
+
+class Incident(OlympusModel):
+    """An incident-response case aggregating alerts/findings into one investigation."""
+
+    schema_name: str = "olympus.incident"
+    incident_id: str = Field(default_factory=lambda: new_id("incident"))
+    title: str = Field(min_length=1)
+    description: str = ""
+    severity: Severity = Severity.MEDIUM
+    status: IncidentStatus = IncidentStatus.NEW
+    source: Source = Source.MANUAL
+    asset_ids: list[str] = Field(default_factory=list)
+    finding_ids: list[str] = Field(default_factory=list)
+    alert_ids: list[str] = Field(default_factory=list)
+    evidence: list[Evidence] = Field(default_factory=list)
+    opened_at: datetime = Field(default_factory=_utcnow)
+    closed_at: datetime | None = None

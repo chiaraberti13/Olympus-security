@@ -7,14 +7,23 @@ import re
 import pytest
 from pydantic import ValidationError
 
-from olympus.core.enums import AssetType, EventType, EvidenceType, FindingStatus, Severity, Source
-from olympus.core.models import Alert, Asset, Event, Evidence, Finding
+from olympus.core.enums import (
+    AssetType,
+    EventType,
+    EvidenceType,
+    FindingStatus,
+    IncidentStatus,
+    Severity,
+    Source,
+)
+from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident
 
 ASSET_ID = re.compile(r"^AST-\d{4}-\d{5}$")
 FINDING_ID = re.compile(r"^FND-\d{4}-\d{5}$")
 EVENT_ID = re.compile(r"^EVT-\d{4}-\d{5}$")
 EVIDENCE_ID = re.compile(r"^EVD-\d{4}-\d{5}$")
 ALERT_ID = re.compile(r"^ALT-\d{4}-\d{5}$")
+INCIDENT_ID = re.compile(r"^INC-\d{4}-\d{5}$")
 
 
 def test_asset_autogenerates_traceable_id() -> None:
@@ -102,4 +111,32 @@ def test_alert_json_round_trip_with_embedded_evidence() -> None:
         evidence=[evidence],
     )
     restored = Alert.model_validate_json(original.model_dump_json())
+    assert restored == original
+
+
+def test_incident_autogenerates_traceable_id_and_defaults() -> None:
+    incident = Incident(title="Suspicious brute force activity")
+    assert INCIDENT_ID.match(incident.incident_id)
+    assert incident.status is IncidentStatus.NEW
+    assert incident.severity is Severity.MEDIUM
+    assert incident.closed_at is None
+
+
+def test_incident_rejects_empty_title() -> None:
+    with pytest.raises(ValidationError):
+        Incident(title="")
+
+
+def test_incident_json_round_trip_with_linked_objects() -> None:
+    evidence = Evidence(evidence_type=EvidenceType.LOG_EXCERPT, reference="ALT-2026-00001")
+    original = Incident(
+        title="Suspicious brute force activity",
+        source=Source.MINERVA,
+        status=IncidentStatus.TRIAGED,
+        asset_ids=["AST-2026-00001"],
+        finding_ids=["FND-2026-00001"],
+        alert_ids=["ALT-2026-00001"],
+        evidence=[evidence],
+    )
+    restored = Incident.model_validate_json(original.model_dump_json())
     assert restored == original

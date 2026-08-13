@@ -82,3 +82,13 @@ class EvidenceType(StrEnum):
     SCREENSHOT = "screenshot"
     NETWORK_CAPTURE = "network_capture"
     OTHER = "other"
+
+
+class IncidentStatus(StrEnum):
+    """Lifecycle state of an incident inside the response workflow (NIST-inspired)."""
+
+    NEW = "new"
+    TRIAGED = "triaged"
+    CONTAINED = "contained"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
