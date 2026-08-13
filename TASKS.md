@@ -42,7 +42,7 @@
 - [x] T-125 README modulo bilingue + `helios demo` reale — done: demo esce 0
 
 ### Apollo (🔵 Detection engineering)
-- [ ] T-131 Schema regole YAML + mapping MITRE ATT&CK + loader — done: test regole valide/invalide
+- [x] T-131 Schema regole YAML + mapping MITRE ATT&CK + loader — done: test regole valide/invalide
 - [ ] T-132 Motore di match regole su core.Event — done: test veri/falsi positivi
 - [ ] T-133 Generazione Alert da regola scattata (con evidence linking) — done: test
 - [ ] T-134 Harness di detection testing (regola + eventi sintetici etichettati) — done: test
