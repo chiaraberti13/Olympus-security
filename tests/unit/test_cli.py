@@ -28,6 +28,9 @@ def test_export_schemas_outputs_valid_json() -> None:
     payload = json.loads(result.stdout)
     assert "olympus.asset" in payload
     assert "olympus.finding" in payload
+    assert "olympus.event" in payload
+    assert "olympus.evidence" in payload
+    assert "olympus.alert" in payload
 
 
 def test_tool_demo_stub_runs() -> None:

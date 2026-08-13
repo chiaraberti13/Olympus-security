@@ -61,3 +61,24 @@ class Source(StrEnum):
     VULCAN = "vulcan"
     MARS = "mars"
     MANUAL = "manual"
+
+
+class EventType(StrEnum):
+    """Broad category of a single observed telemetry event."""
+
+    AUTHENTICATION = "authentication"
+    NETWORK = "network"
+    PROCESS = "process"
+    FILE = "file"
+    DNS = "dns"
+    OTHER = "other"
+
+
+class EvidenceType(StrEnum):
+    """Kind of artifact backing an alert, finding or incident."""
+
+    LOG_EXCERPT = "log_excerpt"
+    FILE_HASH = "file_hash"
+    SCREENSHOT = "screenshot"
+    NETWORK_CAPTURE = "network_capture"
+    OTHER = "other"

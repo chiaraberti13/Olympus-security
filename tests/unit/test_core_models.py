@@ -7,11 +7,14 @@ import re
 import pytest
 from pydantic import ValidationError
 
-from olympus.core.enums import AssetType, Severity, Source
-from olympus.core.models import Asset, Finding
+from olympus.core.enums import AssetType, EventType, EvidenceType, FindingStatus, Severity, Source
+from olympus.core.models import Alert, Asset, Event, Evidence, Finding
 
 ASSET_ID = re.compile(r"^AST-\d{4}-\d{5}$")
 FINDING_ID = re.compile(r"^FND-\d{4}-\d{5}$")
+EVENT_ID = re.compile(r"^EVT-\d{4}-\d{5}$")
+EVIDENCE_ID = re.compile(r"^EVD-\d{4}-\d{5}$")
+ALERT_ID = re.compile(r"^ALT-\d{4}-\d{5}$")
 
 
 def test_asset_autogenerates_traceable_id() -> None:
@@ -51,4 +54,52 @@ def test_finding_json_round_trip() -> None:
         cvss=7.4,
     )
     restored = Finding.model_validate_json(original.model_dump_json())
+    assert restored == original
+
+
+def test_event_autogenerates_traceable_id() -> None:
+    event = Event(event_type=EventType.AUTHENTICATION, source=Source.APOLLO, summary="login")
+    assert EVENT_ID.match(event.event_id)
+    assert event.schema_name == "olympus.event"
+
+
+def test_event_rejects_empty_summary() -> None:
+    with pytest.raises(ValidationError):
+        Event(event_type=EventType.NETWORK, source=Source.APOLLO, summary="")
+
+
+def test_evidence_autogenerates_traceable_id() -> None:
+    evidence = Evidence(evidence_type=EvidenceType.LOG_EXCERPT, reference="EVT-2026-00001")
+    assert EVIDENCE_ID.match(evidence.evidence_id)
+
+
+def test_evidence_rejects_empty_reference() -> None:
+    with pytest.raises(ValidationError):
+        Evidence(evidence_type=EvidenceType.LOG_EXCERPT, reference="")
+
+
+def test_alert_autogenerates_traceable_id_and_defaults() -> None:
+    alert = Alert(title="Brute force detected", source=Source.APOLLO, rule_id="RULE-001")
+    assert ALERT_ID.match(alert.alert_id)
+    assert alert.severity is Severity.MEDIUM
+    assert alert.status is FindingStatus.NEW
+    assert alert.evidence == []
+
+
+def test_alert_rejects_empty_rule_id() -> None:
+    with pytest.raises(ValidationError):
+        Alert(title="x", source=Source.APOLLO, rule_id="")
+
+
+def test_alert_json_round_trip_with_embedded_evidence() -> None:
+    evidence = Evidence(evidence_type=EvidenceType.LOG_EXCERPT, reference="EVT-2026-00001")
+    original = Alert(
+        title="Brute force detected",
+        source=Source.APOLLO,
+        rule_id="RULE-001",
+        mitre_technique_id="T1110",
+        event_ids=["EVT-2026-00001"],
+        evidence=[evidence],
+    )
+    restored = Alert.model_validate_json(original.model_dump_json())
     assert restored == original

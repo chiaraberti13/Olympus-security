@@ -29,9 +29,24 @@
 - [x] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
 
 ## 🔜 To do — W2 Surface & detection
-Helios (scope enforcement → `helios-findings.json`) + Apollo (regole YAML + MITRE ATT&CK +
-detection testing). Core aggiunge Alert/Event/Evidence. Vedi PLAN.md per i dettagli; i task
-puntuali vanno aggiunti qui alla prossima ondata.
+### Core (⚙️ Alert/Event/Evidence)
+- [x] T-120 core.models Event/Alert/Evidence + core.ids prefisso "event" — done: test + export-schemas
+
+### Helios (🔴 Network attack-surface mapper)
+- [ ] T-121 `helios scan` — motore TCP connect + profilo porte comuni, PortScanner iniettabile
+      — done: test su scanner fake offline
+- [ ] T-122 Scope file obbligatorio (host/CIDR) + blocco+log fuori scope — done: test
+- [ ] T-123 Export `helios-findings.json` (Asset per host + Finding per porta aperta)
+      conforme a core — done: round-trip validato
+- [ ] T-124 Alert per servizi esposti ad alto rischio (porte critiche) — done: test
+- [ ] T-125 README modulo bilingue + `helios demo` reale — done: demo esce 0
+
+### Apollo (🔵 Detection engineering)
+- [ ] T-131 Schema regole YAML + mapping MITRE ATT&CK + loader — done: test regole valide/invalide
+- [ ] T-132 Motore di match regole su core.Event — done: test veri/falsi positivi
+- [ ] T-133 Generazione Alert da regola scattata (con evidence linking) — done: test
+- [ ] T-134 Harness di detection testing (regola + eventi sintetici etichettati) — done: test
+- [ ] T-135 README modulo bilingue + `apollo demo` reale — done: demo esce 0
 
 ## ⏳ Backlog — W3..W4
 Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).

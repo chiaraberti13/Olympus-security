@@ -19,6 +19,7 @@ _PREFIXES: dict[str, str] = {
     "risk": "RSK",
     "evidence": "EVD",
     "engagement": "ENG",
+    "event": "EVT",
 }
 
 

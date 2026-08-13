@@ -12,7 +12,15 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from olympus.core.enums import AssetType, Criticality, FindingStatus, Severity, Source
+from olympus.core.enums import (
+    AssetType,
+    Criticality,
+    EventType,
+    EvidenceType,
+    FindingStatus,
+    Severity,
+    Source,
+)
 from olympus.core.ids import new_id
 
 
@@ -76,3 +84,45 @@ class Finding(OlympusModel):
         if value is not None and not 0.0 <= value <= 10.0:
             raise ValueError("cvss must be between 0.0 and 10.0")
         return value
+
+
+class Event(OlympusModel):
+    """A single observed telemetry event feeding the detection pipeline."""
+
+    schema_name: str = "olympus.event"
+    event_id: str = Field(default_factory=lambda: new_id("event"))
+    event_type: EventType
+    source: Source
+    asset_id: str | None = None
+    summary: str = Field(min_length=1)
+    raw: dict[str, str] = Field(default_factory=dict)
+    occurred_at: datetime = Field(default_factory=_utcnow)
+
+
+class Evidence(OlympusModel):
+    """A piece of supporting evidence backing an alert, finding or incident."""
+
+    schema_name: str = "olympus.evidence"
+    evidence_id: str = Field(default_factory=lambda: new_id("evidence"))
+    evidence_type: EvidenceType
+    description: str = ""
+    reference: str = Field(min_length=1)
+    collected_at: datetime = Field(default_factory=_utcnow)
+
+
+class Alert(OlympusModel):
+    """A detection-engineering alert: a rule that fired against one or more events."""
+
+    schema_name: str = "olympus.alert"
+    alert_id: str = Field(default_factory=lambda: new_id("alert"))
+    title: str = Field(min_length=1)
+    description: str = ""
+    severity: Severity = Severity.MEDIUM
+    status: FindingStatus = FindingStatus.NEW
+    source: Source
+    rule_id: str = Field(min_length=1)
+    mitre_technique_id: str | None = None
+    event_ids: list[str] = Field(default_factory=list)
+    evidence: list[Evidence] = Field(default_factory=list)
+    first_seen: datetime = Field(default_factory=_utcnow)
+    last_seen: datetime = Field(default_factory=_utcnow)
