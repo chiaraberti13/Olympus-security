@@ -16,6 +16,7 @@ from olympus.cli import app
 from olympus.helios import cli as helios_cli
 from olympus.hermes import cli as hermes_cli
 from olympus.minerva import cli as minerva_cli
+from olympus.proteus import cli as proteus_cli
 
 runner = CliRunner()
 
@@ -128,11 +129,20 @@ def test_minerva_demo_runs_the_real_pipeline(
     assert (tmp_path / "minerva-incident.json").exists()
 
 
-def test_remaining_tool_demos_are_still_stubs() -> None:
-    for tool in (
-        "proteus",
-        "vulcan",
-    ):
-        result = runner.invoke(app, [tool, "demo"])
-        assert result.exit_code == 0, tool
-        assert "not implemented" in result.stdout
+def test_proteus_demo_runs_the_real_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Redirect the demo's exports away from the tracked examples/ samples:
+    # running the test suite must never dirty the working tree.
+    monkeypatch.setattr(proteus_cli, "DEMO_BLOCK_LOG_PATH", tmp_path / "proteus-blocked.log")
+    monkeypatch.setattr(proteus_cli, "DEMO_REPORT_PATH", tmp_path / "proteus-report.json")
+    monkeypatch.setattr(
+        proteus_cli, "DEMO_TRAINING_PAGE_PATH", tmp_path / "proteus-training-page.html"
+    )
+
+    result = runner.invoke(app, ["proteus", "demo"])
+
+    assert result.exit_code == 0, result.output
+    assert "blocked 1 out-of-scope recipient" in result.stdout
+    assert (tmp_path / "proteus-report.json").exists()
+    assert (tmp_path / "proteus-training-page.html").exists()

@@ -79,7 +79,7 @@
 - [x] T-163 Scope/allowlist destinatari obbligatoria + blocco+log fuori scope — done: test
 - [x] T-164 Export report campagna (Finding per destinatario) conforme a core — done: round-trip
       validato
-- [ ] T-165 README modulo bilingue + `proteus demo` reale — done: demo esce 0
+- [x] T-165 README modulo bilingue + `proteus demo` reale — done: demo esce 0
 
 ### Vulcan (🟣 Aggregazione + report pentest)
 - [ ] T-171 Aggregazione Asset/Finding/Alert da export multipli con deduplica — done: test

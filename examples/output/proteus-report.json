@@ -1,0 +1,144 @@
+{
+  "assets": [
+    {
+      "asset_id": "AST-2026-00001",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.311992Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.311994Z",
+      "metadata": {
+        "display_name": "",
+        "email": "alice@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00002",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.312034Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.312035Z",
+      "metadata": {
+        "display_name": "",
+        "email": "bob@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00003",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.312067Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.312068Z",
+      "metadata": {
+        "display_name": "",
+        "email": "carol@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00004",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.312082Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.312082Z",
+      "metadata": {
+        "display_name": "",
+        "email": "dave@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    }
+  ],
+  "campaign": "Olympus Demo Corp Q3 Awareness Campaign",
+  "clicked_count": 3,
+  "findings": [
+    {
+      "asset_id": "AST-2026-00002",
+      "cvss": null,
+      "description": "bob@olympusdemocorp.example clicked the simulated phishing link in campaign 'Olympus Demo Corp Q3 Awareness Campaign'. No real credentials were requested or collected; a training-disclosure page was shown instead.",
+      "evidence": [],
+      "finding_id": "FND-2026-00001",
+      "first_seen": "2026-08-13T12:42:33.312059Z",
+      "last_seen": "2026-08-13T12:42:33.312060Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "proteus",
+      "status": "new",
+      "title": "Recipient clicked simulated phishing link (Olympus Demo Corp Q3 Awareness Campaign)"
+    },
+    {
+      "asset_id": "AST-2026-00003",
+      "cvss": null,
+      "description": "carol@olympusdemocorp.example clicked the simulated phishing link in campaign 'Olympus Demo Corp Q3 Awareness Campaign'. No real credentials were requested or collected; a training-disclosure page was shown instead.",
+      "evidence": [],
+      "finding_id": "FND-2026-00002",
+      "first_seen": "2026-08-13T12:42:33.312076Z",
+      "last_seen": "2026-08-13T12:42:33.312077Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "proteus",
+      "status": "new",
+      "title": "Recipient clicked simulated phishing link (Olympus Demo Corp Q3 Awareness Campaign)"
+    },
+    {
+      "asset_id": "AST-2026-00004",
+      "cvss": null,
+      "description": "dave@olympusdemocorp.example clicked the simulated phishing link in campaign 'Olympus Demo Corp Q3 Awareness Campaign'. No real credentials were requested or collected; a training-disclosure page was shown instead.",
+      "evidence": [],
+      "finding_id": "FND-2026-00003",
+      "first_seen": "2026-08-13T12:42:33.312088Z",
+      "last_seen": "2026-08-13T12:42:33.312089Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "proteus",
+      "status": "new",
+      "title": "Recipient clicked simulated phishing link (Olympus Demo Corp Q3 Awareness Campaign)"
+    }
+  ],
+  "recipient_count": 4
+}
