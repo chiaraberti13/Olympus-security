@@ -28,7 +28,7 @@
 - [x] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
 - [x] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
 
-## 🔜 To do — W2 Surface & detection
+## ✅ Done — W2 Surface & detection
 ### Core (⚙️ Alert/Event/Evidence)
 - [x] T-120 core.models Event/Alert/Evidence + core.ids prefisso "event" — done: test + export-schemas
 
@@ -46,10 +46,15 @@
 - [x] T-132 Motore di match regole su core.Event — done: test veri/falsi positivi
 - [x] T-133 Generazione Alert da regola scattata (con evidence linking) — done: test
 - [x] T-134 Harness di detection testing (regola + eventi sintetici etichettati) — done: test
-- [ ] T-135 README modulo bilingue + `apollo demo` reale — done: demo esce 0
+- [x] T-135 README modulo bilingue + `apollo demo` reale — done: demo esce 0
 
-## ⏳ Backlog — W3..W4
-Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
+## 🔜 To do — W3 Web, response, reporting
+Artemis (web recon) + Minerva (IR/DFIR); poi Proteus (phishing sim) + Vulcan (aggregazione
+finding + report di pentest). Core aggiunge Incident. Task puntuali da definire al prossimo
+giro del loop.
+
+## ⏳ Backlog — W4
+Mars (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - (nessuno aperto / none open)

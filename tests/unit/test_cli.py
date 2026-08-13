@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from olympus import __version__
+from olympus.apollo import cli as apollo_cli
 from olympus.argus import cli as argus_cli
 from olympus.cli import app
 from olympus.helios import cli as helios_cli
@@ -80,11 +81,26 @@ def test_helios_demo_runs_the_real_pipeline(
     assert (tmp_path / "helios-findings.json").exists()
 
 
+def test_apollo_demo_runs_the_real_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Redirect the demo's exports away from the tracked examples/ samples:
+    # running the test suite must never dirty the working tree.
+    monkeypatch.setattr(apollo_cli, "DEMO_EVENTS_OUTPUT_PATH", tmp_path / "apollo-events.json")
+    monkeypatch.setattr(apollo_cli, "DEMO_ALERTS_OUTPUT_PATH", tmp_path / "apollo-alerts.json")
+
+    result = runner.invoke(app, ["apollo", "demo"])
+
+    assert result.exit_code == 0, result.output
+    assert "APOLLO-BRUTE-FORCE-001" in result.stdout
+    assert (tmp_path / "apollo-events.json").exists()
+    assert (tmp_path / "apollo-alerts.json").exists()
+
+
 def test_remaining_tool_demos_are_still_stubs() -> None:
     for tool in (
         "artemis",
         "proteus",
-        "apollo",
         "minerva",
         "vulcan",
     ):

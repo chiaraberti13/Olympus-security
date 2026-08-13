@@ -1,0 +1,11 @@
+rule_id: APOLLO-BRUTE-FORCE-001
+name: Repeated authentication failure
+description: >-
+  Flags a failed login attempt, indicative of brute-force or
+  credential-stuffing activity against an authentication endpoint.
+event_type: authentication
+mitre_technique_id: T1110
+severity: high
+conditions:
+  - field: outcome
+    equals: failure

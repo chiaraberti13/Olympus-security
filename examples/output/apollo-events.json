@@ -1,0 +1,71 @@
+[
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00001",
+    "event_type": "authentication",
+    "occurred_at": "2026-08-13T09:24:28.577174Z",
+    "raw": {
+      "outcome": "failure",
+      "user": "admin"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "login attempt for user admin"
+  },
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00002",
+    "event_type": "authentication",
+    "occurred_at": "2026-08-13T09:24:28.577189Z",
+    "raw": {
+      "outcome": "failure",
+      "user": "admin"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "login attempt for user admin"
+  },
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00003",
+    "event_type": "authentication",
+    "occurred_at": "2026-08-13T09:24:28.577193Z",
+    "raw": {
+      "outcome": "failure",
+      "user": "admin"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "login attempt for user admin"
+  },
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00004",
+    "event_type": "authentication",
+    "occurred_at": "2026-08-13T09:24:28.577197Z",
+    "raw": {
+      "outcome": "success",
+      "user": "jdoe"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "login attempt for user jdoe"
+  },
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00005",
+    "event_type": "network",
+    "occurred_at": "2026-08-13T09:24:28.577200Z",
+    "raw": {
+      "dest_port": "443"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "outbound HTTPS connection"
+  }
+]

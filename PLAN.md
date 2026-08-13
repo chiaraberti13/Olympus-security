@@ -32,8 +32,9 @@ errori strutturati, CLI unico, export JSON Schema, CI, gate verdi.
 `Hermes` (secret scan → SARIF, pre-commit). *Esito:* primo scambio dati reale + tool
 DevSecOps spendibile.
 
-**W2 — Surface & detection.** `Helios` (scope enforcement → `helios-findings.json`) +
-`Apollo` (regole YAML + MITRE ATT&CK + detection testing). Core aggiunge Alert/Event/Evidence.
+**W2 — Surface & detection (fatto / done).** `Helios` (scope enforcement →
+`helios-findings.json`) + `Apollo` (regole YAML + MITRE ATT&CK + detection testing). Core
+aggiunge Alert/Event/Evidence.
 
 **W3 — Web, response, reporting.** `Artemis` (web recon) + `Minerva` (IR/DFIR); poi `Proteus`
 (phishing sim) + `Vulcan` (aggregazione finding + **report di pentest**). Core aggiunge Incident.

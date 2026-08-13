@@ -1,0 +1,86 @@
+[
+  {
+    "alert_id": "ALT-2026-00001",
+    "description": "Flags a failed login attempt, indicative of brute-force or credential-stuffing activity against an authentication endpoint.",
+    "event_ids": [
+      "EVT-2026-00001"
+    ],
+    "evidence": [
+      {
+        "collected_at": "2026-08-13T09:24:28.577574Z",
+        "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
+        "evidence_id": "EVD-2026-00001",
+        "evidence_type": "log_excerpt",
+        "reference": "EVT-2026-00001",
+        "schema_name": "olympus.evidence",
+        "schema_version": "1.0.0"
+      }
+    ],
+    "first_seen": "2026-08-13T09:24:28.577602Z",
+    "last_seen": "2026-08-13T09:24:28.577604Z",
+    "mitre_technique_id": "T1110",
+    "rule_id": "APOLLO-BRUTE-FORCE-001",
+    "schema_name": "olympus.alert",
+    "schema_version": "1.0.0",
+    "severity": "high",
+    "source": "apollo",
+    "status": "new",
+    "title": "Repeated authentication failure"
+  },
+  {
+    "alert_id": "ALT-2026-00002",
+    "description": "Flags a failed login attempt, indicative of brute-force or credential-stuffing activity against an authentication endpoint.",
+    "event_ids": [
+      "EVT-2026-00002"
+    ],
+    "evidence": [
+      {
+        "collected_at": "2026-08-13T09:24:28.577614Z",
+        "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
+        "evidence_id": "EVD-2026-00002",
+        "evidence_type": "log_excerpt",
+        "reference": "EVT-2026-00002",
+        "schema_name": "olympus.evidence",
+        "schema_version": "1.0.0"
+      }
+    ],
+    "first_seen": "2026-08-13T09:24:28.577621Z",
+    "last_seen": "2026-08-13T09:24:28.577621Z",
+    "mitre_technique_id": "T1110",
+    "rule_id": "APOLLO-BRUTE-FORCE-001",
+    "schema_name": "olympus.alert",
+    "schema_version": "1.0.0",
+    "severity": "high",
+    "source": "apollo",
+    "status": "new",
+    "title": "Repeated authentication failure"
+  },
+  {
+    "alert_id": "ALT-2026-00003",
+    "description": "Flags a failed login attempt, indicative of brute-force or credential-stuffing activity against an authentication endpoint.",
+    "event_ids": [
+      "EVT-2026-00003"
+    ],
+    "evidence": [
+      {
+        "collected_at": "2026-08-13T09:24:28.577625Z",
+        "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
+        "evidence_id": "EVD-2026-00003",
+        "evidence_type": "log_excerpt",
+        "reference": "EVT-2026-00003",
+        "schema_name": "olympus.evidence",
+        "schema_version": "1.0.0"
+      }
+    ],
+    "first_seen": "2026-08-13T09:24:28.577630Z",
+    "last_seen": "2026-08-13T09:24:28.577630Z",
+    "mitre_technique_id": "T1110",
+    "rule_id": "APOLLO-BRUTE-FORCE-001",
+    "schema_name": "olympus.alert",
+    "schema_version": "1.0.0",
+    "severity": "high",
+    "source": "apollo",
+    "status": "new",
+    "title": "Repeated authentication failure"
+  }
+]
