@@ -89,9 +89,18 @@
 - [x] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
 
 ## 🔜 To do — W4 Range & capstone
-Mars: cyber range Docker segmentato + scenari purple end-to-end che attraversano tutta la
-suite. Test cross-module, release riproducibile. Vedi PLAN.md; i task puntuali vanno
-aggiunti qui alla prossima ondata.
+### Mars (🟣 Cyber range + scenari purple)
+- [x] T-181 Docker Compose range segmentato: target web vulnerabile-by-design sintetico
+      "Olympus Demo Corp" + scope file dedicato — done: `docker compose config` valida
+      (nessun daemon disponibile in questo ambiente: validazione strutturale, non avvio reale)
+- [ ] T-182 Makefile targets sicuri (mars-up/mars-down/mars-status), non distruttività
+      documentata — done: comandi definiti e verificati con `docker compose config`
+- [ ] T-183 Scenario purple end-to-end cross-modulo: un solo target sintetico attraversa
+      Argus → Helios → Artemis → Apollo → Minerva → Vulcan mantenendo ID tracciabili
+      — done: test di integrazione verde (`tests/integration/`)
+- [ ] T-184 README modulo bilingue (labs/mars + docs/modules/mars.md) — done
+- [ ] T-185 Release riproducibile: CHANGELOG.md, version bump, `python -m build` verificato
+      — done: build verde
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - (nessuno aperto / none open)

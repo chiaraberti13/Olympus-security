@@ -1,9 +1,18 @@
-# Mars — cyber range (scaffold). The development loop (W4) builds the segmented
-# target environment and the purple-team scenarios. Synthetic data only.
+# Mars — cyber range: a segmented, non-destructive target environment for
+# purple-team exercises against the whole Olympus suite. Synthetic data
+# only ("Olympus Demo Corp"). The dmz network is `internal`, so the range
+# has no outbound internet access -- it can only be reached from, and can
+# only see, the operator's own host via the published port.
 services:
   target-web:
     image: nginx:alpine
-    # Placeholder target. Replaced by the W4 vulnerable-by-design app.
+    volumes:
+      - ./target-web/html:/usr/share/nginx/html:ro
+      - ./target-web/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks: [dmz]
+    ports:
+      - "8080:80"
+
 networks:
   dmz:
+    internal: true

@@ -15,5 +15,11 @@ htmlcov/
 .env
 *.pem
 *.key
+# Exception: Mars range's synthetic, deliberately-exposed placeholder .env
+# (labs/mars/target-web/html/.env), scanned clean by Hermes/gitleaks. Its
+# whole purpose is to be served at /.env for Artemis's content-discovery
+# demo; it must stay a real file on disk. Never add another exception here
+# without verifying the content is synthetic first.
+!/labs/mars/target-web/html/.env
 # OS
 .DS_Store

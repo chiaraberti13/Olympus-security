@@ -1,0 +1,5 @@
+{
+  "engagement": "olympus-demo-corp-mars-range",
+  "allowed_targets": ["127.0.0.1/32"],
+  "excluded_targets": []
+}
