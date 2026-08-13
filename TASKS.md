@@ -33,7 +33,7 @@
 - [x] T-120 core.models Event/Alert/Evidence + core.ids prefisso "event" — done: test + export-schemas
 
 ### Helios (🔴 Network attack-surface mapper)
-- [ ] T-121 `helios scan` — motore TCP connect + profilo porte comuni, PortScanner iniettabile
+- [x] T-121 `helios scan` — motore TCP connect + profilo porte comuni, PortScanner iniettabile
       — done: test su scanner fake offline
 - [ ] T-122 Scope file obbligatorio (host/CIDR) + blocco+log fuori scope — done: test
 - [ ] T-123 Export `helios-findings.json` (Asset per host + Finding per porta aperta)
