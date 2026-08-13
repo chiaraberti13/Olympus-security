@@ -77,7 +77,7 @@
 - [x] T-162 Pagina di training statica (mai raccolta credenziali) + tracking click simulato
       — done: test
 - [x] T-163 Scope/allowlist destinatari obbligatoria + blocco+log fuori scope — done: test
-- [ ] T-164 Export report campagna (Finding per destinatario) conforme a core — done: round-trip
+- [x] T-164 Export report campagna (Finding per destinatario) conforme a core — done: round-trip
       validato
 - [ ] T-165 README modulo bilingue + `proteus demo` reale — done: demo esce 0
 
