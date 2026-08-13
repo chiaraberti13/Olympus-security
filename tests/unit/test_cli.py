@@ -15,6 +15,7 @@ from olympus.artemis import cli as artemis_cli
 from olympus.cli import app
 from olympus.helios import cli as helios_cli
 from olympus.hermes import cli as hermes_cli
+from olympus.minerva import cli as minerva_cli
 
 runner = CliRunner()
 
@@ -38,7 +39,7 @@ def test_export_schemas_outputs_valid_json() -> None:
 
 
 def test_tool_demo_stub_runs() -> None:
-    result = runner.invoke(app, ["proteus", "demo"])
+    result = runner.invoke(app, ["vulcan", "demo"])
     assert result.exit_code == 0
     assert "not implemented" in result.stdout
 
@@ -113,10 +114,23 @@ def test_artemis_demo_runs_the_real_pipeline(
     assert (tmp_path / "artemis-findings.json").exists()
 
 
+def test_minerva_demo_runs_the_real_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Redirect the demo's report export away from the tracked examples/
+    # sample: running the test suite must never dirty the working tree.
+    monkeypatch.setattr(minerva_cli, "DEMO_OUTPUT_PATH", tmp_path / "minerva-incident.json")
+
+    result = runner.invoke(app, ["minerva", "demo"])
+
+    assert result.exit_code == 0, result.output
+    assert "chain of custody verified: True" in result.stdout
+    assert (tmp_path / "minerva-incident.json").exists()
+
+
 def test_remaining_tool_demos_are_still_stubs() -> None:
     for tool in (
         "proteus",
-        "minerva",
         "vulcan",
     ):
         result = runner.invoke(app, [tool, "demo"])
