@@ -26,8 +26,8 @@ class HttpResponse:
 class HttpClient(Protocol):
     """Anything able to perform a passive HTTP GET request."""
 
-    def get(self, url: str) -> HttpResponse:
-        """Return the response for a GET request to ``url``."""
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        """Return the response for a GET request to ``url``, with optional extra headers."""
         ...
 
 
@@ -41,13 +41,14 @@ class UrllibHttpClient:
     def __init__(self, timeout: float = 10.0) -> None:
         self._timeout = timeout
 
-    def get(self, url: str) -> HttpResponse:
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         """Perform a real HTTP GET against ``url`` and return a normalized response."""
         if not url.startswith(("http://", "https://")):
             raise HttpRequestError(f"refusing to fetch a non-HTTP(S) URL: {url}")
 
+        request_headers = {"User-Agent": "OlympusArtemis/0.1", **(headers or {})}
         request = urllib.request.Request(  # noqa: S310 (scheme already checked above)
-            url, headers={"User-Agent": "OlympusArtemis/0.1"}
+            url, headers=request_headers
         )
         try:
             with urllib.request.urlopen(  # noqa: S310 (scheme already checked above)

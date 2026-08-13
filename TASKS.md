@@ -58,7 +58,7 @@
 - [x] T-142 Analisi header di sicurezza (CSP/HSTS/X-Frame-Options/...) → Finding — done: test
 - [x] T-143 Rilevamento CORS misconfigurato (wildcard+credentials, origin riflessa) → Finding
       — done: test
-- [ ] T-144 Content discovery (path comuni esposti: .git, .env, admin...) + scope obbligatorio
+- [x] T-144 Content discovery (path comuni esposti: .git, .env, admin...) + scope obbligatorio
       con blocco+log — done: test
 - [ ] T-145 README modulo bilingue + `artemis demo` reale — done: demo esce 0
 
