@@ -98,3 +98,19 @@
   l'esempio committato
 - Test di regressione / Regression test: `make check` ripetuto due volte consecutive lascia
   `git status` pulito
+
+### ERR-2026-08-13-01 — `olympus version` disallineato da `pyproject.toml` dopo il bump a 1.0.0
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: verifica end-to-end dell'intero progetto dopo la chiusura di W4/T-185
+  (release 1.0.0); `olympus version` stampava ancora `0.1.0`
+- Sintomo / Symptom: `src/olympus/__init__.py` dichiarava `__version__ = "0.1.0"` come
+  stringa hardcoded, indipendente da `pyproject.toml`; il bump di versione per la release
+  1.0.0 (T-185) aveva aggiornato solo `pyproject.toml`, lasciando le due fonti disallineate
+- Causa / Cause: due fonti di verità per la versione del pacchetto invece di una sola;
+  `test_version_command` non poteva rilevare il disallineamento perché confrontava
+  `__version__` con se stesso (stessa costante importata sia dal test sia dal comando CLI)
+- Fix: `__version__` ora legge `importlib.metadata.version("olympus-security")` a runtime
+  (fonte di verità unica: i metadata del pacchetto installato, generati da `pyproject.toml`),
+  con fallback `"0.0.0+unknown"` se il pacchetto non è installato; reinstallato in editable
+  mode per rigenerare i metadata
+- Test di regressione / Regression test: `olympus version` stampa `1.0.0`; `make check` verde
