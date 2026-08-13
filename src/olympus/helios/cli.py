@@ -2,12 +2,50 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import typer
+
+from olympus.helios.recon import scan_host
+from olympus.helios.scanner import TcpConnectScanner
+from olympus.helios.scope import OutOfScopeError, ScopeError, enforce_scope
 
 app = typer.Typer(
     help="Helios — Authorized network attack-surface mapper.",
     no_args_is_help=True,
 )
+
+DEFAULT_SCOPE_PATH = Path("examples/input/helios-scope.json")
+DEFAULT_BLOCK_LOG_PATH = Path("examples/output/helios-blocked.log")
+
+
+@app.command()
+def scan(
+    target: str = typer.Option(..., "--target", help="Host or IP to scan for open ports."),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH,
+        "--scope",
+        help="Path to the JSON scope file listing authorized targets.",
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH,
+        "--log",
+        help="Path to the out-of-scope audit log.",
+    ),
+) -> None:
+    """Scan a single in-scope host for open common ports (plain TCP connect)."""
+    try:
+        enforce_scope(target, scope, log)
+    except ScopeError as exc:
+        typer.echo(f"helios: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"helios: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+
+    result = scan_host(target, TcpConnectScanner())
+    typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
 
 
 @app.command()

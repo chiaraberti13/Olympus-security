@@ -35,7 +35,7 @@
 ### Helios (🔴 Network attack-surface mapper)
 - [x] T-121 `helios scan` — motore TCP connect + profilo porte comuni, PortScanner iniettabile
       — done: test su scanner fake offline
-- [ ] T-122 Scope file obbligatorio (host/CIDR) + blocco+log fuori scope — done: test
+- [x] T-122 Scope file obbligatorio (host/CIDR) + blocco+log fuori scope — done: test
 - [ ] T-123 Export `helios-findings.json` (Asset per host + Finding per porta aperta)
       conforme a core — done: round-trip validato
 - [ ] T-124 Alert per servizi esposti ad alto rischio (porte critiche) — done: test
