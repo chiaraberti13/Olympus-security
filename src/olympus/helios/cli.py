@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from olympus.helios.findings import build_findings, export_findings
 from olympus.helios.recon import scan_host
 from olympus.helios.scanner import TcpConnectScanner
 from olympus.helios.scope import OutOfScopeError, ScopeError, enforce_scope
@@ -33,6 +34,11 @@ def scan(
         "--log",
         help="Path to the out-of-scope audit log.",
     ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        help="If set, also export the scan as core.Asset/Finding JSON to this path.",
+    ),
 ) -> None:
     """Scan a single in-scope host for open common ports (plain TCP connect)."""
     try:
@@ -46,6 +52,11 @@ def scan(
 
     result = scan_host(target, TcpConnectScanner())
     typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+
+    if output is not None:
+        assets, findings = build_findings([result])
+        export_findings(assets, findings, output)
+        typer.echo(f"helios: wrote {len(findings)} finding(s) to {output}", err=True)
 
 
 @app.command()

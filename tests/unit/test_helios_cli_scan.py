@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from olympus.cli import app
+from olympus.core.models import Asset, Finding
 from olympus.helios import cli as helios_cli
 
 runner = CliRunner()
@@ -49,6 +50,37 @@ def test_scan_in_scope_target_prints_open_ports(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["host"] == TARGET
     assert payload["open_ports"] == [22, 443]
+
+
+def test_scan_with_output_exports_valid_core_assets_and_findings(tmp_path: Path) -> None:
+    scope_path = _write_scope(tmp_path / "scope.json")
+    log_path = tmp_path / "blocked.log"
+    findings_path = tmp_path / "out" / "helios-findings.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "helios",
+            "scan",
+            "--target",
+            TARGET,
+            "--scope",
+            str(scope_path),
+            "--log",
+            str(log_path),
+            "--output",
+            str(findings_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert findings_path.exists()
+
+    raw = json.loads(findings_path.read_text(encoding="utf-8"))
+    assets = [Asset.model_validate(item) for item in raw["assets"]]
+    findings = [Finding.model_validate(item) for item in raw["findings"]]
+    assert assets[0].hostname == TARGET
+    assert len(findings) == 2
 
 
 def test_scan_out_of_scope_target_is_blocked_and_logged(tmp_path: Path) -> None:
