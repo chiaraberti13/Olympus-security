@@ -68,7 +68,7 @@
       — done: test rilevamento manomissione
 - [x] T-153 Transizioni di stato dell'incidente (macchina a stati, transizioni invalide rifiutate)
       — done: test transizioni valide/invalide
-- [ ] T-154 Export/import report incidente conforme a core.Incident — done: round-trip validato
+- [x] T-154 Export/import report incidente conforme a core.Incident — done: round-trip validato
 - [ ] T-155 README modulo bilingue + `minerva demo` reale — done: demo esce 0
 
 ### Proteus (🔴 Phishing sim, mai credenziali reali)
