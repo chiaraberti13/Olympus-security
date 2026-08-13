@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "olympus-security"
-version = "0.1.0"
+version = "1.0.0"
 description = "Olympus — an offensive-security platform (Red + Blue) with a shared data contract."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,6 +25,7 @@ dev = [
     "mypy>=1.11",
     "pre-commit>=3.7",
     "types-PyYAML>=6.0",
+    "build>=1.2",
 ]
 
 [project.scripts]

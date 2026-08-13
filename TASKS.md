@@ -88,7 +88,7 @@
 - [x] T-174 Export `vulcan-report.json` conforme a core — done: round-trip validato
 - [x] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
 
-## 🔜 To do — W4 Range & capstone
+## ✅ Done — W4 Range & capstone
 ### Mars (🟣 Cyber range + scenari purple)
 - [x] T-181 Docker Compose range segmentato: target web vulnerabile-by-design sintetico
       "Olympus Demo Corp" + scope file dedicato — done: `docker compose config` valida
@@ -99,8 +99,21 @@
       Argus → Helios → Artemis → Apollo → Minerva → Vulcan mantenendo ID tracciabili
       — done: test di integrazione verde (`tests/integration/`)
 - [x] T-184 README modulo bilingue (labs/mars + docs/modules/mars.md) — done
-- [ ] T-185 Release riproducibile: CHANGELOG.md, version bump, `python -m build` verificato
+- [x] T-185 Release riproducibile: CHANGELOG.md, version bump, `python -m build` verificato
       — done: build verde
+
+## 🏁 Piano completo / Plan complete
+Tutte le ondate pianificate (W0–W4) sono chiuse. `make check` verde, nessuna voce APERTA in
+ERRORS.md, 9 moduli reali con demo offline deterministica, scenario purple cross-modulo
+verde, build riproducibile bit-per-bit. Vedi [CHANGELOG.md](CHANGELOG.md) per il riepilogo
+della release `1.0.0`. Eventuale lavoro futuro (nuovi moduli, hardening, CI reale) va aperto
+come nuova ondata in [PLAN.md](PLAN.md) con i propri task qui.
+
+All planned waves (W0–W4) are closed. `make check` green, no OPEN entry in ERRORS.md, 9 real
+modules with a deterministic offline demo, a green cross-module purple scenario, a
+bit-for-bit reproducible build. See [CHANGELOG.md](CHANGELOG.md) for the `1.0.0` release
+summary. Future work (new modules, hardening, real CI) should open as a new wave in
+[PLAN.md](PLAN.md) with its own tasks here.
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - (nessuno aperto / none open)

@@ -40,8 +40,17 @@ aggiunge Alert/Event/Evidence.
 (IR/DFIR); poi `Proteus` (phishing sim) + `Vulcan` (aggregazione finding + **report di
 pentest**). Core aggiunge Incident.
 
-**W4 — Range & capstone.** `Mars`: cyber range Docker segmentato + scenari purple end-to-end
-che attraversano tutta la suite. Test cross-module, release riproducibile.
+**W4 — Range & capstone (fatto / done).** `Mars`: cyber range Docker segmentato + scenari
+purple end-to-end che attraversano tutta la suite. Test cross-module, release riproducibile.
+
+## 🏁 Piano completo / Plan complete
+Tutte le ondate (W0–W4) sono chiuse: `make check` verde, `ERRORS.md` senza voci APERTE, 9
+moduli reali. Release `1.0.0` — vedi [CHANGELOG.md](CHANGELOG.md). Nuovo lavoro futuro va
+aperto come nuova ondata qui, con task puntuali in `TASKS.md`.
+
+All waves (W0–W4) are closed: `make check` green, `ERRORS.md` with no OPEN entries, 9 real
+modules. Release `1.0.0` — see [CHANGELOG.md](CHANGELOG.md). Future work should open as a
+new wave here, with itemized tasks in `TASKS.md`.
 
 ## Definition of Done (per modulo / per module)
 - [ ] Funzione core dello scope operativa · comando `demo` reale su dati sintetici
