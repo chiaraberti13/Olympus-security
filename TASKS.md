@@ -93,7 +93,7 @@
 - [x] T-181 Docker Compose range segmentato: target web vulnerabile-by-design sintetico
       "Olympus Demo Corp" + scope file dedicato — done: `docker compose config` valida
       (nessun daemon disponibile in questo ambiente: validazione strutturale, non avvio reale)
-- [ ] T-182 Makefile targets sicuri (mars-up/mars-down/mars-status), non distruttività
+- [x] T-182 Makefile targets sicuri (mars-up/mars-down/mars-status), non distruttività
       documentata — done: comandi definiti e verificati con `docker compose config`
 - [ ] T-183 Scenario purple end-to-end cross-modulo: un solo target sintetico attraversa
       Argus → Helios → Artemis → Apollo → Minerva → Vulcan mantenendo ID tracciabili
