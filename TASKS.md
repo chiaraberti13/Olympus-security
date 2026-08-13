@@ -72,7 +72,7 @@
 - [x] T-155 README modulo bilingue + `minerva demo` reale — done: demo esce 0
 
 ### Proteus (🔴 Phishing sim, mai credenziali reali)
-- [ ] T-161 Generatore campagna simulata (destinatari sintetici, nessun invio email reale)
+- [x] T-161 Generatore campagna simulata (destinatari sintetici, nessun invio email reale)
       — done: test
 - [ ] T-162 Pagina di training statica (mai raccolta credenziali) + tracking click simulato
       — done: test
