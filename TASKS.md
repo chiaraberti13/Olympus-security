@@ -95,7 +95,7 @@
       (nessun daemon disponibile in questo ambiente: validazione strutturale, non avvio reale)
 - [x] T-182 Makefile targets sicuri (mars-up/mars-down/mars-status), non distruttività
       documentata — done: comandi definiti e verificati con `docker compose config`
-- [ ] T-183 Scenario purple end-to-end cross-modulo: un solo target sintetico attraversa
+- [x] T-183 Scenario purple end-to-end cross-modulo: un solo target sintetico attraversa
       Argus → Helios → Artemis → Apollo → Minerva → Vulcan mantenendo ID tracciabili
       — done: test di integrazione verde (`tests/integration/`)
 - [ ] T-184 README modulo bilingue (labs/mars + docs/modules/mars.md) — done
