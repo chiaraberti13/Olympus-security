@@ -98,7 +98,7 @@
 - [x] T-183 Scenario purple end-to-end cross-modulo: un solo target sintetico attraversa
       Argus → Helios → Artemis → Apollo → Minerva → Vulcan mantenendo ID tracciabili
       — done: test di integrazione verde (`tests/integration/`)
-- [ ] T-184 README modulo bilingue (labs/mars + docs/modules/mars.md) — done
+- [x] T-184 README modulo bilingue (labs/mars + docs/modules/mars.md) — done
 - [ ] T-185 Release riproducibile: CHANGELOG.md, version bump, `python -m build` verificato
       — done: build verde
 
