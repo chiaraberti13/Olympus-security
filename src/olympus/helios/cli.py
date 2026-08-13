@@ -8,8 +8,9 @@ from pathlib import Path
 import typer
 
 from olympus.helios.alerts import build_alerts
+from olympus.helios.demo_data import DEMO_HOSTS, DemoScanner
 from olympus.helios.findings import build_findings, export_findings
-from olympus.helios.recon import scan_host
+from olympus.helios.recon import HostRecon, scan_host
 from olympus.helios.scanner import TcpConnectScanner
 from olympus.helios.scope import OutOfScopeError, ScopeError, enforce_scope
 
@@ -20,6 +21,7 @@ app = typer.Typer(
 
 DEFAULT_SCOPE_PATH = Path("examples/input/helios-scope.json")
 DEFAULT_BLOCK_LOG_PATH = Path("examples/output/helios-blocked.log")
+DEMO_OUTPUT_PATH = Path("examples/output/helios-findings.json")
 
 
 @app.command()
@@ -66,6 +68,26 @@ def scan(
 
 @app.command()
 def demo() -> None:
-    """Run a self-contained demo on the synthetic 'Olympus Demo Corp' dataset."""
-    # NOTE: scaffold only. The development loop implements this command.
-    typer.echo("helios: demo not implemented yet (scaffold).")
+    """Run the full Helios pipeline on the synthetic 'Olympus Demo Corp' hosts.
+
+    Fully offline and deterministic: the port scanner is served from
+    :mod:`olympus.helios.demo_data` instead of the network, but every other
+    step (scope enforcement, recon, findings/alert export) is the real
+    production code path used by ``helios scan``.
+    """
+    typer.echo(f"helios: demo — port scan on {len(DEMO_HOSTS)} synthetic host(s)")
+
+    scanner = DemoScanner()
+    recons: list[HostRecon] = []
+    for host in DEMO_HOSTS:
+        enforce_scope(host, DEFAULT_SCOPE_PATH, DEFAULT_BLOCK_LOG_PATH)
+        result = scan_host(host, scanner)
+        recons.append(result)
+        typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+
+    assets, findings = build_findings(recons)
+    alerts = build_alerts(findings)
+    export_findings(assets, findings, DEMO_OUTPUT_PATH, alerts=alerts)
+    typer.echo(
+        f"helios: wrote {len(findings)} finding(s), {len(alerts)} alert(s) to {DEMO_OUTPUT_PATH}"
+    )
