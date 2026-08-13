@@ -28,8 +28,9 @@ gates are green (`make check`).
 **W0 — Foundations (fatto / done).** `core`: enum, ID generator, modelli Asset/Finding,
 errori strutturati, CLI unico, export JSON Schema, CI, gate verdi.
 
-**W1 — First value.** `Argus` (OSINT passivo → `argus-assets.json`) + `Hermes` (secret scan
-→ SARIF, pre-commit). *Esito:* primo scambio dati reale + tool DevSecOps spendibile.
+**W1 — First value (fatto / done).** `Argus` (OSINT passivo → `argus-assets.json`) +
+`Hermes` (secret scan → SARIF, pre-commit). *Esito:* primo scambio dati reale + tool
+DevSecOps spendibile.
 
 **W2 — Surface & detection.** `Helios` (scope enforcement → `helios-findings.json`) +
 `Apollo` (regole YAML + MITRE ATT&CK + detection testing). Core aggiunge Alert/Event/Evidence.

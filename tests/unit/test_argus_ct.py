@@ -101,9 +101,7 @@ def test_crtsh_client_parses_valid_response(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_crtsh_client_empty_response_returns_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "urllib.request.urlopen", lambda url, timeout=0.0: _FakeHttpResponse(b"")
-    )
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=0.0: _FakeHttpResponse(b""))
     assert CrtShClient().query(DOMAIN) == []
 
 

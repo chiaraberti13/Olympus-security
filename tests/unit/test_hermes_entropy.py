@@ -62,6 +62,16 @@ def test_threshold_is_configurable() -> None:
     assert scan_text_entropy(text, hex_threshold=0.0)
 
 
+def test_unspaced_env_assignment_isolates_the_value_from_the_key() -> None:
+    # Regression: a plain `.env`-style `KEY=value` line (no spaces) must not
+    # be swallowed into one "KEY=value" token -- the variable name has
+    # nothing to do with the secret's entropy and must not appear in it.
+    secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"  # AWS docs example secret access key
+    matches = scan_text_entropy(f"AWS_SECRET_ACCESS_KEY={secret}")
+    assert len(matches) == 1
+    assert matches[0].matched_text == secret
+
+
 def test_match_reports_correct_line_and_column() -> None:
     secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"  # AWS docs example secret access key
     text = f"line one\nsecret = {secret}"

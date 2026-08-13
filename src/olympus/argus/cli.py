@@ -78,12 +78,8 @@ def scan(
 
 @app.command("diff")
 def diff_command(
-    previous: Path = typer.Option(
-        ..., "--previous", help="Older argus-assets.json snapshot."
-    ),
-    current: Path = typer.Option(
-        ..., "--current", help="Newer argus-assets.json snapshot."
-    ),
+    previous: Path = typer.Option(..., "--previous", help="Older argus-assets.json snapshot."),
+    current: Path = typer.Option(..., "--current", help="Newer argus-assets.json snapshot."),
 ) -> None:
     """Compare two argus-assets.json snapshots and report added/removed/changed hosts."""
     try:

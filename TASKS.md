@@ -12,7 +12,7 @@
 - [x] T-005 CLI unico `olympus <tool> <cmd>` + core export-schemas
 - [x] T-006 Test unit core + CLI, coverage ≥ 90% (attuale 98.7%)
 
-## 🔜 To do — W1 First value
+## ✅ Done — W1 First value
 ### Argus (🔴 OSINT)
 - [x] T-101 `argus scan --domain` recon passiva DNS/MX/SPF/DMARC — done: test + fixture
 - [x] T-102 Certificate Transparency + sottodomini passivi — done: test su fixture offline
@@ -26,10 +26,15 @@
       (regressione risolta: ERR-2026-08-11-06, test demo isolato da esempio tracciato)
 - [x] T-113 Scan della history Git — done: test su repo fixture
 - [x] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
-- [ ] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
+- [x] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
 
-## ⏳ Backlog — W2..W4
-Helios, Apollo, Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
+## 🔜 To do — W2 Surface & detection
+Helios (scope enforcement → `helios-findings.json`) + Apollo (regole YAML + MITRE ATT&CK +
+detection testing). Core aggiunge Alert/Event/Evidence. Vedi PLAN.md per i dettagli; i task
+puntuali vanno aggiunti qui alla prossima ondata.
+
+## ⏳ Backlog — W3..W4
+Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - (nessuno aperto / none open)

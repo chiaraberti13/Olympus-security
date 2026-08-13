@@ -1,0 +1,18 @@
+# Hook manifest so other repos can adopt Hermes via pre-commit:
+#
+#   repos:
+#     - repo: https://github.com/chiaraberti13/olympus-security
+#       rev: <tag or commit>
+#       hooks:
+#         - id: hermes-secret-scan
+#
+- id: hermes-secret-scan
+  name: Hermes secret scan
+  description: >-
+    Scan staged files for known-prefix (AWS/GitHub/Slack/JWT/private key) and
+    high-entropy secrets before they are committed.
+  entry: olympus hermes scan
+  language: python
+  additional_dependencies: ["olympus-security"]
+  pass_filenames: true
+  types: [text]

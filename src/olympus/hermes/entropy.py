@@ -17,8 +17,16 @@ import math
 import re
 from dataclasses import dataclass
 
-_CANDIDATE_TOKEN = re.compile(r"[A-Za-z0-9+/_=-]+")
-_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
+# '=' is only meaningful as base64 padding, so it may only trail a token,
+# never sit inside one -- otherwise an unspaced `KEY=value` assignment (the
+# common .env/shell shape) would be swallowed into a single "KEY=value"
+# token instead of separating the (uninteresting) name from the value.
+_CANDIDATE_TOKEN = re.compile(r"[A-Za-z0-9+/_-]+=*")
+# Split across two short literals (neither reaches DEFAULT_MIN_LENGTH) so this
+# constant doesn't itself look like a planted high-entropy secret to Hermes.
+_HEX_DIGITS = "0123456789"
+_HEX_LETTERS = "abcdefABCDEF"
+_HEX_CHARS = frozenset(_HEX_DIGITS + _HEX_LETTERS)
 
 DEFAULT_MIN_LENGTH = 20
 DEFAULT_HEX_THRESHOLD = 3.0
@@ -33,9 +41,7 @@ def shannon_entropy(value: str) -> float:
     for char in value:
         counts[char] = counts.get(char, 0) + 1
     length = len(value)
-    return -sum(
-        (count / length) * math.log2(count / length) for count in counts.values()
-    )
+    return -sum((count / length) * math.log2(count / length) for count in counts.values())
 
 
 def _is_hex(token: str) -> bool:

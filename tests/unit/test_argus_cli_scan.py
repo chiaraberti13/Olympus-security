@@ -74,9 +74,7 @@ def test_scan_in_scope_domain_prints_recon_json(tmp_path: Path) -> None:
     assert payload["subdomains"] == [f"www.{DOMAIN}"]
 
 
-def test_scan_survives_ct_lookup_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scan_survives_ct_lookup_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(argus_cli, "CrtShClient", _FailingCtClient)
     scope_path = _write_scope(tmp_path / "scope.json")
     log_path = tmp_path / "blocked.log"

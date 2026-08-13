@@ -14,3 +14,14 @@ repos:
     rev: v8.18.4
     hooks:
       - id: gitleaks
+  - repo: local
+    hooks:
+      - id: hermes-secret-scan
+        name: Hermes secret scan (dogfood)
+        description: Olympus's own Hermes module, scanning its own staged files.
+        entry: olympus hermes scan
+        language: system
+        pass_filenames: true
+        types: [text]
+        # Test fixtures and demo samples intentionally contain fake secrets.
+        exclude: ^(tests/|examples/input/hermes-samples/|examples/output/)

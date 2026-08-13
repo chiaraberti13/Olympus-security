@@ -1,0 +1,160 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/input/hermes-samples/leaked-config.env"
+                },
+                "region": {
+                  "snippet": {
+                    "text": "AKIA************MPLE"
+                  },
+                  "startColumn": 19,
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "AWS Access Key ID detected"
+          },
+          "ruleId": "HERMES-AWS-ACCESS-KEY-ID"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/input/hermes-samples/leaked-config.env"
+                },
+                "region": {
+                  "snippet": {
+                    "text": "ghp_********************************aaaa"
+                  },
+                  "startColumn": 14,
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "GitHub Token detected"
+          },
+          "ruleId": "HERMES-GITHUB-TOKEN"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/input/hermes-samples/leaked-config.env"
+                },
+                "region": {
+                  "snippet": {
+                    "text": "eyJh***************************************************************************************sR8U"
+                  },
+                  "startColumn": 13,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "JSON Web Token detected"
+          },
+          "ruleId": "HERMES-JWT"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/input/hermes-samples/leaked-config.env"
+                },
+                "region": {
+                  "snippet": {
+                    "text": "wJal********************************EKEY"
+                  },
+                  "startColumn": 23,
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "High-entropy string detected (entropy=4.66 bits/char)"
+          },
+          "ruleId": "HERMES-HIGH-ENTROPY"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/input/hermes-samples/leaked-config.env"
+                },
+                "region": {
+                  "snippet": {
+                    "text": "dozj***********************************sR8U"
+                  },
+                  "startColumn": 65,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "High-entropy string detected (entropy=4.82 bits/char)"
+          },
+          "ruleId": "HERMES-HIGH-ENTROPY"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "hermes-demo",
+          "rules": [
+            {
+              "id": "HERMES-AWS-ACCESS-KEY-ID",
+              "name": "AWS Access Key ID",
+              "shortDescription": {
+                "text": "AWS Access Key ID"
+              }
+            },
+            {
+              "id": "HERMES-GITHUB-TOKEN",
+              "name": "GitHub Token",
+              "shortDescription": {
+                "text": "GitHub Token"
+              }
+            },
+            {
+              "id": "HERMES-JWT",
+              "name": "JSON Web Token",
+              "shortDescription": {
+                "text": "JSON Web Token"
+              }
+            },
+            {
+              "id": "HERMES-HIGH-ENTROPY",
+              "name": "High-Entropy String",
+              "shortDescription": {
+                "text": "High-Entropy String"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}
