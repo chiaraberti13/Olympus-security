@@ -83,7 +83,7 @@
 
 ### Vulcan (🟣 Aggregazione + report pentest)
 - [x] T-171 Aggregazione Asset/Finding/Alert da export multipli con deduplica — done: test
-- [ ] T-172 Scoring/ordinamento per rischio (CVSS + severità) — done: test
+- [x] T-172 Scoring/ordinamento per rischio (CVSS + severità) — done: test
 - [ ] T-173 Generazione report di pentest (Markdown) da dati aggregati — done: test struttura
 - [ ] T-174 Export `vulcan-report.json` conforme a core — done: round-trip validato
 - [ ] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
