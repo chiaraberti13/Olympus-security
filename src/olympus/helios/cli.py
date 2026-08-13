@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from olympus.helios.alerts import build_alerts
 from olympus.helios.findings import build_findings, export_findings
 from olympus.helios.recon import scan_host
 from olympus.helios.scanner import TcpConnectScanner
@@ -55,8 +56,12 @@ def scan(
 
     if output is not None:
         assets, findings = build_findings([result])
-        export_findings(assets, findings, output)
-        typer.echo(f"helios: wrote {len(findings)} finding(s) to {output}", err=True)
+        alerts = build_alerts(findings)
+        export_findings(assets, findings, output, alerts=alerts)
+        typer.echo(
+            f"helios: wrote {len(findings)} finding(s), {len(alerts)} alert(s) to {output}",
+            err=True,
+        )
 
 
 @app.command()

@@ -38,7 +38,7 @@
 - [x] T-122 Scope file obbligatorio (host/CIDR) + blocco+log fuori scope — done: test
 - [x] T-123 Export `helios-findings.json` (Asset per host + Finding per porta aperta)
       conforme a core — done: round-trip validato
-- [ ] T-124 Alert per servizi esposti ad alto rischio (porte critiche) — done: test
+- [x] T-124 Alert per servizi esposti ad alto rischio (porte critiche) — done: test
 - [ ] T-125 README modulo bilingue + `helios demo` reale — done: demo esce 0
 
 ### Apollo (🔵 Detection engineering)

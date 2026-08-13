@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from olympus.core.enums import AssetType, Severity, Source
+from olympus.helios.alerts import build_alerts
 from olympus.helios.findings import build_findings, export_findings, load_findings
 from olympus.helios.recon import HostRecon
 
@@ -67,14 +68,29 @@ def test_export_and_load_findings_round_trip(tmp_path: Path) -> None:
     output_path = tmp_path / "nested" / "helios-findings.json"
 
     export_findings(original_assets, original_findings, output_path)
-    loaded_assets, loaded_findings = load_findings(output_path)
+    loaded_assets, loaded_findings, loaded_alerts = load_findings(output_path)
 
     assert loaded_assets == original_assets
     assert loaded_findings == original_findings
+    assert loaded_alerts == []
     for asset in loaded_assets:
         assert asset.schema_name == "olympus.asset"
     for finding in loaded_findings:
         assert finding.schema_name == "olympus.finding"
+
+
+def test_export_and_load_findings_round_trip_with_alerts(tmp_path: Path) -> None:
+    recon = HostRecon(host=HOST, open_ports=[3389])  # high-risk -> alerting
+    assets, findings = build_findings([recon])
+    original_alerts = build_alerts(findings)
+    output_path = tmp_path / "helios-findings.json"
+
+    export_findings(assets, findings, output_path, alerts=original_alerts)
+    _loaded_assets, _loaded_findings, loaded_alerts = load_findings(output_path)
+
+    assert len(loaded_alerts) == 1
+    assert loaded_alerts == original_alerts
+    assert loaded_alerts[0].schema_name == "olympus.alert"
 
 
 def test_load_findings_rejects_non_object_payload(tmp_path: Path) -> None:
