@@ -36,8 +36,9 @@ DevSecOps spendibile.
 `helios-findings.json`) + `Apollo` (regole YAML + MITRE ATT&CK + detection testing). Core
 aggiunge Alert/Event/Evidence.
 
-**W3 — Web, response, reporting.** `Artemis` (web recon) + `Minerva` (IR/DFIR); poi `Proteus`
-(phishing sim) + `Vulcan` (aggregazione finding + **report di pentest**). Core aggiunge Incident.
+**W3 — Web, response, reporting (fatto / done).** `Artemis` (web recon) + `Minerva`
+(IR/DFIR); poi `Proteus` (phishing sim) + `Vulcan` (aggregazione finding + **report di
+pentest**). Core aggiunge Incident.
 
 **W4 — Range & capstone.** `Mars`: cyber range Docker segmentato + scenari purple end-to-end
 che attraversano tutta la suite. Test cross-module, release riproducibile.

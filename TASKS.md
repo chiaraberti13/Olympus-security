@@ -48,7 +48,7 @@
 - [x] T-134 Harness di detection testing (regola + eventi sintetici etichettati) — done: test
 - [x] T-135 README modulo bilingue + `apollo demo` reale — done: demo esce 0
 
-## 🔜 To do — W3 Web, response, reporting
+## ✅ Done — W3 Web, response, reporting
 ### Core (⚙️ Incident)
 - [x] T-140 core.models Incident (lifecycle NEW→TRIAGED→CONTAINED→RESOLVED→CLOSED)
       — done: test + export-schemas
@@ -86,10 +86,12 @@
 - [x] T-172 Scoring/ordinamento per rischio (CVSS + severità) — done: test
 - [x] T-173 Generazione report di pentest (Markdown) da dati aggregati — done: test struttura
 - [x] T-174 Export `vulcan-report.json` conforme a core — done: round-trip validato
-- [ ] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
+- [x] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
 
-## ⏳ Backlog — W4
-Mars (vedi PLAN.md).
+## 🔜 To do — W4 Range & capstone
+Mars: cyber range Docker segmentato + scenari purple end-to-end che attraversano tutta la
+suite. Test cross-module, release riproducibile. Vedi PLAN.md; i task puntuali vanno
+aggiunti qui alla prossima ondata.
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - (nessuno aperto / none open)

@@ -1,0 +1,377 @@
+{
+  "alerts": [
+    {
+      "alert_id": "ALT-2026-00001",
+      "description": "Flags a failed login attempt, indicative of brute-force or credential-stuffing activity against an authentication endpoint.",
+      "event_ids": [
+        "EVT-2026-00001"
+      ],
+      "evidence": [
+        {
+          "collected_at": "2026-08-13T09:24:28.577574Z",
+          "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
+          "evidence_id": "EVD-2026-00001",
+          "evidence_type": "log_excerpt",
+          "reference": "EVT-2026-00001",
+          "schema_name": "olympus.evidence",
+          "schema_version": "1.0.0"
+        }
+      ],
+      "first_seen": "2026-08-13T09:24:28.577602Z",
+      "last_seen": "2026-08-13T09:24:28.577604Z",
+      "mitre_technique_id": "T1110",
+      "rule_id": "APOLLO-BRUTE-FORCE-001",
+      "schema_name": "olympus.alert",
+      "schema_version": "1.0.0",
+      "severity": "high",
+      "source": "apollo",
+      "status": "new",
+      "title": "Repeated authentication failure"
+    },
+    {
+      "alert_id": "ALT-2026-00002",
+      "description": "Flags a failed login attempt, indicative of brute-force or credential-stuffing activity against an authentication endpoint.",
+      "event_ids": [
+        "EVT-2026-00002"
+      ],
+      "evidence": [
+        {
+          "collected_at": "2026-08-13T09:24:28.577614Z",
+          "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
+          "evidence_id": "EVD-2026-00002",
+          "evidence_type": "log_excerpt",
+          "reference": "EVT-2026-00002",
+          "schema_name": "olympus.evidence",
+          "schema_version": "1.0.0"
+        }
+      ],
+      "first_seen": "2026-08-13T09:24:28.577621Z",
+      "last_seen": "2026-08-13T09:24:28.577621Z",
+      "mitre_technique_id": "T1110",
+      "rule_id": "APOLLO-BRUTE-FORCE-001",
+      "schema_name": "olympus.alert",
+      "schema_version": "1.0.0",
+      "severity": "high",
+      "source": "apollo",
+      "status": "new",
+      "title": "Repeated authentication failure"
+    },
+    {
+      "alert_id": "ALT-2026-00003",
+      "description": "Flags a failed login attempt, indicative of brute-force or credential-stuffing activity against an authentication endpoint.",
+      "event_ids": [
+        "EVT-2026-00003"
+      ],
+      "evidence": [
+        {
+          "collected_at": "2026-08-13T09:24:28.577625Z",
+          "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
+          "evidence_id": "EVD-2026-00003",
+          "evidence_type": "log_excerpt",
+          "reference": "EVT-2026-00003",
+          "schema_name": "olympus.evidence",
+          "schema_version": "1.0.0"
+        }
+      ],
+      "first_seen": "2026-08-13T09:24:28.577630Z",
+      "last_seen": "2026-08-13T09:24:28.577630Z",
+      "mitre_technique_id": "T1110",
+      "rule_id": "APOLLO-BRUTE-FORCE-001",
+      "schema_name": "olympus.alert",
+      "schema_version": "1.0.0",
+      "severity": "high",
+      "source": "apollo",
+      "status": "new",
+      "title": "Repeated authentication failure"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "AST-2026-00001",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.311992Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.311994Z",
+      "metadata": {
+        "display_name": "",
+        "email": "alice@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00002",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.312034Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.312035Z",
+      "metadata": {
+        "display_name": "",
+        "email": "bob@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00003",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.312067Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.312068Z",
+      "metadata": {
+        "display_name": "",
+        "email": "carol@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00004",
+      "asset_type": "other",
+      "criticality": "medium",
+      "first_seen": "2026-08-13T12:42:33.312082Z",
+      "hostname": null,
+      "ip_addresses": [],
+      "last_seen": "2026-08-13T12:42:33.312082Z",
+      "metadata": {
+        "display_name": "",
+        "email": "dave@olympusdemocorp.example"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "proteus",
+      "tags": [
+        "proteus",
+        "campaign-recipient"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00031",
+      "asset_type": "domain",
+      "criticality": "medium",
+      "first_seen": "2026-08-11T13:09:11.244661Z",
+      "hostname": "olympusdemocorp.example",
+      "ip_addresses": [
+        "203.0.113.10",
+        "2001:db8::10"
+      ],
+      "last_seen": "2026-08-11T13:09:11.244664Z",
+      "metadata": {
+        "dmarc": "v=DMARC1; p=reject; rua=mailto:dmarc@olympusdemocorp.example",
+        "mx_records": "10 mail.olympusdemocorp.example",
+        "spf": "v=spf1 include:_spf.olympusdemocorp.example ~all"
+      },
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "argus",
+      "tags": [
+        "argus",
+        "dns-recon"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00032",
+      "asset_type": "domain",
+      "criticality": "medium",
+      "first_seen": "2026-08-11T13:09:11.244687Z",
+      "hostname": "mail.olympusdemocorp.example",
+      "ip_addresses": [],
+      "last_seen": "2026-08-11T13:09:11.244688Z",
+      "metadata": {},
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "argus",
+      "tags": [
+        "argus",
+        "certificate-transparency"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00033",
+      "asset_type": "domain",
+      "criticality": "medium",
+      "first_seen": "2026-08-11T13:09:11.244701Z",
+      "hostname": "vpn.olympusdemocorp.example",
+      "ip_addresses": [],
+      "last_seen": "2026-08-11T13:09:11.244702Z",
+      "metadata": {},
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "argus",
+      "tags": [
+        "argus",
+        "certificate-transparency"
+      ]
+    },
+    {
+      "asset_id": "AST-2026-00034",
+      "asset_type": "domain",
+      "criticality": "medium",
+      "first_seen": "2026-08-11T13:09:11.244713Z",
+      "hostname": "www.olympusdemocorp.example",
+      "ip_addresses": [],
+      "last_seen": "2026-08-11T13:09:11.244714Z",
+      "metadata": {},
+      "owner": null,
+      "schema_name": "olympus.asset",
+      "schema_version": "1.0.0",
+      "source": "argus",
+      "tags": [
+        "argus",
+        "certificate-transparency"
+      ]
+    }
+  ],
+  "engagement": "olympus-demo-corp-2026",
+  "findings": [
+    {
+      "asset_id": "AST-2026-00001",
+      "cvss": null,
+      "description": "An exposed .env file commonly contains secrets/credentials.",
+      "evidence": [
+        "GET https://olympusdemocorp.example/.env -> 200"
+      ],
+      "finding_id": "FND-2026-00007",
+      "first_seen": "2026-08-13T12:31:21.273854Z",
+      "last_seen": "2026-08-13T12:31:21.273854Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "critical",
+      "source": "artemis",
+      "status": "new",
+      "title": "Exposed path: /.env"
+    },
+    {
+      "asset_id": "AST-2026-00001",
+      "cvss": null,
+      "description": "Access-Control-Allow-Origin: * combined with Access-Control-Allow-Credentials: true is invalid per spec but indicates a misconfigured CORS policy.",
+      "evidence": [],
+      "finding_id": "FND-2026-00006",
+      "first_seen": "2026-08-13T12:31:21.273835Z",
+      "last_seen": "2026-08-13T12:31:21.273836Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "high",
+      "source": "artemis",
+      "status": "new",
+      "title": "CORS wildcard origin with credentials allowed"
+    },
+    {
+      "asset_id": "AST-2026-00002",
+      "cvss": null,
+      "description": "bob@olympusdemocorp.example clicked the simulated phishing link in campaign 'Olympus Demo Corp Q3 Awareness Campaign'. No real credentials were requested or collected; a training-disclosure page was shown instead.",
+      "evidence": [],
+      "finding_id": "FND-2026-00001",
+      "first_seen": "2026-08-13T12:42:33.312059Z",
+      "last_seen": "2026-08-13T12:42:33.312060Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "proteus",
+      "status": "new",
+      "title": "Recipient clicked simulated phishing link (Olympus Demo Corp Q3 Awareness Campaign)"
+    },
+    {
+      "asset_id": "AST-2026-00003",
+      "cvss": null,
+      "description": "carol@olympusdemocorp.example clicked the simulated phishing link in campaign 'Olympus Demo Corp Q3 Awareness Campaign'. No real credentials were requested or collected; a training-disclosure page was shown instead.",
+      "evidence": [],
+      "finding_id": "FND-2026-00002",
+      "first_seen": "2026-08-13T12:42:33.312076Z",
+      "last_seen": "2026-08-13T12:42:33.312077Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "proteus",
+      "status": "new",
+      "title": "Recipient clicked simulated phishing link (Olympus Demo Corp Q3 Awareness Campaign)"
+    },
+    {
+      "asset_id": "AST-2026-00004",
+      "cvss": null,
+      "description": "dave@olympusdemocorp.example clicked the simulated phishing link in campaign 'Olympus Demo Corp Q3 Awareness Campaign'. No real credentials were requested or collected; a training-disclosure page was shown instead.",
+      "evidence": [],
+      "finding_id": "FND-2026-00003",
+      "first_seen": "2026-08-13T12:42:33.312088Z",
+      "last_seen": "2026-08-13T12:42:33.312089Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "proteus",
+      "status": "new",
+      "title": "Recipient clicked simulated phishing link (Olympus Demo Corp Q3 Awareness Campaign)"
+    },
+    {
+      "asset_id": "AST-2026-00001",
+      "cvss": null,
+      "description": "X-Content-Type-Options: nosniff prevents MIME-sniffing attacks.",
+      "evidence": [],
+      "finding_id": "FND-2026-00004",
+      "first_seen": "2026-08-13T12:31:21.273819Z",
+      "last_seen": "2026-08-13T12:31:21.273820Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "artemis",
+      "status": "new",
+      "title": "Missing security header: x-content-type-options"
+    },
+    {
+      "asset_id": "AST-2026-00001",
+      "cvss": null,
+      "description": "Referrer-Policy controls how much referrer information leaks cross-origin.",
+      "evidence": [],
+      "finding_id": "FND-2026-00005",
+      "first_seen": "2026-08-13T12:31:21.273824Z",
+      "last_seen": "2026-08-13T12:31:21.273825Z",
+      "references": [],
+      "remediation": "",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "low",
+      "source": "artemis",
+      "status": "new",
+      "title": "Missing security header: referrer-policy"
+    }
+  ]
+}

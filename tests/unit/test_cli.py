@@ -17,6 +17,7 @@ from olympus.helios import cli as helios_cli
 from olympus.hermes import cli as hermes_cli
 from olympus.minerva import cli as minerva_cli
 from olympus.proteus import cli as proteus_cli
+from olympus.vulcan import cli as vulcan_cli
 
 runner = CliRunner()
 
@@ -37,12 +38,6 @@ def test_export_schemas_outputs_valid_json() -> None:
     assert "olympus.evidence" in payload
     assert "olympus.alert" in payload
     assert "olympus.incident" in payload
-
-
-def test_tool_demo_stub_runs() -> None:
-    result = runner.invoke(app, ["vulcan", "demo"])
-    assert result.exit_code == 0
-    assert "not implemented" in result.stdout
 
 
 def test_argus_demo_runs_the_real_pipeline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,3 +141,22 @@ def test_proteus_demo_runs_the_real_pipeline(
     assert "blocked 1 out-of-scope recipient" in result.stdout
     assert (tmp_path / "proteus-report.json").exists()
     assert (tmp_path / "proteus-training-page.html").exists()
+
+
+def test_vulcan_demo_runs_the_real_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Redirect the demo's report exports away from the tracked examples/
+    # samples: running the test suite must never dirty the working tree.
+    # The *source* files it reads (other modules' committed demo output)
+    # are left as the real, tracked examples/ — this is Vulcan's whole
+    # point: aggregating what every other module actually produced.
+    monkeypatch.setattr(vulcan_cli, "DEMO_MARKDOWN_OUTPUT_PATH", tmp_path / "vulcan-report.md")
+    monkeypatch.setattr(vulcan_cli, "DEMO_JSON_OUTPUT_PATH", tmp_path / "vulcan-report.json")
+
+    result = runner.invoke(app, ["vulcan", "demo"])
+
+    assert result.exit_code == 0, result.output
+    assert "vulcan: aggregated" in result.stdout
+    assert (tmp_path / "vulcan-report.md").exists()
+    assert (tmp_path / "vulcan-report.json").exists()
