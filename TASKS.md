@@ -54,7 +54,7 @@
       — done: test + export-schemas
 
 ### Artemis (🔴 Web recon)
-- [ ] T-141 HttpClient iniettabile (protocol + adapter urllib) — done: test su client fake offline
+- [x] T-141 HttpClient iniettabile (protocol + adapter urllib) — done: test su client fake offline
 - [ ] T-142 Analisi header di sicurezza (CSP/HSTS/X-Frame-Options/...) → Finding — done: test
 - [ ] T-143 Rilevamento CORS misconfigurato (wildcard+credentials, origin riflessa) → Finding
       — done: test
