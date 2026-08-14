@@ -18,6 +18,7 @@ REGOLE FISSE
 - "Verde o non fatto": un task è completo solo se `make check` è verde
   (ruff + mypy --strict + pytest con coverage >= 90%).
 - Un task alla volta. Niente scope creep: il nuovo scope va in TASKS.md o ERRORS.md.
+- Esegui automaticamente il push di tutte le modifiche sul branch di lavoro; mai su `main`.
 - Moduli offensivi: scope file obbligatorio, blocco+log fuori scope, non distruttivo.
   Proteus non raccoglie mai credenziali reali.
 

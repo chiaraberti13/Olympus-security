@@ -124,6 +124,36 @@
 - Fix: eseguibile Git risolto a path assoluto, eccezione Ruff motivata, helper tipizzato, smoke
   test aggiornato e test CLI SARIF aggiunto; coverage finale 90,7%
 - Test di regressione / Regression test: `make check` completo
-- Fix: in attesa di un ambiente con le dipendenze dev preinstallate o accesso al package index;
-  i 42 test passano escludendo soltanto gli argomenti di coverage
-- Test di regressione / Regression test: `make check` deve completare il gate coverage ≥ 90%
+
+### ERR-2026-08-14-07 — T-201: lista export core e ordine import test
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-201, primo run `ruff check .`
+- Sintomo / Symptom: elementi Event/Evidence inseriti dopo la chiusura di `__all__` e I001
+  nel nuovo test
+- Causa / Cause: applicazione incompleta della patch e import non ordinati
+- Fix: elementi spostati dentro `__all__` e import ordinati secondo Ruff
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-08 — T-201: tipo ID Event non registrato
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-201, primo test di round-trip Event
+- Sintomo / Symptom: `new_id("event")` sollevava `ValueError` per kind sconosciuto
+- Causa / Cause: il nuovo modello era stato aggiunto senza il relativo prefisso canonico
+- Fix: registrato il prefisso `EVT` nel generatore condiviso
+- Test di regressione / Regression test: round-trip Event nel gate pytest
+
+### ERR-2026-08-14-09 — Helios: righe oltre il limite Ruff
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-202..T-204, primo gate Helios
+- Sintomo / Symptom: E501 su firme, validazione porte e payload export
+- Causa / Cause: prima stesura troppo compatta
+- Fix: firme e strutture dati suddivise, condizione estratta con naming esplicito
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-10 — W2: smoke demo obsoleto, coverage e import test
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-205 e T-215, primo test dei demo reali
+- Sintomo / Symptom: smoke test attendeva ancora scaffold, coverage 87,8%, I001/E501 nei test CLI
+- Causa / Cause: lista legacy non aggiornata e percorsi CLI non ancora esercitati
+- Fix: demo rimossi dalla lista scaffold, aggiunti test CLI offline e formattati gli import
+- Test di regressione / Regression test: `make check` completo

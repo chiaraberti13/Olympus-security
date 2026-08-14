@@ -27,6 +27,9 @@ def test_export_schemas_outputs_valid_json() -> None:
     payload = json.loads(result.stdout)
     assert "olympus.asset" in payload
     assert "olympus.finding" in payload
+    assert "olympus.event" in payload
+    assert "olympus.evidence" in payload
+    assert "olympus.alert" in payload
 
 
 def test_argus_demo_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -38,10 +41,8 @@ def test_argus_demo_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_all_tool_demos_run() -> None:
     for tool in (
-        "helios",
         "artemis",
         "proteus",
-        "apollo",
         "minerva",
         "vulcan",
     ):

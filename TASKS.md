@@ -27,10 +27,26 @@
 - [x] T-114 Output SARIF valido + mascheramento del secret — done: struttura SARIF validata
 - [x] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
 
-## ⏳ Backlog — W2..W4
-Helios, Apollo, Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
+## 🔜 To do — W2 Surface & detection
+### Core contract
+- [x] T-201 `core.models` Event, Evidence e Alert + export JSON Schema — done: round-trip validato
+
+### Helios (🔴 Surface mapping)
+- [x] T-202 Scope CIDR/host con blocco e audit log fuori perimetro — done: test IPv4/IPv6
+- [x] T-203 Discovery TCP non distruttiva con timeout e limiti — done: connector offline iniettato
+- [x] T-204 Export `helios-findings.json` conforme a core.Finding — done: round-trip validato
+- [x] T-205 README bilingue + `helios demo` sintetico — done: demo esce 0
+
+### Apollo (🔵 Detection engineering)
+- [x] T-211 Parser regole YAML sicuro + schema rule — done: fixture valida/non valida
+- [x] T-212 Mapping MITRE ATT&CK e validazione ID tecnica — done: test
+- [x] T-213 Detection testing Event → Alert — done: veri/falsi positivi
+- [x] T-214 Export alert conforme a core.Alert — done: round-trip validato
+- [x] T-215 README bilingue + `apollo demo` sintetico — done: demo esce 0
+
+## ⏳ Backlog — W3..W4
+Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
-- [ ] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
   (ERR-2026-08-14-01) — done: coverage ≥ 90% verificata

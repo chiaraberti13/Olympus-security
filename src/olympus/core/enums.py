@@ -27,6 +27,15 @@ class FindingStatus(StrEnum):
     CLOSED = "closed"
 
 
+class AlertStatus(StrEnum):
+    """Lifecycle state of a detection alert."""
+
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    INVESTIGATING = "investigating"
+    CLOSED = "closed"
+
+
 class Criticality(StrEnum):
     """Business criticality of an asset."""
 
