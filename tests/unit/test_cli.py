@@ -30,6 +30,7 @@ def test_export_schemas_outputs_valid_json() -> None:
     assert "olympus.event" in payload
     assert "olympus.evidence" in payload
     assert "olympus.alert" in payload
+    assert "olympus.incident" in payload
 
 
 def test_argus_demo_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -11,12 +11,13 @@ from olympus.core.enums import (
     AssetType,
     Criticality,
     FindingStatus,
+    IncidentStatus,
     Severity,
     Source,
 )
 from olympus.core.errors import ValidationReport, format_validation_error
 from olympus.core.ids import IdGenerator, new_id
-from olympus.core.models import Alert, Asset, Event, Evidence, Finding, OlympusModel
+from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident, OlympusModel
 
 __all__ = [
     "Alert",
@@ -29,6 +30,8 @@ __all__ = [
     "Finding",
     "FindingStatus",
     "IdGenerator",
+    "Incident",
+    "IncidentStatus",
     "OlympusModel",
     "Severity",
     "Source",

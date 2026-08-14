@@ -44,8 +44,12 @@
 - [x] T-214 Export alert conforme a core.Alert — done: round-trip validato
 - [x] T-215 README bilingue + `apollo demo` sintetico — done: demo esce 0
 
-## ⏳ Backlog — W3..W4
-Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
+## 🔜 To do — W3 Web, response & reporting
+### Core contract
+- [x] T-301 `core.models.Incident` + lifecycle + export JSON Schema — done: round-trip validato
+
+## ⏳ Backlog — resto W3 e W4
+Artemis, Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-301 (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
