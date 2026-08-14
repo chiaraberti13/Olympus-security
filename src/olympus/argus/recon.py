@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from olympus.argus.ct import CertificateTransparencyClient
 from olympus.argus.resolver import DnsResolver
 
 
@@ -25,6 +26,7 @@ class DomainRecon:
     txt_records: list[str] = field(default_factory=list)
     spf: str | None = None
     dmarc: str | None = None
+    subdomains: list[str] = field(default_factory=list)
     scanned_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
@@ -37,6 +39,7 @@ class DomainRecon:
             "txt_records": self.txt_records,
             "spf": self.spf,
             "dmarc": self.dmarc,
+            "subdomains": self.subdomains,
             "scanned_at": self.scanned_at.isoformat(),
         }
 
@@ -57,7 +60,11 @@ def _find_dmarc(dmarc_txt_records: list[str]) -> str | None:
     return None
 
 
-def scan_domain(domain: str, resolver: DnsResolver) -> DomainRecon:
+def scan_domain(
+    domain: str,
+    resolver: DnsResolver,
+    ct_client: CertificateTransparencyClient | None = None,
+) -> DomainRecon:
     """Run a passive DNS/MX/SPF/DMARC recon pass against ``domain``."""
     a_records = resolver.resolve(domain, "A")
     aaaa_records = resolver.resolve(domain, "AAAA")
@@ -73,4 +80,5 @@ def scan_domain(domain: str, resolver: DnsResolver) -> DomainRecon:
         txt_records=txt_records,
         spf=_find_spf(txt_records),
         dmarc=_find_dmarc(dmarc_txt_records),
+        subdomains=ct_client.discover(domain) if ct_client is not None else [],
     )

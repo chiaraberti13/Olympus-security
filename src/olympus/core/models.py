@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from olympus.core.enums import AssetType, Criticality, FindingStatus, Severity, Source
+from olympus.core.enums import AlertStatus, AssetType, Criticality, FindingStatus, Severity, Source
 from olympus.core.ids import new_id
 
 
@@ -76,3 +76,40 @@ class Finding(OlympusModel):
         if value is not None and not 0.0 <= value <= 10.0:
             raise ValueError("cvss must be between 0.0 and 10.0")
         return value
+
+
+class Event(OlympusModel):
+    """A normalized observable consumed by detection rules."""
+
+    schema_name: str = "olympus.event"
+    event_id: str = Field(default_factory=lambda: new_id("event"))
+    event_type: str = Field(min_length=1)
+    source: Source
+    observed_at: datetime = Field(default_factory=_utcnow)
+    asset_id: str | None = None
+    attributes: dict[str, str] = Field(default_factory=dict)
+
+
+class Evidence(OlympusModel):
+    """An immutable reference to material supporting a finding or alert."""
+
+    schema_name: str = "olympus.evidence"
+    evidence_id: str = Field(default_factory=lambda: new_id("evidence"))
+    evidence_type: str = Field(min_length=1)
+    uri: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    collected_at: datetime = Field(default_factory=_utcnow)
+
+
+class Alert(OlympusModel):
+    """A detection result linked to its source event and supporting evidence."""
+
+    schema_name: str = "olympus.alert"
+    alert_id: str = Field(default_factory=lambda: new_id("alert"))
+    event_id: str
+    title: str = Field(min_length=1)
+    source: Source
+    severity: Severity = Severity.MEDIUM
+    status: AlertStatus = AlertStatus.OPEN
+    evidence_ids: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=_utcnow)
