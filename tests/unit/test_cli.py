@@ -44,7 +44,6 @@ def test_all_tool_demos_run() -> None:
     for tool in (
         "artemis",
         "proteus",
-        "minerva",
         "vulcan",
     ):
         result = runner.invoke(app, [tool, "demo"])

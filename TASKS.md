@@ -48,8 +48,11 @@
 ### Core contract
 - [x] T-301 `core.models.Incident` + lifecycle + export JSON Schema — done: round-trip validato
 
+### Minerva (🔵 IR/DFIR)
+- [x] T-302 Chain of custody append-only per core.Evidence + demo bilingue — done: tamper test
+
 ## ⏳ Backlog — resto W3 e W4
-Artemis, Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-301 (vedi PLAN.md).
+Artemis, resto Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-302 (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
