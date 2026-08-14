@@ -68,3 +68,91 @@
   combinato
 - Fix: asserzioni sui messaggi di errore spostate su `result.output` invece di `result.stdout`
 - Test di regressione / Regression test: `pytest` nel gate CI
+
+### ERR-2026-08-14-01 — Plugin `pytest-cov` assente nell'ambiente non aggiornabile
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-102, gate finale `make check`
+- Sintomo / Symptom: `python -m pytest` rifiuta gli argomenti `--cov`, `--cov-report` e
+  `--cov-fail-under`; `pip install -e ".[dev]"` non può scaricare `hatchling`
+- Causa / Cause: l'interprete attivo non include `pytest-cov` e il proxy del package index
+  risponde `403 Forbidden`, impedendo l'installazione delle dipendenze di sviluppo dichiarate
+- Fix: aggiunto un gate portabile basato sul tracer della standard library, avviato prima di
+  pytest e limitato ai frame `src/olympus`; nessuna dipendenza o accesso rete richiesti
+- Test di regressione / Regression test: `make check` deve completare il gate coverage ≥ 90%
+
+### ERR-2026-08-14-02 — Ruff: messaggio coverage oltre il limite di riga
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-901, primo run del gate coverage portabile
+- Sintomo / Symptom: E501 su una chiamata `print` lunga 102 caratteri
+- Causa / Cause: messaggio e destinazione stderr composti sulla stessa riga
+- Fix: messaggio estratto in una variabile locale
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-03 — Primo tracer portabile sottostima la coverage
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-901, secondo run del gate coverage portabile
+- Sintomo / Symptom: coverage riportata al 67,8% nonostante la suite copra i modelli core
+- Causa / Cause: `trace.Trace` applicava filtri interni non adatti alla raccolta avviata da pytest
+- Fix: raccolta sostituita con un trace hook limitato esplicitamente a `src/olympus`
+- Test di regressione / Regression test: `make check` verifica una coverage ≥ 90%
+
+### ERR-2026-08-14-04 — Ruff B009 sul trace hook
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-901, trace hook del gate coverage
+- Sintomo / Symptom: B009 sull'accesso costante a `f_code` e `f_lineno` tramite `getattr`
+- Causa / Cause: parametro frame annotato troppo genericamente come `object`
+- Fix: annotazione `FrameType` e accesso diretto agli attributi
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-05 — Mypy: firma callback incompatibile con `sys.settrace`
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-901, trace hook del gate coverage
+- Sintomo / Symptom: callback annotata con ritorno `object` incompatibile con `TraceFunction`
+- Causa / Cause: un trace hook restituisce ricorsivamente una funzione di tracing, non un object
+  arbitrario
+- Fix: tipo di ritorno reso compatibile con la firma dinamica richiesta dalla standard library
+- Test di regressione / Regression test: `mypy .` nel gate CI
+
+### ERR-2026-08-14-06 — Gate W1: lint, typing, regressione demo e coverage
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-103..T-115, iterazioni del gate W1
+- Sintomo / Symptom: S603 sui subprocess Git, tipo opzionale dell'eseguibile Git, test smoke
+  ancora legato ai demo scaffold e coverage iniziale 89,3%
+- Causa / Cause: hardening subprocess non esplicitato, narrowing globale insufficiente, test
+  legacy non aggiornato e percorso CLI Hermes non coperto
+- Fix: eseguibile Git risolto a path assoluto, eccezione Ruff motivata, helper tipizzato, smoke
+  test aggiornato e test CLI SARIF aggiunto; coverage finale 90,7%
+- Test di regressione / Regression test: `make check` completo
+
+### ERR-2026-08-14-07 — T-201: lista export core e ordine import test
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-201, primo run `ruff check .`
+- Sintomo / Symptom: elementi Event/Evidence inseriti dopo la chiusura di `__all__` e I001
+  nel nuovo test
+- Causa / Cause: applicazione incompleta della patch e import non ordinati
+- Fix: elementi spostati dentro `__all__` e import ordinati secondo Ruff
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-08 — T-201: tipo ID Event non registrato
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-201, primo test di round-trip Event
+- Sintomo / Symptom: `new_id("event")` sollevava `ValueError` per kind sconosciuto
+- Causa / Cause: il nuovo modello era stato aggiunto senza il relativo prefisso canonico
+- Fix: registrato il prefisso `EVT` nel generatore condiviso
+- Test di regressione / Regression test: round-trip Event nel gate pytest
+
+### ERR-2026-08-14-09 — Helios: righe oltre il limite Ruff
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-202..T-204, primo gate Helios
+- Sintomo / Symptom: E501 su firme, validazione porte e payload export
+- Causa / Cause: prima stesura troppo compatta
+- Fix: firme e strutture dati suddivise, condizione estratta con naming esplicito
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-10 — W2: smoke demo obsoleto, coverage e import test
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-205 e T-215, primo test dei demo reali
+- Sintomo / Symptom: smoke test attendeva ancora scaffold, coverage 87,8%, I001/E501 nei test CLI
+- Causa / Cause: lista legacy non aggiornata e percorsi CLI non ancora esercitati
+- Fix: demo rimossi dalla lista scaffold, aggiunti test CLI offline e formattati gli import
+- Test di regressione / Regression test: `make check` completo
