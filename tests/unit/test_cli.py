@@ -42,7 +42,6 @@ def test_argus_demo_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_all_tool_demos_run() -> None:
     for tool in (
-        "artemis",
         "proteus",
         "vulcan",
     ):

@@ -183,3 +183,27 @@
 - Causa / Cause: ramo di rifiuto delle condizioni duplicate non esercitato
 - Fix: aggiunto caso regressivo YAML con chiave condition duplicata
 - Test di regressione / Regression test: gate coverage ≥ 90%
+
+### ERR-2026-08-14-14 — Artemis: righe oltre il limite Ruff
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-304, primo run di verifica
+- Sintomo / Symptom: E501 sulla condizione path e sulla firma del test CLI
+- Causa / Cause: espressioni corrette ma troppo compatte
+- Fix: condizione e firma suddivise su righe leggibili
+- Test di regressione / Regression test: `ruff check .` nel gate CI
+
+### ERR-2026-08-14-15 — Coverage T-304 arrotondata a 90,0% ma sotto soglia
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-304, primo gate test Artemis
+- Sintomo / Symptom: 1238/1376 linee (89,97%), visualizzato 90,0% ma correttamente rifiutato
+- Causa / Cause: ramo CLI di autorizzazione positiva non esercitato
+- Fix: aggiunto test del comando `check-scope` per un URL autorizzato
+- Test di regressione / Regression test: gate coverage ≥ 90%
+
+### ERR-2026-08-14-16 — Test demo Minerva modificava un esempio tracciato
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: gate finale T-304, audit del working tree
+- Sintomo / Symptom: `make check` modificava `examples/output/minerva-incident.json`
+- Causa / Cause: il test demo isolava il ledger ma non il nuovo path incident di T-303
+- Fix: anche `DEFAULT_INCIDENT` viene reindirizzato dentro `tmp_path`
+- Test di regressione / Regression test: working tree stabile dopo `make check`

@@ -52,8 +52,11 @@
 - [x] T-302 Chain of custody append-only per core.Evidence + demo bilingue — done: tamper test
 - [x] T-303 Triage deterministico Alert → Incident + export core.Incident — done: round-trip CLI
 
+### Artemis (🔴 Web recon)
+- [x] T-304 Scope URL/origin/path obbligatorio + blocco audit + demo bilingue — done: zero rete
+
 ## ⏳ Backlog — resto W3 e W4
-Artemis, resto Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-303 (vedi PLAN.md).
+Resto Artemis/Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-304 (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`

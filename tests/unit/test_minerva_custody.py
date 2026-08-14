@@ -77,6 +77,7 @@ def test_regressive_timestamp_is_rejected(tmp_path: Path) -> None:
 def test_demo_and_verify_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ledger = tmp_path / "demo-custody.json"
     monkeypatch.setattr(minerva_cli, "DEFAULT_LEDGER", ledger)
+    monkeypatch.setattr(minerva_cli, "DEFAULT_INCIDENT", tmp_path / "incident.json")
 
     demo = runner.invoke(app, ["minerva", "demo"])
     verified = runner.invoke(app, ["minerva", "verify", str(ledger)])
