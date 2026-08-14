@@ -71,7 +71,6 @@
 
 ### ERR-2026-08-14-01 — Plugin `pytest-cov` assente nell'ambiente non aggiornabile
 - Stato / Status: RISOLTO / RESOLVED
-- Stato / Status: APERTO / OPEN
 - Contesto / Context: T-102, gate finale `make check`
 - Sintomo / Symptom: `python -m pytest` rifiuta gli argomenti `--cov`, `--cov-report` e
   `--cov-fail-under`; `pip install -e ".[dev]"` non può scaricare `hatchling`
@@ -157,3 +156,30 @@
 - Causa / Cause: lista legacy non aggiornata e percorsi CLI non ancora esercitati
 - Fix: demo rimossi dalla lista scaffold, aggiunti test CLI offline e formattati gli import
 - Test di regressione / Regression test: `make check` completo
+
+### ERR-2026-08-14-11 — Apollo accettava solo JSON con estensione YAML
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: audit post-W2 del criterio T-211
+- Sintomo / Symptom: una regola YAML reale non era caricabile; il demo usava JSON rinominato
+- Causa / Cause: JSON è un sottoinsieme YAML 1.2, ma non soddisfa l'UX e il criterio dichiarato
+  di authoring delle regole
+- Fix: aggiunto parser YAML ristretto senza dipendenze; rifiuta tag, anchor, costruttori,
+  duplicati, tab e indentazione ambigua
+- Test di regressione / Regression test: fixture YAML reale e rifiuto esplicito dei tag
+
+### ERR-2026-08-14-12 — Test Apollo legato all'eccezione del parser JSON
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-902, primo test del parser YAML ristretto
+- Sintomo / Symptom: la fixture malformata sollevava correttamente `ValueError`, mentre il test
+  legacy richiedeva `JSONDecodeError`; coverage transitoria 89,7%
+- Causa / Cause: il test esponeva un dettaglio del vecchio parser anziché il contratto pubblico
+- Fix: asserzione aggiornata sull'errore semantico e casi regressivi per duplicati, tab e indent
+- Test di regressione / Regression test: `make check` completo
+
+### ERR-2026-08-14-13 — Coverage T-902 sotto soglia di una linea
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: gate T-902 dopo i test di hardening YAML
+- Sintomo / Symptom: 930/1034 linee, 89,9% contro il minimo 90%
+- Causa / Cause: ramo di rifiuto delle condizioni duplicate non esercitato
+- Fix: aggiunto caso regressivo YAML con chiave condition duplicata
+- Test di regressione / Regression test: gate coverage ≥ 90%

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -33,9 +34,66 @@ class DetectionRule(BaseModel):
         return techniques
 
 
+def _plain_scalar(value: str, line_number: int) -> str:
+    """Parse a deliberately small, non-executable YAML plain scalar."""
+    scalar = value.strip()
+    if not scalar or scalar.startswith(("!", "&", "*", "|", ">", "{", "[")):
+        raise ValueError(f"unsupported YAML scalar on line {line_number}")
+    if " #" in scalar:
+        scalar = scalar.split(" #", 1)[0].rstrip()
+    if len(scalar) >= 2 and scalar[0] == scalar[-1] and scalar[0] in {'"', "'"}:
+        scalar = scalar[1:-1]
+    return scalar
+
+
+def _parse_yaml(text: str) -> dict[str, Any]:
+    """Parse the strict mapping/list subset used by portable Apollo rules."""
+    payload: dict[str, Any] = {}
+    section: str | None = None
+    for line_number, raw_line in enumerate(text.splitlines(), 1):
+        if "\t" in raw_line:
+            raise ValueError(f"tabs are not allowed in YAML on line {line_number}")
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        indentation = len(raw_line) - len(raw_line.lstrip(" "))
+        content = raw_line.strip()
+        if indentation == 0:
+            if ":" not in content:
+                raise ValueError(f"expected key/value pair on line {line_number}")
+            key, raw_value = content.split(":", 1)
+            key = key.strip()
+            if key in payload:
+                raise ValueError(f"duplicate YAML key {key!r} on line {line_number}")
+            if raw_value.strip():
+                payload[key] = _plain_scalar(raw_value, line_number)
+                section = None
+            elif key == "conditions":
+                payload[key] = {}
+                section = key
+            elif key == "mitre_attack":
+                payload[key] = []
+                section = key
+            else:
+                raise ValueError(f"unsupported nested YAML key {key!r}")
+            continue
+        if indentation != 2 or section is None:
+            raise ValueError(f"invalid YAML indentation on line {line_number}")
+        if section == "mitre_attack" and content.startswith("- "):
+            payload[section].append(_plain_scalar(content[2:], line_number))
+        elif section == "conditions" and ":" in content:
+            key, raw_value = content.split(":", 1)
+            if key.strip() in payload[section]:
+                raise ValueError(f"duplicate condition on line {line_number}")
+            payload[section][key.strip()] = _plain_scalar(raw_value, line_number)
+        else:
+            raise ValueError(f"invalid YAML collection item on line {line_number}")
+    return payload
+
+
 def load_rule(path: Path) -> DetectionRule:
-    """Load a JSON document, a safe interoperable subset of YAML 1.2."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    """Safely load a strict Apollo YAML rule without constructors, tags or anchors."""
+    text = path.read_text(encoding="utf-8")
+    payload = json.loads(text) if text.lstrip().startswith("{") else _parse_yaml(text)
     if not isinstance(payload, dict):
         raise ValueError("rule document must be a mapping")
     return DetectionRule.model_validate(payload)

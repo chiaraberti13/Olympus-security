@@ -50,8 +50,48 @@ def test_rule_rejects_invalid_mitre_id_and_document(tmp_path: Path) -> None:
         load_rule(_rule(tmp_path / "bad.yaml", "invalid"))
     malformed = tmp_path / "malformed.yaml"
     malformed.write_text("not executable yaml", encoding="utf-8")
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(ValueError, match="expected key/value"):
         load_rule(malformed)
+
+
+def test_rule_loads_yaml_and_rejects_executable_features(tmp_path: Path) -> None:
+    yaml_rule = tmp_path / "rule.yaml"
+    yaml_rule.write_text(
+        """rule_id: APL-YAML
+title: Synthetic YAML rule
+event_type: process.start
+conditions:
+  image: demo.exe
+severity: low
+mitre_attack:
+  - T1059
+""",
+        encoding="utf-8",
+    )
+    assert load_rule(yaml_rule).conditions == {"image": "demo.exe"}
+
+    yaml_rule.write_text("rule_id: !!python/object:unsafe\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported YAML scalar"):
+        load_rule(yaml_rule)
+
+
+@pytest.mark.parametrize(
+    ("document", "message"),
+    [
+        ("rule_id: APL-ONE\nrule_id: APL-TWO\n", "duplicate YAML key"),
+        ("rule_id:\tAPL-TAB\n", "tabs are not allowed"),
+        ("  orphan: value\n", "invalid YAML indentation"),
+        (
+            "rule_id: APL-DUP\nconditions:\n  image: one\n  image: two\n",
+            "duplicate condition",
+        ),
+    ],
+)
+def test_rule_rejects_ambiguous_yaml(document: str, message: str, tmp_path: Path) -> None:
+    rule = tmp_path / "ambiguous.yaml"
+    rule.write_text(document, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_rule(rule)
 
 
 def test_alert_export_round_trips_core_model(tmp_path: Path) -> None:

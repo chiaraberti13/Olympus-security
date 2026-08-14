@@ -38,7 +38,7 @@
 - [x] T-205 README bilingue + `helios demo` sintetico — done: demo esce 0
 
 ### Apollo (🔵 Detection engineering)
-- [x] T-211 Parser regole YAML sicuro + schema rule — done: fixture valida/non valida
+- [x] T-211 Parser regole YAML sicuro + schema rule — done: YAML reale, fixture valida/non valida
 - [x] T-212 Mapping MITRE ATT&CK e validazione ID tecnica — done: test
 - [x] T-213 Detection testing Event → Alert — done: veri/falsi positivi
 - [x] T-214 Export alert conforme a core.Alert — done: round-trip validato
@@ -50,3 +50,5 @@ Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
   (ERR-2026-08-14-01) — done: coverage ≥ 90% verificata
+- [x] T-902 Correggere il falso supporto YAML di Apollo (ERR-2026-08-14-11) — done: parser
+  YAML ristretto testato contro tag/costruttori
