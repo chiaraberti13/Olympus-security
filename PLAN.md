@@ -1,6 +1,6 @@
 # PLAN — Olympus Security (auto-correcting build plan)
 
-> 🇮🇹/🇬🇧 Piano d'ondate del monorepo. Il motore è il loop auto-correttivo:
+> 🇮🇹/🇬🇧 Backlog di potenziamento per modulo. Il motore resta il loop auto-correttivo:
 > `PLAN → BUILD → VERIFY → TEST → CHECK → LOG → RESOLVE → GATE`. Regola d'oro:
 > **"Verde o non fatto" / "Green or not done"**.
 
@@ -23,41 +23,86 @@ gates are green (`make check`).
 ## Gate / Quality gates
 `ruff check .` · `mypy .` (strict) · `pytest` (coverage ≥ 90%). Nessun secret nel repo.
 
-## Ondate / Waves
+## 📦 Release 1.0.0 (storico / history)
+Le ondate fondative W0–W4 (9 moduli, scenario purple cross-modulo, build riproducibile) sono
+chiuse e non sono più tracciate qui: la cronologia completa resta in
+[CHANGELOG.md](CHANGELOG.md). Da qui in avanti `PLAN.md`/`TASKS.md` tracciano solo il
+**backlog di potenziamento**, organizzato per modulo invece che per ondata cronologica.
 
-**W0 — Foundations (fatto / done).** `core`: enum, ID generator, modelli Asset/Finding,
-errori strutturati, CLI unico, export JSON Schema, CI, gate verdi.
+The foundational waves W0–W4 (9 modules, cross-module purple scenario, reproducible build)
+are closed and no longer tracked here: the full history lives in
+[CHANGELOG.md](CHANGELOG.md). From here on `PLAN.md`/`TASKS.md` track only the
+**enhancement backlog**, organized per module instead of by chronological wave.
 
-**W1 — First value (fatto / done).** `Argus` (OSINT passivo → `argus-assets.json`) +
-`Hermes` (secret scan → SARIF, pre-commit). *Esito:* primo scambio dati reale + tool
-DevSecOps spendibile.
+## 🔧 Backlog di potenziamento per modulo / Per-module enhancement backlog
 
-**W2 — Surface & detection (fatto / done).** `Helios` (scope enforcement →
-`helios-findings.json`) + `Apollo` (regole YAML + MITRE ATT&CK + detection testing). Core
-aggiunge Alert/Event/Evidence.
+Ogni direttrice qui sotto ha i task puntuali corrispondenti in `TASKS.md` (`T-2xx`, non
+spuntati). Nessun task è iniziato: sono proposte da validare una alla volta seguendo lo
+stesso ciclo PLAN→BUILD→VERIFY→TEST→CHECK→LOG→RESOLVE→GATE già usato per W0–W4.
 
-**W3 — Web, response, reporting (fatto / done).** `Artemis` (web recon) + `Minerva`
-(IR/DFIR); poi `Proteus` (phishing sim) + `Vulcan` (aggregazione finding + **report di
-pentest**). Core aggiunge Incident.
+Each item below has corresponding itemized tasks in `TASKS.md` (`T-2xx`, unchecked). None
+are started: they are proposals to validate one at a time, following the same
+PLAN→BUILD→VERIFY→TEST→CHECK→LOG→RESOLVE→GATE cycle already used for W0–W4.
 
-**W4 — Range & capstone (fatto / done).** `Mars`: cyber range Docker segmentato + scenari
-purple end-to-end che attraversano tutta la suite. Test cross-module, release riproducibile.
+### Argus (🔴 OSINT)
+- WHOIS/ASN passivo (ownership IP/dominio) come fonte OSINT aggiuntiva, best-effort come CT
+- Fingerprint tecnologico passivo via header HTTP (server, framework) senza probing attivo
 
-## 🏁 Piano completo / Plan complete
-Tutte le ondate (W0–W4) sono chiuse: `make check` verde, `ERRORS.md` senza voci APERTE, 9
-moduli reali. Release `1.0.0` — vedi [CHANGELOG.md](CHANGELOG.md). Nuovo lavoro futuro va
-aperto come nuova ondata qui, con task puntuali in `TASKS.md`.
+### Hermes (🔵 Secret scanner)
+- Nuovi pattern/prefissi di secret provider (es. Slack, Stripe, GCP service account)
+- Confronto/merge dell'output SARIF con altri tool di scansione per un report unificato
 
-All waves (W0–W4) are closed: `make check` green, `ERRORS.md` with no OPEN entries, 9 real
-modules. Release `1.0.0` — see [CHANGELOG.md](CHANGELOG.md). Future work should open as a
-new wave here, with itemized tasks in `TASKS.md`.
+### Helios (🔴 Network attack-surface mapper)
+- Banner/service fingerprinting opzionale sulle porte aperte (best-effort, non intrusivo)
 
-## Definition of Done (per modulo / per module)
-- [ ] Funzione core dello scope operativa · comando `demo` reale su dati sintetici
+### Apollo (🔵 Detection engineering)
+- Rule-pack MITRE ATT&CK ampliato oltre a T1110 (Brute Force): T1110.003 (Password
+  Spraying), T1595 (Active Scanning), T1071 (C2 su porte comuni), T1078 (Valid Accounts
+  anomaly)
+
+### Artemis (🔴 Web recon)
+- Ulteriori controlli header di sicurezza (Permissions-Policy, Referrer-Policy)
+- Lista path di content discovery estesa (backup, config di framework comuni)
+
+### Minerva (🔵 IR/DFIR)
+- Export report incidente in formati aggiuntivi oltre al JSON conforme a core
+
+### Proteus (🔴 Phishing sim, mai credenziali reali)
+- Più varianti di template campagna/training page (oggi una sola), sempre senza raccolta
+  credenziali reale
+
+### Vulcan (🟣 Aggregazione + report pentest)
+- Export HTML del pentest report, riusando i dati già aggregati in `aggregate.py`/`risk.py`
+- Filtro severità minima configurabile da CLI per il report
+
+### Mars (🟣 Cyber range + scenari purple)
+- Verifica opzionale in CI quando un daemon Docker è disponibile (self-hosted runner), oltre
+  alla sola validazione strutturale attuale (`docker compose config`)
+- Segmentazione di rete aggiuntiva nel range (oltre alla singola rete `dmz` attuale)
+
+### Cross-cutting / DevEx
+- CI: matrix su più versioni Python (3.11/3.12) in `.github/workflows/ci.yml`
+- Badge di stato CI nel `README.md`
+- Packaging: pubblicazione del pacchetto (build già riproducibile, manca solo il publish)
+- Timeout e rate-limit configurabili da CLI per i client di rete (CT lookup di Argus,
+  `HttpClient` di Artemis), utile con proxy/egress restrittivi
+
+## ⏸️ Esplicitamente rinviato / Explicitly deferred
+Dashboard web, database persistente, layer API/autenticazione: nessuno di questi risolve un
+problema reale del progetto oggi (CLI + JSON restano sufficienti). Rinviati per disciplina
+anti-over-engineering, non dimenticati — vedi sezione sotto.
+
+Web dashboard, persistent database, API/auth layer: none solve a real problem for this
+project today (CLI + JSON remain sufficient). Deferred on anti-over-engineering grounds, not
+forgotten — see the section below.
+
+## Definition of Done (per direttrice di potenziamento / per enhancement item)
+- [ ] Funzione operativa · comando `demo` reale su dati sintetici (se applicabile)
 - [ ] `make check` verde (ruff + mypy strict + pytest ≥90%)
-- [ ] Output conforme agli schemi di `core` · `examples/` con I/O reali
-- [ ] README di modulo bilingue · commenti nel codice **solo in inglese**
-- [ ] (Red) scope file, blocco+log fuori scope, non distruttivo
+- [ ] Output conforme agli schemi di `core`, se il potenziamento produce dati
+- [ ] README di modulo aggiornato (bilingue) · commenti nel codice **solo in inglese**
+- [ ] (Red) scope file, blocco+log fuori scope, non distruttivo — se il potenziamento tocca
+      un modulo offensivo mandatorio (Helios, Artemis, Proteus/Mars)
 - [ ] `ERRORS.md` senza voci APERTE per il modulo
 
 ## Anti-over-engineering

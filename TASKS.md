@@ -3,117 +3,59 @@
 > Un task alla volta. Spunta SOLO se `make check` è verde e il criterio è soddisfatto.
 > One task at a time. Tick ONLY if `make check` is green and the criterion is met.
 
-## ✅ Done — W0 Foundations
-- [x] T-000 Scaffold monorepo + pyproject + CI + gate configurati
-- [x] T-001 core.enums (Severity, FindingStatus, Criticality, AssetType, Source)
-- [x] T-002 core.ids (IdGenerator + new_id, formato PREFIX-YYYY-NNNNN)
-- [x] T-003 core.models (Asset, Finding) con schema_name/version + extra=forbid
-- [x] T-004 core.errors (ValidationReport: to_human + to_dict)
-- [x] T-005 CLI unico `olympus <tool> <cmd>` + core export-schemas
-- [x] T-006 Test unit core + CLI, coverage ≥ 90% (attuale 98.7%)
+> 🇮🇹 Storico W0–W4 (release `1.0.0`, 55 task T-000..T-185, tutti chiusi) rimosso da questo
+> file: cronologia completa in [CHANGELOG.md](CHANGELOG.md). Da qui in poi solo backlog di
+> potenziamento per modulo, non ancora iniziato.
+> 🇬🇧 W0–W4 history (release `1.0.0`, 55 tasks T-000..T-185, all closed) removed from this
+> file: full history in [CHANGELOG.md](CHANGELOG.md). From here on, per-module enhancement
+> backlog only, not started yet.
 
-## ✅ Done — W1 First value
-### Argus (🔴 OSINT)
-- [x] T-101 `argus scan --domain` recon passiva DNS/MX/SPF/DMARC — done: test + fixture
-- [x] T-102 Certificate Transparency + sottodomini passivi — done: test su fixture offline
-- [x] T-103 Export `argus-assets.json` conforme a core.Asset — done: round-trip validato
-- [x] T-104 Change monitoring (diff tra due snapshot) — done: test diff
-- [x] T-105 README modulo bilingue + `argus demo` reale — done: demo esce 0
+## 🕓 Proposto — Argus (🔴 OSINT)
+- [ ] T-201 WHOIS/ASN passivo (ownership IP/dominio) come fonte OSINT aggiuntiva best-effort
+- [ ] T-202 Fingerprint tecnologico passivo via header HTTP (server/framework), no probing attivo
 
-### Hermes (🔵 Secret scanner)
-- [x] T-111 Motore regex + prefissi noti (AWS, GitHub, JWT...) — done: test veri/falsi positivi
-- [x] T-112 Motore entropia + soglia configurabile — done: test
-      (regressione risolta: ERR-2026-08-11-06, test demo isolato da esempio tracciato)
-- [x] T-113 Scan della history Git — done: test su repo fixture
-- [x] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
-- [x] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
+## 🕓 Proposto — Hermes (🔵 Secret scanner)
+- [ ] T-203 Nuovi pattern/prefissi secret provider (Slack, Stripe, GCP service account...)
+- [ ] T-204 Merge dell'output SARIF con altri tool di scansione per report unificato
 
-## ✅ Done — W2 Surface & detection
-### Core (⚙️ Alert/Event/Evidence)
-- [x] T-120 core.models Event/Alert/Evidence + core.ids prefisso "event" — done: test + export-schemas
+## 🕓 Proposto — Helios (🔴 Network attack-surface mapper)
+- [ ] T-205 Banner/service fingerprinting opzionale sulle porte aperte (best-effort)
 
-### Helios (🔴 Network attack-surface mapper)
-- [x] T-121 `helios scan` — motore TCP connect + profilo porte comuni, PortScanner iniettabile
-      — done: test su scanner fake offline
-- [x] T-122 Scope file obbligatorio (host/CIDR) + blocco+log fuori scope — done: test
-- [x] T-123 Export `helios-findings.json` (Asset per host + Finding per porta aperta)
-      conforme a core — done: round-trip validato
-- [x] T-124 Alert per servizi esposti ad alto rischio (porte critiche) — done: test
-- [x] T-125 README modulo bilingue + `helios demo` reale — done: demo esce 0
+## 🕓 Proposto — Apollo (🔵 Detection engineering)
+- [ ] T-206 Regola MITRE T1110.003 (Password Spraying)
+- [ ] T-207 Regola MITRE T1595 (Active Scanning)
+- [ ] T-208 Regola MITRE T1071 (C2 su porte comuni)
+- [ ] T-209 Regola MITRE T1078 (Valid Accounts anomaly)
 
-### Apollo (🔵 Detection engineering)
-- [x] T-131 Schema regole YAML + mapping MITRE ATT&CK + loader — done: test regole valide/invalide
-- [x] T-132 Motore di match regole su core.Event — done: test veri/falsi positivi
-- [x] T-133 Generazione Alert da regola scattata (con evidence linking) — done: test
-- [x] T-134 Harness di detection testing (regola + eventi sintetici etichettati) — done: test
-- [x] T-135 README modulo bilingue + `apollo demo` reale — done: demo esce 0
+## 🕓 Proposto — Artemis (🔴 Web recon)
+- [ ] T-210 Controlli header aggiuntivi (Permissions-Policy, Referrer-Policy) → Finding
+- [ ] T-211 Lista path di content discovery estesa (backup, config framework comuni)
 
-## ✅ Done — W3 Web, response, reporting
-### Core (⚙️ Incident)
-- [x] T-140 core.models Incident (lifecycle NEW→TRIAGED→CONTAINED→RESOLVED→CLOSED)
-      — done: test + export-schemas
+## 🕓 Proposto — Minerva (🔵 IR/DFIR)
+- [ ] T-212 Export report incidente in formati aggiuntivi oltre al JSON conforme a core
 
-### Artemis (🔴 Web recon)
-- [x] T-141 HttpClient iniettabile (protocol + adapter urllib) — done: test su client fake offline
-- [x] T-142 Analisi header di sicurezza (CSP/HSTS/X-Frame-Options/...) → Finding — done: test
-- [x] T-143 Rilevamento CORS misconfigurato (wildcard+credentials, origin riflessa) → Finding
-      — done: test
-- [x] T-144 Content discovery (path comuni esposti: .git, .env, admin...) + scope obbligatorio
-      con blocco+log — done: test
-- [x] T-145 README modulo bilingue + `artemis demo` reale — done: demo esce 0
+## 🕓 Proposto — Proteus (🔴 Phishing sim, mai credenziali reali)
+- [ ] T-213 Più varianti di template campagna/training page, senza raccolta credenziali reale
 
-### Minerva (🔵 IR/DFIR)
-- [x] T-151 Apertura incidente: aggrega Alert/Finding in un core.Incident — done: test
-- [x] T-152 Chain of custody: log evidenze append-only con hash-chain a prova di manomissione
-      — done: test rilevamento manomissione
-- [x] T-153 Transizioni di stato dell'incidente (macchina a stati, transizioni invalide rifiutate)
-      — done: test transizioni valide/invalide
-- [x] T-154 Export/import report incidente conforme a core.Incident — done: round-trip validato
-- [x] T-155 README modulo bilingue + `minerva demo` reale — done: demo esce 0
+## 🕓 Proposto — Vulcan (🟣 Aggregazione + report pentest)
+- [ ] T-214 Export HTML del pentest report (riuso `aggregate.py`/`risk.py`)
+- [ ] T-215 Filtro severità minima configurabile da CLI per il report
 
-### Proteus (🔴 Phishing sim, mai credenziali reali)
-- [x] T-161 Generatore campagna simulata (destinatari sintetici, nessun invio email reale)
-      — done: test
-- [x] T-162 Pagina di training statica (mai raccolta credenziali) + tracking click simulato
-      — done: test
-- [x] T-163 Scope/allowlist destinatari obbligatoria + blocco+log fuori scope — done: test
-- [x] T-164 Export report campagna (Finding per destinatario) conforme a core — done: round-trip
-      validato
-- [x] T-165 README modulo bilingue + `proteus demo` reale — done: demo esce 0
+## 🕓 Proposto — Mars (🟣 Cyber range + scenari purple)
+- [ ] T-216 Verifica opzionale in CI con daemon Docker disponibile (self-hosted runner)
+- [ ] T-217 Segmentazione di rete aggiuntiva nel range (oltre alla singola rete `dmz`)
 
-### Vulcan (🟣 Aggregazione + report pentest)
-- [x] T-171 Aggregazione Asset/Finding/Alert da export multipli con deduplica — done: test
-- [x] T-172 Scoring/ordinamento per rischio (CVSS + severità) — done: test
-- [x] T-173 Generazione report di pentest (Markdown) da dati aggregati — done: test struttura
-- [x] T-174 Export `vulcan-report.json` conforme a core — done: round-trip validato
-- [x] T-175 README modulo bilingue + `vulcan demo` reale — done: demo esce 0
+## 🕓 Proposto — Cross-cutting / DevEx
+- [ ] T-218 CI matrix multi-Python (3.11/3.12) in `.github/workflows/ci.yml`
+- [ ] T-219 Badge di stato CI nel `README.md`
+- [ ] T-220 Packaging: pubblicazione del pacchetto (build già riproducibile)
+- [ ] T-221 Timeout/rate-limit configurabili da CLI per i client di rete (Argus CT, Artemis
+      HttpClient)
 
-## ✅ Done — W4 Range & capstone
-### Mars (🟣 Cyber range + scenari purple)
-- [x] T-181 Docker Compose range segmentato: target web vulnerabile-by-design sintetico
-      "Olympus Demo Corp" + scope file dedicato — done: `docker compose config` valida
-      (nessun daemon disponibile in questo ambiente: validazione strutturale, non avvio reale)
-- [x] T-182 Makefile targets sicuri (mars-up/mars-down/mars-status), non distruttività
-      documentata — done: comandi definiti e verificati con `docker compose config`
-- [x] T-183 Scenario purple end-to-end cross-modulo: un solo target sintetico attraversa
-      Argus → Helios → Artemis → Apollo → Minerva → Vulcan mantenendo ID tracciabili
-      — done: test di integrazione verde (`tests/integration/`)
-- [x] T-184 README modulo bilingue (labs/mars + docs/modules/mars.md) — done
-- [x] T-185 Release riproducibile: CHANGELOG.md, version bump, `python -m build` verificato
-      — done: build verde
-
-## 🏁 Piano completo / Plan complete
-Tutte le ondate pianificate (W0–W4) sono chiuse. `make check` verde, nessuna voce APERTA in
-ERRORS.md, 9 moduli reali con demo offline deterministica, scenario purple cross-modulo
-verde, build riproducibile bit-per-bit. Vedi [CHANGELOG.md](CHANGELOG.md) per il riepilogo
-della release `1.0.0`. Eventuale lavoro futuro (nuovi moduli, hardening, CI reale) va aperto
-come nuova ondata in [PLAN.md](PLAN.md) con i propri task qui.
-
-All planned waves (W0–W4) are closed. `make check` green, no OPEN entry in ERRORS.md, 9 real
-modules with a deterministic offline demo, a green cross-module purple scenario, a
-bit-for-bit reproducible build. See [CHANGELOG.md](CHANGELOG.md) for the `1.0.0` release
-summary. Future work (new modules, hardening, real CI) should open as a new wave in
-[PLAN.md](PLAN.md) with its own tasks here.
+## ⏸️ Rinviato (nota, non task) / Deferred (note, not a task)
+Dashboard web, DB persistente, layer API/autenticazione — nessun problema reale da risolvere
+oggi, vedi `PLAN.md` § Anti-over-engineering. Nessun task aperto per questi finché non emerge
+una necessità concreta.
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - (nessuno aperto / none open)
