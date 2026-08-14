@@ -31,4 +31,5 @@
 Helios, Apollo, Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
-- (nessuno aperto / none open)
+- [ ] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
+  (ERR-2026-08-14-01) — done: coverage ≥ 90% verificata
