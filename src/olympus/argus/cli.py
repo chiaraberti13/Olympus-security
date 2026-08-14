@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
@@ -44,7 +45,11 @@ def scan(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    result = scan_domain(domain, DnspythonResolver())
+    try:
+        result = scan_domain(domain, DnspythonResolver(), CrtShClient())
+    except CertificateTransparencyError as exc:
+        typer.echo(f"argus: Certificate Transparency error: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
     typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
 
 

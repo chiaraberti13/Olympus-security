@@ -68,3 +68,14 @@
   combinato
 - Fix: asserzioni sui messaggi di errore spostate su `result.output` invece di `result.stdout`
 - Test di regressione / Regression test: `pytest` nel gate CI
+
+### ERR-2026-08-14-01 — Plugin `pytest-cov` assente nell'ambiente non aggiornabile
+- Stato / Status: APERTO / OPEN
+- Contesto / Context: T-102, gate finale `make check`
+- Sintomo / Symptom: `python -m pytest` rifiuta gli argomenti `--cov`, `--cov-report` e
+  `--cov-fail-under`; `pip install -e ".[dev]"` non può scaricare `hatchling`
+- Causa / Cause: l'interprete attivo non include `pytest-cov` e il proxy del package index
+  risponde `403 Forbidden`, impedendo l'installazione delle dipendenze di sviluppo dichiarate
+- Fix: in attesa di un ambiente con le dipendenze dev preinstallate o accesso al package index;
+  i 42 test passano escludendo soltanto gli argomenti di coverage
+- Test di regressione / Regression test: `make check` deve completare il gate coverage ≥ 90%
