@@ -50,9 +50,10 @@
 
 ### Minerva (🔵 IR/DFIR)
 - [x] T-302 Chain of custody append-only per core.Evidence + demo bilingue — done: tamper test
+- [x] T-303 Triage deterministico Alert → Incident + export core.Incident — done: round-trip CLI
 
 ## ⏳ Backlog — resto W3 e W4
-Artemis, resto Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-302 (vedi PLAN.md).
+Artemis, resto Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-303 (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
