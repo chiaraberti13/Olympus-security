@@ -10,6 +10,7 @@ import typer
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.diff import diff_snapshots
+from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope

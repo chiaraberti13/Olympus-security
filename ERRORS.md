@@ -71,6 +71,7 @@
 
 ### ERR-2026-08-14-01 — Plugin `pytest-cov` assente nell'ambiente non aggiornabile
 - Stato / Status: RISOLTO / RESOLVED
+- Stato / Status: APERTO / OPEN
 - Contesto / Context: T-102, gate finale `make check`
 - Sintomo / Symptom: `python -m pytest` rifiuta gli argomenti `--cov`, `--cov-report` e
   `--cov-fail-under`; `pip install -e ".[dev]"` non può scaricare `hatchling`
@@ -123,3 +124,6 @@
 - Fix: eseguibile Git risolto a path assoluto, eccezione Ruff motivata, helper tipizzato, smoke
   test aggiornato e test CLI SARIF aggiunto; coverage finale 90,7%
 - Test di regressione / Regression test: `make check` completo
+- Fix: in attesa di un ambiente con le dipendenze dev preinstallate o accesso al package index;
+  i 42 test passano escludendo soltanto gli argomenti di coverage
+- Test di regressione / Regression test: `make check` deve completare il gate coverage ≥ 90%
