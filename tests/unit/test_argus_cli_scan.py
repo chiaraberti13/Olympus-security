@@ -54,7 +54,10 @@ def test_scan_in_scope_domain_prints_recon_json(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["argus", "scan", "--domain", DOMAIN, "--scope", str(scope_path), "--log", str(log_path)],
+        [
+            "argus", "scan", "--domain", DOMAIN, "--scope", str(scope_path),
+            "--log", str(log_path), "--output", str(tmp_path / "assets.json"),
+        ],
     )
 
     assert result.exit_code == 0, result.stdout

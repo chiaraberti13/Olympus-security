@@ -47,5 +47,7 @@ aggiorna i file. Fermati quando l'ondata è chiusa e tutto è verde.
 
 ## In automatico (facoltativo) / Unattended (optional)
 Per esecuzioni notturne non presidiate usa un branch `nightly/AAAA-MM-GG`, **mai `main`**,
-e apri una **Pull Request** per la review ("propose, don't push"). Vedi il workflow CI in
-`.github/workflows/`.
+esegui automaticamente il push di tutte le modifiche sul branch di lavoro e apri una
+**Pull Request** per la review; non eseguire mai il push diretto su `main`. Per unattended
+runs, automatically push every change to the working branch and open a **Pull Request** for
+review; never push directly to `main`. See `.github/workflows/`.

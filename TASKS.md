@@ -15,21 +15,22 @@
 ## 🔜 To do — W1 First value
 ### Argus (🔴 OSINT)
 - [x] T-101 `argus scan --domain` recon passiva DNS/MX/SPF/DMARC — done: test + fixture
-- [ ] T-102 Certificate Transparency + sottodomini passivi — done: test su fixture offline
-- [ ] T-103 Export `argus-assets.json` conforme a core.Asset — done: round-trip validato
-- [ ] T-104 Change monitoring (diff tra due snapshot) — done: test diff
-- [ ] T-105 README modulo bilingue + `argus demo` reale — done: demo esce 0
+- [x] T-102 Certificate Transparency + sottodomini passivi — done: test su fixture offline
+- [x] T-103 Export `argus-assets.json` conforme a core.Asset — done: round-trip validato
+- [x] T-104 Change monitoring (diff tra due snapshot) — done: test diff
+- [x] T-105 README modulo bilingue + `argus demo` reale — done: demo esce 0
 
 ### Hermes (🔵 Secret scanner)
-- [ ] T-111 Motore regex + prefissi noti (AWS, GitHub, JWT...) — done: test veri/falsi positivi
-- [ ] T-112 Motore entropia + soglia configurabile — done: test
-- [ ] T-113 Scan della history Git — done: test su repo fixture
-- [ ] T-114 Output SARIF valido + mascheramento del secret — done: schema SARIF validato
-- [ ] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
+- [x] T-111 Motore regex + prefissi noti (AWS, GitHub, JWT...) — done: test veri/falsi positivi
+- [x] T-112 Motore entropia + soglia configurabile — done: test
+- [x] T-113 Scan della history Git — done: test su repo fixture
+- [x] T-114 Output SARIF valido + mascheramento del secret — done: struttura SARIF validata
+- [x] T-115 Hook pre-commit + README bilingue + `hermes demo` — done: demo esce 0
 
 ## ⏳ Backlog — W2..W4
 Helios, Apollo, Artemis, Minerva, Proteus, Vulcan, Mars (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
+- [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
 - [ ] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
   (ERR-2026-08-14-01) — done: coverage ≥ 90% verificata

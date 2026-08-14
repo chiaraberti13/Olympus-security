@@ -12,7 +12,7 @@ type:
 	$(PYTHON) -m mypy .
 
 test:
-	$(PYTHON) -m pytest
+	$(PYTHON) tools/coverage_gate.py --fail-under 90
 
 check: lint type test   ## the single gate: "green or not done"
 

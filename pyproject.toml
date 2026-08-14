@@ -44,7 +44,7 @@ select = ["E", "F", "I", "B", "UP", "S", "C4", "SIM", "PTH", "RUF"]
 # S101 (assert) is fine in tests; handled per-file below.
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S603"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["typer.Option", "typer.Argument"]
