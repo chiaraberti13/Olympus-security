@@ -73,3 +73,14 @@ def test_to_dict_is_json_serializable() -> None:
     assert payload["domain"] == DOMAIN
     assert payload["a_records"] == ["203.0.113.10"]
     assert isinstance(payload["scanned_at"], str)
+
+
+def test_scan_domain_includes_passive_ct_subdomains() -> None:
+    class FakeCtClient:
+        def discover(self, domain: str) -> list[str]:
+            assert domain == DOMAIN
+            return [f"portal.{domain}"]
+
+    result = scan_domain(DOMAIN, demo_corp_resolver(), FakeCtClient())
+
+    assert result.subdomains == ["portal.olympusdemocorp.example"]

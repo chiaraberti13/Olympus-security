@@ -51,7 +51,7 @@ olympus argus demo                               # demo su "Olympus Demo Corp"
 ## Qualità: "Verde o non fatto"
 Ogni modifica passa da tre gate prima di essere considerata fatta:
 ```bash
-make check      # ruff  +  mypy --strict  +  pytest --cov (fail-under 90%)
+make check      # ruff + mypy --strict + pytest con gate coverage portabile (≥90%)
 ```
 Lo sviluppo segue un **loop auto-correttivo**: ogni fallimento viene registrato in
 `ERRORS.md` e diventa un nuovo task in `TASKS.md`. Dettagli in [PLAN.md](PLAN.md).
@@ -119,7 +119,7 @@ olympus argus demo
 ### Quality: "Green or not done"
 Every change passes three gates before it counts as done:
 ```bash
-make check      # ruff  +  mypy --strict  +  pytest --cov (fail-under 90%)
+make check      # ruff + mypy --strict + pytest with portable coverage gate (≥90%)
 ```
 Development follows a **self-correcting loop**: every failure is logged in `ERRORS.md` and
 becomes a new task in `TASKS.md`. See [PLAN.md](PLAN.md).
