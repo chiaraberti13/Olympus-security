@@ -14,3 +14,10 @@ repos:
     rev: v8.18.4
     hooks:
       - id: gitleaks
+  - repo: local
+    hooks:
+      - id: hermes
+        name: Olympus Hermes secret scan
+        entry: olympus hermes scan --output .hermes-results.sarif
+        language: system
+        exclude: ^examples/input/hermes-demo\.txt$
