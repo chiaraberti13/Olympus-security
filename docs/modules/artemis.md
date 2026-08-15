@@ -1,0 +1,25 @@
+# Artemis — web recon autorizzata / Authorized web recon
+
+## Italiano
+Artemis applica lo scope prima di qualsiasi futura richiesta web. Il controllo normalizza
+schema, hostname IDNA, porte di default e path; ammette solo HTTP(S), rifiuta credenziali negli
+URL e confronta origin e prefissi di path con confini di segmento. I target fuori scope sono
+bloccati e registrati senza query string, evitando di inserire token accidentali nell'audit.
+Il client solo-GET disabilita i redirect automatici, riapplica lo scope prima di ogni hop e
+limita timeout, numero di redirect e dimensione del body. Non invia form né esegue JavaScript.
+
+```bash
+olympus artemis check-scope --url https://portal.olympusdemocorp.example/app/login \
+  --scope examples/input/artemis-scope.json
+olympus artemis fetch --url https://portal.olympusdemocorp.example/app/login \
+  --scope examples/input/artemis-scope.json --timeout 5 --max-bytes 1000000
+olympus artemis demo
+```
+
+## English
+Artemis enforces scope before any future web request. Validation normalizes scheme, IDNA host,
+default ports and path; allows HTTP(S) only, rejects URL credentials, and compares origins and
+path prefixes on segment boundaries. Out-of-scope targets are blocked and audited without
+query strings, preventing accidental tokens from entering logs. The GET-only client disables
+automatic redirects, reapplies scope before every hop, and limits timeout, redirect count and
+body size. It never submits forms or executes JavaScript. The demo uses an offline transport.

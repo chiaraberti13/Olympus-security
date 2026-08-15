@@ -1,0 +1,5 @@
+{
+  "engagement": "olympus-demo-corp-2026",
+  "allowed_origins": ["https://portal.olympusdemocorp.example"],
+  "allowed_path_prefixes": ["/app"]
+}

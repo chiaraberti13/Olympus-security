@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "action": "collected",
+      "actor": "demo-responder",
+      "entry_hash": "47fc76b46cff5c30f13b881e19caad0d9b1cd151d0594db3925f9623d878b17e",
+      "evidence_id": "EVD-2026-00001",
+      "occurred_at": "2026-08-14T09:00:00Z",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sequence": 1
+    },
+    {
+      "action": "transferred",
+      "actor": "demo-forensics",
+      "entry_hash": "59456c5d6847facdae9f1f368ebe88761616ac24e991795817f6828c4890f826",
+      "evidence_id": "EVD-2026-00001",
+      "occurred_at": "2026-08-14T09:30:00Z",
+      "previous_hash": "47fc76b46cff5c30f13b881e19caad0d9b1cd151d0594db3925f9623d878b17e",
+      "sequence": 2
+    }
+  ],
+  "schema_name": "olympus.custody",
+  "schema_version": "1.0.0"
+}
