@@ -230,6 +230,11 @@ def test_pinned_connections_use_only_supplied_address(monkeypatch: pytest.Monkey
         return object()
 
     class FakeContext:
+        # http.client reads these SSLContext attributes before wrapping the
+        # socket (Python 3.11+); expose them so the stub matches a real context.
+        verify_mode = ssl.CERT_NONE
+        check_hostname = False
+
         def wrap_socket(self, raw_socket: object, server_hostname: str) -> object:
             del server_hostname
             return raw_socket
