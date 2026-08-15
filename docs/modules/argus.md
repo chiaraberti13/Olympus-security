@@ -36,6 +36,22 @@ olympus argus ip --ip 203.0.113.10 --scope examples/input/argus-ip-scope.json
 olympus argus ip --ip 8.8.8.8 --geo --i-am-authorized --scope examples/input/argus-ip-scope.json
 ```
 
+### Investigation graph / grafo d'indagine (flowsint-style)
+`argus investigate` costruisce un **grafo OSINT**: da un'entità seed (email, dominio, IP,
+username, telefono) esegue *transform* che scoprono entità collegate (email→username+dominio,
+dominio→IP/sottodomini, IP→geo/ASN, username→account) fino a `--depth` salti. Esporta il grafo
+in JSON e in **Mermaid** per visualizzarlo. / `argus investigate` builds an **OSINT graph**:
+from a seed entity it runs transforms that pivot to linked entities, up to `--depth` hops, and
+exports the graph as JSON + a Mermaid diagram.
+
+```bash
+olympus argus investigate --seed-type email --seed-value jdoe@olympusdemocorp.example \
+  --depth 2 --geo --i-am-authorized --output grafo.json --mermaid grafo.mmd
+```
+
+Ogni indagine richiede `--i-am-authorized` (fan-out di lookup su terze parti) e viene tracciata
+in un log di audit; i transform usano client iniettabili (quindi testabili offline).
+
 ## English
 Argus performs strictly passive reconnaissance on authorized domains: DNS, email posture and
 Certificate Transparency. `argus scan` requires a scope file, blocks and logs out-of-scope

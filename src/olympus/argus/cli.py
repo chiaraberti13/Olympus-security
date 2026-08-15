@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -32,6 +33,7 @@ from olympus.argus.enrichment import (
     PhoneEnrichment,
     RapidApiMessagingClient,
 )
+from olympus.argus.graph import EntityType, export_investigation
 from olympus.argus.ip_osint import (
     IpApiClient,
     IpGeo,
@@ -64,6 +66,7 @@ from olympus.argus.phone_scope import (
 from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
+from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.core.http import UrllibHttpClient
 
 app = typer.Typer(
@@ -502,3 +505,80 @@ def ip(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     typer.echo(f"argus: profiled {len(intels)} IP(s)", err=True)
+
+
+_INVESTIGATE_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — an investigation fans out third-party OSINT lookups about the seed "
+    "and everything it links to. Run it only with documented authorization. Re-run with "
+    "--i-am-authorized to confirm."
+)
+DEFAULT_INVESTIGATION_LOG = Path("examples/output/argus-investigate.log")
+
+
+def _log_investigation(name: str, seed_type: str, seed_value: str, log: Path) -> None:
+    entry = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "investigation": name,
+        "seed_type": seed_type,
+        "seed_value": seed_value,
+        "action": "investigation_started",
+    }
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+@app.command()
+def investigate(
+    seed_type: EntityType = typer.Option(
+        ..., "--seed-type", help="Seed entity type (domain/host/ip/email/phone/username)."
+    ),
+    seed_value: str = typer.Option(..., "--seed-value", help="Seed entity value."),
+    name: str = typer.Option("investigation", "--name", help="Investigation name."),
+    depth: int = typer.Option(1, "--depth", min=0, max=3, help="How many pivot hops to expand."),
+    sites: Path = typer.Option(
+        DEFAULT_SITES_PATH, "--sites", help="Site registry for username transforms."
+    ),
+    geo: bool = typer.Option(False, "--geo", help="Enable IP geolocation/ASN (third-party)."),
+    log: Path = typer.Option(DEFAULT_INVESTIGATION_LOG, "--log", help="Investigation audit log."),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm documented authorization for the fan-out."
+    ),
+    output: Path = typer.Option(
+        Path("examples/output/argus-investigation.json"), "--output", help="Graph JSON output."
+    ),
+    mermaid: Path | None = typer.Option(
+        None, "--mermaid", help="If set, also write a Mermaid diagram of the graph."
+    ),
+) -> None:
+    """Build an OSINT investigation graph by pivoting from a seed entity (flowsint-style)."""
+    if not i_am_authorized:
+        typer.echo(f"argus: {_INVESTIGATE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4)
+
+    try:
+        site_specs = load_site_registry(sites)
+    except SiteRegistryError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    _log_investigation(name, seed_type.value, seed_value, log)
+    ctx = TransformContext(
+        resolver=DnspythonResolver(),
+        ct_client=CrtShClient(),
+        http=UrllibHttpClient(),
+        site_specs=site_specs,
+        geolocate=geo,
+    )
+    graph = run_investigation(name, seed_type, seed_value, ctx, depth=depth)
+
+    typer.echo(json.dumps(graph.to_dict(), indent=2, sort_keys=True))
+    export_investigation(graph, output)
+    if mermaid is not None:
+        mermaid.parent.mkdir(parents=True, exist_ok=True)
+        mermaid.write_text(graph.to_mermaid(), encoding="utf-8")
+    typer.echo(
+        f"argus: investigation '{name}' — {len(graph.entities)} entit(y/ies), "
+        f"{len(graph.relationships)} edge(s); {output}",
+        err=True,
+    )

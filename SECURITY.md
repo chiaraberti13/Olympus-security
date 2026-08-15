@@ -44,7 +44,9 @@ messaging in `argus phone`; **Metabase GHSA-vwf4-m7j8-wcjf** → regola Apollo +
 XSS riflesso non-distruttivo in Artemis (marker benigno, nessuna evasione WAF);
 **ad_attack_architecture / adhammer** → pack di **detection** AD in Apollo (solo lato
 difensivo: DCSync, Kerberoasting, pass-the-hash, LLMNR poisoning, golden ticket);
-**GhostTrack** → **IP OSINT** in Argus (classificazione offline + geolocation/ASN keyless).
+**GhostTrack** → **IP OSINT** in Argus (classificazione offline + geolocation/ASN keyless);
+**flowsint** → **grafo d'indagine** in Argus (`investigate`): entità + relazioni + transform di
+pivot Maltego-style, con gate di autorizzazione e log di audit.
 
 ### Escluso per design / Excluded by design
 - **hackingtool** — launcher di ~215 tool esterni, molti distruttivi (DDoS, RAT, payload,
