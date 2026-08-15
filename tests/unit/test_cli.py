@@ -40,11 +40,9 @@ def test_argus_demo_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert "exported 2 assets" in result.stdout
 
 
-def test_all_tool_demos_run() -> None:
-    for tool in (
-        "proteus",
-        "vulcan",
-    ):
-        result = runner.invoke(app, [tool, "demo"])
-        assert result.exit_code == 0, tool
-        assert "not implemented" in result.stdout
+def test_remaining_scaffold_demo_runs() -> None:
+    # Proteus is still a scaffold until its real commands land; every other
+    # module now ships real tools (no demo).
+    result = runner.invoke(app, ["proteus", "demo"])
+    assert result.exit_code == 0
+    assert "not implemented" in result.stdout

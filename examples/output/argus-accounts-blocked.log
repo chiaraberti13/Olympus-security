@@ -6,3 +6,5 @@
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-102/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:52:55.654353+00:00"}
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-103/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:53:38.877880+00:00"}
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-104/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:54:59.717544+00:00"}
+{"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-106/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T16:12:41.405381+00:00"}
+{"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-107/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T16:13:11.632524+00:00"}
