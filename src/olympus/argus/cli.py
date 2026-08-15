@@ -8,15 +8,33 @@ from pathlib import Path
 import typer
 from pydantic import ValidationError
 
+from olympus.argus.accounts import (
+    AccountIntel,
+    AccountScanResult,
+    SiteRegistryError,
+    build_account_assets,
+    build_account_finding,
+    enumerate_accounts,
+    export_account_intel,
+    load_site_registry,
+)
+from olympus.argus.accounts_scope import (
+    AccountOutOfScopeError,
+    AccountScopeError,
+    enforce_account_scope,
+)
 from olympus.argus.assets import build_assets, export_assets, load_assets
 from olympus.argus.ct import CrtShClient, CtQueryError, CtRecon, enumerate_subdomains
 from olympus.argus.demo_data import (
+    DEMO_ACCOUNT_HANDLE,
     DEMO_DOMAIN,
     DEMO_PHONE_NUMBER,
+    DemoAccountHttpClient,
     DemoCtClient,
     DemoMessagingPresenceClient,
     DemoPhoneEnrichmentClient,
     DemoResolver,
+    demo_site_specs,
 )
 from olympus.argus.diff import diff_snapshots
 from olympus.argus.enrichment import (
@@ -58,6 +76,17 @@ DEMO_PREVIOUS_ASSETS_PATH = Path("examples/input/argus-assets-previous.json")
 DEFAULT_PHONE_SCOPE_PATH = Path("examples/input/argus-phone-scope.json")
 DEFAULT_PHONE_BLOCK_LOG_PATH = Path("examples/output/argus-phone-blocked.log")
 DEMO_PHONE_OUTPUT_PATH = Path("examples/output/argus-phone-intel.json")
+
+DEFAULT_SITES_PATH = Path("examples/input/argus-sites.json")
+DEFAULT_ACCOUNT_SCOPE_PATH = Path("examples/input/argus-accounts-scope.json")
+DEFAULT_ACCOUNT_BLOCK_LOG_PATH = Path("examples/output/argus-accounts-blocked.log")
+DEMO_ACCOUNT_OUTPUT_PATH = Path("examples/output/argus-accounts-intel.json")
+
+_METADATA_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — extracting public profile metadata (avatar/bio/followers) about a "
+    "real person is privacy-sensitive OSINT. Run it only with documented authorization/consent. "
+    "Re-run with --i-am-authorized to confirm."
+)
 
 # Shown before any real, third-party lookup against a live number.
 _AUTH_DISCLAIMER = (
@@ -311,3 +340,89 @@ def phone_demo() -> None:
     typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
     export_phone_intel(intel, DEMO_PHONE_OUTPUT_PATH)
     typer.echo(f"argus: wrote phone intel ({len(findings)} finding(s)) to {DEMO_PHONE_OUTPUT_PATH}")
+
+
+def _build_account_intel(result: AccountScanResult) -> AccountIntel:
+    """Turn a raw scan into assets + a summary finding bundle."""
+    assets = build_account_assets(result)
+    finding = build_account_finding(assets[0].asset_id, result) if assets else None
+    return AccountIntel(result=result, assets=assets, findings=[finding] if finding else [])
+
+
+@app.command()
+def accounts(
+    username: str = typer.Option(..., "--username", help="Handle to enumerate across sites."),
+    scope: Path = typer.Option(
+        DEFAULT_ACCOUNT_SCOPE_PATH, "--scope", help="JSON allowlist of authorized handles."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_ACCOUNT_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."
+    ),
+    sites: Path = typer.Option(
+        DEFAULT_SITES_PATH, "--sites", help="JSON site registry to check."
+    ),
+    metadata: bool = typer.Option(
+        False, "--metadata", help="Also extract public profile metadata (needs --i-am-authorized)."
+    ),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm documented authorization for metadata scraping."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the account-intel bundle as JSON to this path."
+    ),
+) -> None:
+    """Enumerate a single in-scope handle across a curated list of public sites."""
+    try:
+        enforce_account_scope(username, scope, log)
+    except AccountScopeError as exc:
+        typer.echo(f"argus: account scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except AccountOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+
+    if metadata and not i_am_authorized:
+        typer.echo(f"argus: {_METADATA_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4)
+
+    try:
+        specs = load_site_registry(sites)
+    except SiteRegistryError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    result = enumerate_accounts(username, specs, UrllibHttpClient(), want_metadata=metadata)
+    intel = _build_account_intel(result)
+
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    hits = len(result.existing())
+    typer.echo(f"argus: '{username}' found on {hits}/{len(specs)} site(s)", err=True)
+    if output is not None:
+        export_account_intel(intel, output)
+        typer.echo(f"argus: wrote account intel to {output}", err=True)
+
+
+@app.command("accounts-demo")
+def accounts_demo() -> None:
+    """Enumerate a synthetic handle across synthetic sites, fully offline.
+
+    Deterministic and network-free: sites and responses come from
+    :mod:`olympus.argus.demo_data`, but the enumeration, asset/finding
+    building and export are the same production code path as ``argus accounts``.
+    """
+    typer.echo(f"argus: accounts-demo — enumerating {DEMO_ACCOUNT_HANDLE} (synthetic)")
+    enforce_account_scope(
+        DEMO_ACCOUNT_HANDLE, DEFAULT_ACCOUNT_SCOPE_PATH, DEFAULT_ACCOUNT_BLOCK_LOG_PATH
+    )
+
+    result = enumerate_accounts(
+        DEMO_ACCOUNT_HANDLE, demo_site_specs(), DemoAccountHttpClient(), want_metadata=True
+    )
+    intel = _build_account_intel(result)
+
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    export_account_intel(intel, DEMO_ACCOUNT_OUTPUT_PATH)
+    typer.echo(
+        f"argus: '{DEMO_ACCOUNT_HANDLE}' found on {len(result.existing())} site(s); "
+        f"wrote {DEMO_ACCOUNT_OUTPUT_PATH}"
+    )

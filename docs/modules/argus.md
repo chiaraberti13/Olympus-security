@@ -91,11 +91,34 @@ lookup reale è protetto da `--i-am-authorized` con un disclaimer esplicito.
 > pentest, il tuo numero, o studio su numeri che controlli). Olympus non emette nulla di
 > distruttivo e non usa evasione (User-Agent onesto, nessuna impersonazione).
 
+### Account enumeration
+Argus cerca un **username/handle** su una lista curata di siti pubblici e, opzionalmente,
+estrae i metadati pubblici già visibili sulla pagina (bio, follower...).
+
+```bash
+# Presenza (una GET onesta per sito, nessuna chiave)
+olympus argus accounts --username olympus_demo --scope examples/input/argus-accounts-scope.json
+
+# Presenza + metadati pubblici (uso autorizzato)
+olympus argus accounts --username jdoe --metadata --i-am-authorized
+
+# Demo offline e deterministica su siti sintetici
+olympus argus accounts-demo
+```
+
+Lo scope è una **allowlist di handle** (`examples/input/argus-accounts-scope.json`) con
+block+log. La lista siti è un file JSON dichiarativo (`examples/input/argus-sites.json`),
+non codice. **Scelta di sicurezza deliberata**: nessuna impersonazione TLS, nessuna
+rotazione proxy, nessuna evasione anti-bot (a differenza del tool originale da cui nasce il
+concetto) — solo HTTP trasparente e autorizzato. L'estrazione di metadati richiede
+`--i-am-authorized`.
+
 ### Etica
 Nessun dato reale: `olympus argus demo` opera solo su `olympusdemocorp.example` (TLD
 riservato alla documentazione, RFC 2606) e indirizzi nei blocchi riservati RFC 5737/3849.
 Il core del phone-OSINT è offline; `phone-demo` usa un numero NANP fittizio riservato
-(555-0123) e doppi offline. Non distruttivo: solo query standard, mai probing attivo.
+(555-0123) e doppi offline; `accounts-demo` usa siti `.example` sintetici. Non distruttivo:
+solo query standard, mai probing attivo, mai evasione.
 
 ---
 
@@ -189,7 +212,30 @@ disclaimer.
 > number, or study on numbers you control). Olympus emits nothing destructive and uses no
 > evasion (honest User-Agent, no impersonation).
 
+### Account enumeration
+Argus looks up a **username/handle** across a curated list of public sites and, optionally,
+extracts the public profile metadata already visible on the page (bio, followers...).
+
+```bash
+# Presence (one honest GET per site, no key)
+olympus argus accounts --username olympus_demo --scope examples/input/argus-accounts-scope.json
+
+# Presence + public metadata (authorized use)
+olympus argus accounts --username jdoe --metadata --i-am-authorized
+
+# Deterministic offline demo over synthetic sites
+olympus argus accounts-demo
+```
+
+Scope is a **handle allowlist** (`examples/input/argus-accounts-scope.json`) with block+log.
+The site list is a declarative JSON file (`examples/input/argus-sites.json`), not code.
+**Deliberate safety choice**: no TLS impersonation, no proxy rotation, no anti-bot evasion
+(unlike the source tool this concept comes from) — only transparent, authorized HTTP.
+Metadata extraction requires `--i-am-authorized`.
+
 ### Ethics
 No real data: `olympus argus demo` only ever operates on `olympusdemocorp.example` (TLD
 reserved for documentation, RFC 2606) and addresses in the RFC 5737/3849 reserved ranges.
-Non-destructive: only standard DNS/CT queries, never active probing of discovered hosts.
+The phone-OSINT core is offline; `phone-demo` uses a reserved fictional NANP number
+(555-0123) and offline doubles; `accounts-demo` uses synthetic `.example` sites.
+Non-destructive: only standard queries, never active probing, never evasion.
