@@ -30,6 +30,10 @@ olympus argus phone --input numeri.txt --scope examples/input/argus-phone-scope.
 # Username singolo o batch: presenza su siti curati + metadati pubblici (autorizzati)
 olympus argus accounts --username olympus_demo --scope examples/input/argus-accounts-scope.json
 olympus argus accounts --input handle.txt --scope examples/input/argus-accounts-scope.json
+
+# IP: classificazione offline + geolocation/ASN opzionale (ip-api.com, autorizzata)
+olympus argus ip --ip 203.0.113.10 --scope examples/input/argus-ip-scope.json
+olympus argus ip --ip 8.8.8.8 --geo --i-am-authorized --scope examples/input/argus-ip-scope.json
 ```
 
 ## English

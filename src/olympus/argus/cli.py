@@ -32,6 +32,22 @@ from olympus.argus.enrichment import (
     PhoneEnrichment,
     RapidApiMessagingClient,
 )
+from olympus.argus.ip_osint import (
+    IpApiClient,
+    IpGeo,
+    IpGeoError,
+    IpIntel,
+    IpParseError,
+    analyze_ip,
+    build_ip_asset,
+    build_ip_findings,
+    export_ip_intel,
+)
+from olympus.argus.ip_scope import (
+    IpOutOfScopeError,
+    IpScopeError,
+    enforce_ip_scope,
+)
 from olympus.argus.phone import (
     PhoneIntel,
     PhoneParseError,
@@ -65,6 +81,14 @@ DEFAULT_PHONE_BLOCK_LOG_PATH = Path("examples/output/argus-phone-blocked.log")
 DEFAULT_SITES_PATH = Path("examples/input/argus-sites.json")
 DEFAULT_ACCOUNT_SCOPE_PATH = Path("examples/input/argus-accounts-scope.json")
 DEFAULT_ACCOUNT_BLOCK_LOG_PATH = Path("examples/output/argus-accounts-blocked.log")
+
+DEFAULT_IP_SCOPE_PATH = Path("examples/input/argus-ip-scope.json")
+DEFAULT_IP_BLOCK_LOG_PATH = Path("examples/output/argus-ip-blocked.log")
+
+_IP_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — --geo queries a third-party geolocation service about the target "
+    "IP. Run it only with documented authorization. Re-run with --i-am-authorized to confirm."
+)
 
 _METADATA_DISCLAIMER = (
     "AUTHORIZED USE ONLY — extracting public profile metadata (avatar/bio/followers) about a "
@@ -419,3 +443,88 @@ def accounts(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         typer.echo(f"argus: wrote account intel to {output}", err=True)
+
+
+def _profile_ip(ip: str, scope: Path, log: Path, *, geo: bool) -> IpIntel:
+    """Profile one IP: classify offline, enforce scope, and optionally geolocate."""
+    report = analyze_ip(ip)
+    enforce_ip_scope(report.ip, scope, log)
+    geo_result: IpGeo | None = None
+    if geo:
+        try:
+            geo_result = IpApiClient(UrllibHttpClient()).geolocate(report.ip)
+        except IpGeoError as exc:
+            typer.echo(f"argus: warning: geolocation failed for {report.ip}: {exc}", err=True)
+    asset = build_ip_asset(report, geo_result)
+    findings = build_ip_findings(asset.asset_id, report, geo_result)
+    return IpIntel(report=report, asset=asset, findings=findings)
+
+
+@app.command()
+def ip(
+    ip_address: str | None = typer.Option(None, "--ip", help="IPv4/IPv6 address to profile."),
+    input_file: Path | None = typer.Option(
+        None, "--input", help="File with one IP per line (batch mode)."
+    ),
+    scope: Path = typer.Option(
+        DEFAULT_IP_SCOPE_PATH, "--scope", help="JSON scope file of authorized CIDR networks."
+    ),
+    log: Path = typer.Option(DEFAULT_IP_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."),
+    geo: bool = typer.Option(
+        False, "--geo", help="Geolocation/ASN via ip-api.com (third-party, keyless)."
+    ),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm authorization for the third-party geo lookup."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the IP-intel bundle(s) as JSON to this path."
+    ),
+) -> None:
+    """Profile in-scope IP address(es): offline classification + opt-in geolocation.
+
+    Provide exactly one of --ip (single) or --input (batch, one per line).
+    """
+    if (ip_address is None) == (input_file is None):
+        typer.echo("argus: provide exactly one of --ip or --input", err=True)
+        raise typer.Exit(code=2)
+    if geo and not i_am_authorized:
+        typer.echo(f"argus: {_IP_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4)
+
+    if ip_address is not None:
+        try:
+            intel = _profile_ip(ip_address, scope, log, geo=geo)
+        except IpParseError as exc:
+            typer.echo(f"argus: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except IpScopeError as exc:
+            typer.echo(f"argus: IP scope error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except IpOutOfScopeError as exc:
+            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+            raise typer.Exit(code=3) from exc
+        typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+        if output is not None:
+            export_ip_intel(intel, output)
+            typer.echo(f"argus: wrote IP intel to {output}", err=True)
+        return
+
+    assert input_file is not None  # noqa: S101 (guaranteed by the exactly-one check above)
+    intels: list[IpIntel] = []
+    for target in _read_targets(input_file):
+        try:
+            intels.append(_profile_ip(target, scope, log, geo=geo))
+        except IpParseError:
+            typer.echo(f"argus: skipping invalid IP {target!r}", err=True)
+        except IpScopeError as exc:
+            typer.echo(f"argus: IP scope error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except IpOutOfScopeError:
+            typer.echo(f"argus: skipping out-of-scope IP {target!r} (logged)", err=True)
+
+    payload = [intel.to_dict() for intel in intels]
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    typer.echo(f"argus: profiled {len(intels)} IP(s)", err=True)
