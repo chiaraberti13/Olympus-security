@@ -7,7 +7,13 @@ from pathlib import Path
 
 import typer
 
-from olympus.artemis.http import HttpClientError, HttpResponse, UrllibTransport, fetch_scoped
+from olympus.artemis.http import (
+    HttpClientError,
+    HttpResponse,
+    PinnedTransport,
+    SocketResolver,
+    fetch_scoped,
+)
 from olympus.artemis.scope import OutOfScopeError, ScopeError, enforce_scope
 
 app = typer.Typer(help="Artemis — authorized web reconnaissance.", no_args_is_help=True)
@@ -26,7 +32,13 @@ def fetch(
     """Perform one bounded, scope-safe GET flow and print metadata only."""
     try:
         result = fetch_scoped(
-            url, scope, log, UrllibTransport(), timeout=timeout, max_bytes=max_bytes
+            url,
+            scope,
+            log,
+            SocketResolver(),
+            PinnedTransport(),
+            timeout=timeout,
+            max_bytes=max_bytes,
         )
     except (ScopeError, OutOfScopeError, HttpClientError, ValueError) as exc:
         typer.echo(f"artemis: fetch blocked or failed: {exc}", err=True)
@@ -62,16 +74,24 @@ def check_scope(
 def demo() -> None:
     """Run a redirecting synthetic GET flow using an offline transport."""
     class DemoTransport:
-        def get(self, url: str, timeout: float, max_bytes: int) -> HttpResponse:
-            del timeout, max_bytes
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del addresses, timeout, max_bytes
             if url.endswith("/app/login"):
                 return HttpResponse(url, 302, {"location": "/app/home"}, b"")
             return HttpResponse(url, 200, {"content-type": "text/html"}, b"<h1>Demo</h1>")
+
+    class DemoResolver:
+        def resolve(self, hostname: str, port: int) -> list[str]:
+            del hostname, port
+            return ["192.0.2.10"]
 
     result = fetch_scoped(
         "https://portal.olympusdemocorp.example/app/login",
         DEFAULT_SCOPE,
         DEFAULT_LOG,
+        DemoResolver(),
         DemoTransport(),
     )
     typer.echo(

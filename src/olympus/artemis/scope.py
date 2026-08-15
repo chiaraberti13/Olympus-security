@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import posixpath
 from dataclasses import dataclass
@@ -26,6 +27,19 @@ class ScopedUrl:
     url: str
     origin: str
     path: str
+
+
+def _audit_block(target: str, log_path: Path, reason: str) -> None:
+    """Append a query-free, structured scope denial record."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "event": "blocked_out_of_scope",
+        "reason": reason,
+        "target": target,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    with log_path.open("a", encoding="utf-8") as audit:
+        audit.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 def _canonicalize(raw_url: str) -> ScopedUrl:
@@ -85,12 +99,35 @@ def enforce_scope(target: str, scope_path: Path, log_path: Path) -> ScopedUrl:
         raise ScopeError(f"invalid scope file: {exc}") from exc
     if scoped_target.origin in origins and _path_allowed(scoped_target.path, prefixes):
         return scoped_target
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    record = {
-        "event": "blocked_out_of_scope",
-        "target": f"{scoped_target.origin}{scoped_target.path}",
-        "timestamp": datetime.now(UTC).isoformat(),
-    }
-    with log_path.open("a", encoding="utf-8") as audit:
-        audit.write(json.dumps(record, sort_keys=True) + "\n")
-    raise OutOfScopeError(record["target"])
+    safe_target = f"{scoped_target.origin}{scoped_target.path}"
+    _audit_block(safe_target, log_path, "url_not_allowed")
+    raise OutOfScopeError(safe_target)
+
+
+def enforce_address_scope(
+    scoped_url: ScopedUrl,
+    addresses: list[str],
+    scope_path: Path,
+    log_path: Path,
+) -> tuple[str, ...]:
+    """Require every resolved address to be explicitly covered by a scope CIDR."""
+    if not addresses:
+        raise ScopeError("DNS resolution returned no addresses")
+    try:
+        payload: Any = json.loads(scope_path.read_text(encoding="utf-8"))
+        networks = [
+            ipaddress.ip_network(value, strict=False) for value in payload["allowed_ip_networks"]
+        ]
+        parsed_addresses = [ipaddress.ip_address(value) for value in addresses]
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ScopeError(f"invalid address scope: {exc}") from exc
+    denied = [
+        address
+        for address in parsed_addresses
+        if not any(address in network for network in networks)
+    ]
+    if denied:
+        safe_target = f"{scoped_url.origin}{scoped_url.path}"
+        _audit_block(safe_target, log_path, "resolved_address_not_allowed")
+        raise OutOfScopeError(safe_target)
+    return tuple(str(address) for address in parsed_addresses)

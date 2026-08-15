@@ -239,3 +239,59 @@
 - Causa / Cause: marker del body non univoco rispetto ai metadati leciti
 - Fix: body impostato a un marker distinto e asserzione mirata sul contenuto completo
 - Test di regressione / Regression test: test CLI non stampa il body
+
+### ERR-2026-08-15-01 — Artemis HTTP vulnerabile a DNS rebinding TOCTOU
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: audit post-T-305 del transport urllib
+- Sintomo / Symptom: hostname validato per scope ma risolto internamente una seconda volta al GET
+- Causa / Cause: il transport riceveva soltanto l'URL, senza indirizzi già autorizzati
+- Fix: resolver singolo per hop, allowlist CIDR su tutte le risposte e connessione IP-pinned
+- Test di regressione / Regression test: IPv4/IPv6 offline e nessuna seconda risoluzione
+
+### ERR-2026-08-15-02 — T-306: import order e righe troppo lunghe
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: primo run Ruff del DNS pinning
+- Sintomo / Symptom: I001 ed E501 sulla selezione connection e filtro CIDR
+- Causa / Cause: patch iniziale non formattata secondo il gate
+- Fix: import ordinati ed espressioni suddivise
+- Test di regressione / Regression test: `ruff check .`
+
+### ERR-2026-08-15-03 — Mypy stub http.client incompleto
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-306, primo run mypy
+- Sintomo / Symptom: indirizzo getaddrinfo `str|int` e attributi privati non presenti negli stub
+- Causa / Cause: affidamento su dettagli interni di `HTTPConnection`/`HTTPSConnection`
+- Fix: conversione indirizzo esplicita, context SSL di proprietà e connect senza source address
+- Test di regressione / Regression test: `mypy .`
+
+### ERR-2026-08-15-04 — Coverage T-306 sotto soglia
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: primo gate test DNS pinning
+- Sintomo / Symptom: 1396/1563 linee, 89,3% contro il minimo 90%
+- Causa / Cause: resolver production e rami allowlist IPv4/IPv6 non esercitati
+- Fix: test offline di dedup/error DNS e blocco se una sola risposta è fuori CIDR
+- Test di regressione / Regression test: gate coverage ≥ 90%
+
+### ERR-2026-08-15-05 — Mypy: modulo socket non esportato da Artemis HTTP
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: test SocketResolver T-306
+- Sintomo / Symptom: accesso al dettaglio `artemis_http.socket` non esportato
+- Causa / Cause: monkeypatch indirizzato attraverso il modulo applicativo
+- Fix: patch applicata direttamente al modulo standard `socket`
+- Test di regressione / Regression test: `mypy .`
+
+### ERR-2026-08-15-06 — Coverage T-306 ancora sotto soglia
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: secondo gate DNS pinning
+- Sintomo / Symptom: 1404/1563 linee, 89,8%
+- Causa / Cause: risposta DNS vuota e ramo HTTP non TLS non coperti
+- Fix: test espliciti per resolver vuoto e connessione HTTP pinned
+- Test di regressione / Regression test: gate coverage ≥ 90%
+
+### ERR-2026-08-15-07 — Coverage pinning 89,9%
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: terzo gate T-306
+- Sintomo / Symptom: 1405/1563 linee, ancora sotto soglia
+- Causa / Cause: metodi connect IP-pinned non esercitati direttamente
+- Fix: test socket fake verifica che IPv4/IPv6 forniti siano gli unici endpoint usati
+- Test di regressione / Regression test: gate coverage ≥ 90%
