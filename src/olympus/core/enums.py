@@ -45,6 +45,8 @@ class AssetType(StrEnum):
     WEB_SERVER = "web_server"
     SERVICE = "service"
     URL = "url"
+    PHONE = "phone"
+    ACCOUNT = "account"
     OTHER = "other"
 
 
