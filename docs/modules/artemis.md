@@ -19,6 +19,10 @@ perimetro viene **bloccato e registrato**.
 - **Content discovery** — verifica un insieme fisso di path sensibili noti (`.git/config`,
   `.env`, `.htpasswd`, `backup.zip`, `/admin`): una singola GET per path, nessun brute
   force, nessuna wordlist.
+- **Check CVE Metabase (CVE-2026-72898)** — fingerprint **non-exploitativo**: legge la
+  versione pubblica da `/api/session/properties` e la confronta con i range affetti; segnala
+  un Finding `CRITICAL` con rimedio (upgrade) se vulnerabile. **Non invia mai** un payload
+  SQLi: Olympus rileva il rischio, non lo sfrutta.
 
 ### Comandi
 ```bash
@@ -77,6 +81,10 @@ and logged**.
 - **Content discovery** — checks a fixed set of well-known sensitive paths
   (`.git/config`, `.env`, `.htpasswd`, `backup.zip`, `/admin`): a single GET per path, no
   brute forcing, no wordlists.
+- **Metabase CVE check (CVE-2026-72898)** — a **non-exploitative** fingerprint: it reads the
+  public version from `/api/session/properties` and compares it against the affected ranges,
+  emitting a `CRITICAL` finding with remediation (upgrade) when vulnerable. It **never sends**
+  a SQLi payload: Olympus reports the risk, it does not exploit it.
 
 ### Commands
 ```bash

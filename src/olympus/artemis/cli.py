@@ -13,6 +13,7 @@ from olympus.artemis.demo_data import DEMO_URL, DemoClient
 from olympus.artemis.discovery import discover_content
 from olympus.artemis.headers import analyze_headers
 from olympus.artemis.http_client import HttpClient, UrllibHttpClient
+from olympus.artemis.metabase import detect_metabase
 from olympus.artemis.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.core.enums import AssetType, Source
 from olympus.core.models import Asset, Finding
@@ -46,6 +47,7 @@ def _run_recon(url: str, client: HttpClient) -> tuple[Asset, int, list[Finding]]
     findings.extend(analyze_headers(asset.asset_id, response))
     findings.extend(analyze_cors(asset.asset_id, response, request_origin=PROBE_ORIGIN))
     findings.extend(discover_content(asset.asset_id, url, client))
+    findings.extend(detect_metabase(asset.asset_id, url, client))
 
     return asset, response.status_code, findings
 
