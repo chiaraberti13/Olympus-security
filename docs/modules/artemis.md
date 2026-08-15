@@ -22,6 +22,12 @@ olympus artemis demo
 olympus artemis metabase --url https://metabase.olympusdemocorp.example \
   --scope examples/input/artemis-metabase-scope.json
 olympus artemis metabase-demo
+
+# Reflected XSS: marker benigno (nessuno script), flag solo se riflesso non-escaped.
+# Reflected XSS: benign marker (no script), flags only an unescaped reflection.
+olympus artemis xss --url "https://portal.olympusdemocorp.example/app/search?q=x" --param q \
+  --scope examples/input/artemis-scope.json
+olympus artemis xss-demo
 ```
 
 ## English

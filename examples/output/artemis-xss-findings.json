@@ -1,0 +1,24 @@
+[
+  {
+    "asset_id": "AST-2026-00001",
+    "cvss": null,
+    "description": "A benign marker containing the characters ' \" < > was reflected verbatim (unescaped) in the response for parameter 'q', indicating the value is not contextually output-encoded. This is very likely exploitable as reflected cross-site scripting. No executable payload was sent \u2014 only structural characters \u2014 so manual confirmation of the injection context is recommended.",
+    "evidence": [
+      "GET https://portal.olympusdemocorp.example/app/search?q=olymp7xss%27%22%3C%3E",
+      "reflected marker: olymp7xss'\"<>"
+    ],
+    "finding_id": "FND-2026-00001",
+    "first_seen": "2026-08-15T13:31:36.408803Z",
+    "last_seen": "2026-08-15T13:31:36.408806Z",
+    "references": [
+      "https://owasp.org/www-community/attacks/xss/"
+    ],
+    "remediation": "Apply contextual output encoding for the reflection context (HTML body, attribute, JS, URL) and add a restrictive Content-Security-Policy.",
+    "schema_name": "olympus.finding",
+    "schema_version": "1.0.0",
+    "severity": "high",
+    "source": "artemis",
+    "status": "new",
+    "title": "Reflected XSS: parameter 'q' reflects input unescaped"
+  }
+]

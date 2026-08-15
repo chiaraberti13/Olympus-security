@@ -16,6 +16,7 @@ from olympus.artemis.http import (
 )
 from olympus.artemis.metabase import detect_metabase
 from olympus.artemis.scope import OutOfScopeError, ScopeError, enforce_scope
+from olympus.artemis.xss import MARKER, check_reflected_xss
 from olympus.core.enums import AssetType, Source
 from olympus.core.models import Asset, Finding
 
@@ -25,6 +26,8 @@ DEFAULT_LOG = Path("examples/output/artemis-blocked.log")
 DEFAULT_METABASE_SCOPE = Path("examples/input/artemis-metabase-scope.json")
 DEMO_METABASE_URL = "https://metabase.olympusdemocorp.example"
 DEMO_METABASE_OUTPUT = Path("examples/output/artemis-metabase-findings.json")
+DEMO_XSS_URL = "https://portal.olympusdemocorp.example/app/search"
+DEMO_XSS_OUTPUT = Path("examples/output/artemis-xss-findings.json")
 
 
 def _render_findings(findings: list[Finding]) -> str:
@@ -174,3 +177,66 @@ def metabase_demo() -> None:
     DEMO_METABASE_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     DEMO_METABASE_OUTPUT.write_text(_render_findings(findings), encoding="utf-8")
     typer.echo(f"artemis: metabase-demo produced {len(findings)} finding(s)")
+
+
+@app.command()
+def xss(
+    url: str = typer.Option(..., "--url", help="URL to probe (its query params are the target)."),
+    param: str = typer.Option(..., "--param", help="Query parameter to test for reflection."),
+    scope: Path = typer.Option(DEFAULT_SCOPE, "--scope"),
+    log: Path = typer.Option(DEFAULT_LOG, "--log"),
+    output: Path | None = typer.Option(None, "--output", help="Export findings JSON to this path."),
+) -> None:
+    """Non-destructively test a URL parameter for reflected XSS (marker reflection only).
+
+    Sends a benign structural marker (no script/payload) through the scope-safe
+    transport and flags an unescaped reflection. No WAF evasion is performed.
+    """
+    asset = Asset(
+        asset_type=AssetType.WEB_SERVER,
+        hostname=url,
+        source=Source.ARTEMIS,
+        tags=["artemis", "xss"],
+    )
+    findings = check_reflected_xss(
+        asset.asset_id, url, param, scope, log, SocketResolver(), PinnedTransport()
+    )
+    typer.echo(_render_findings(findings))
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(_render_findings(findings), encoding="utf-8")
+    typer.echo(f"artemis: xss check produced {len(findings)} finding(s)", err=True)
+
+
+@app.command("xss-demo")
+def xss_demo() -> None:
+    """Run the reflected-XSS check against a synthetic vulnerable endpoint, offline."""
+
+    class DemoResolver:
+        def resolve(self, hostname: str, port: int) -> list[str]:
+            del hostname, port
+            return ["192.0.2.10"]
+
+    class DemoTransport:
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del addresses, timeout, max_bytes
+            # Synthetic vulnerable page: reflects the raw (unescaped) marker.
+            body = f"<html><h1>Results for {MARKER}</h1></html>".encode()
+            return HttpResponse(url, 200, {"content-type": "text/html"}, body)
+
+    asset = Asset(
+        asset_type=AssetType.WEB_SERVER,
+        hostname=DEMO_XSS_URL,
+        source=Source.ARTEMIS,
+        tags=["artemis", "xss"],
+    )
+    findings = check_reflected_xss(
+        asset.asset_id, DEMO_XSS_URL, "q", DEFAULT_SCOPE, DEFAULT_LOG,
+        DemoResolver(), DemoTransport(),
+    )
+    typer.echo(_render_findings(findings))
+    DEMO_XSS_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    DEMO_XSS_OUTPUT.write_text(_render_findings(findings), encoding="utf-8")
+    typer.echo(f"artemis: xss-demo produced {len(findings)} finding(s)")
