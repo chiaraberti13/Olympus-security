@@ -1,0 +1,23 @@
+# Gitleaks configuration for Olympus.
+#
+# Production code under src/ is scanned for real secrets with the full default
+# rule set. Test and example directories hold *synthetic, by-design* fixtures
+# (fake API keys used to exercise the tools, documentation-range sample data),
+# so they are allowlisted to avoid false positives — no real credential ever
+# lives there.
+
+title = "Olympus gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic fixtures and documentation samples contain no real secrets."
+paths = [
+  '''tests/.*''',
+  '''examples/.*''',
+]
+regexes = [
+  # Placeholder API-key values used by unit tests (never real credentials).
+  '''OLYMPUS_(NUMVERIFY|RAPIDAPI)_KEY''',
+]
