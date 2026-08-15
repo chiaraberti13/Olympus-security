@@ -1,0 +1,83 @@
+{
+  "asset": {
+    "asset_id": "AST-2026-00001",
+    "asset_type": "phone",
+    "criticality": "medium",
+    "first_seen": "2026-08-15T13:10:00.621031Z",
+    "hostname": "+16505550123",
+    "ip_addresses": [],
+    "last_seen": "2026-08-15T13:10:00.621036Z",
+    "metadata": {
+      "country_code": "1",
+      "e164": "+16505550123",
+      "is_valid": "true",
+      "line_type": "fixed_line_or_mobile",
+      "location": "California",
+      "region_code": "US"
+    },
+    "owner": null,
+    "schema_name": "olympus.asset",
+    "schema_version": "1.0.0",
+    "source": "argus",
+    "tags": [
+      "argus",
+      "phone-osint"
+    ]
+  },
+  "findings": [
+    {
+      "asset_id": "AST-2026-00001",
+      "cvss": null,
+      "description": "Third-party breach intelligence reports this number in 2 exposure(s).",
+      "evidence": [
+        "breach_count=2",
+        "sources=DemoStealer/Redline, DemoStealer/Raccoon"
+      ],
+      "finding_id": "FND-2026-00001",
+      "first_seen": "2026-08-15T13:10:00.621078Z",
+      "last_seen": "2026-08-15T13:10:00.621079Z",
+      "references": [],
+      "remediation": "Treat the number as compromised for identity purposes; prefer app-based MFA over SMS and monitor for SIM-swap/account-takeover attempts.",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "high",
+      "source": "argus",
+      "status": "new",
+      "title": "Number appears in known data breaches"
+    },
+    {
+      "asset_id": "AST-2026-00001",
+      "cvss": null,
+      "description": "The number is registered on a messaging platform and exposes public metadata (public profile photo), useful for pretext/social-engineering risk assessment during an authorized engagement.",
+      "evidence": [
+        "platform=whatsapp",
+        "exposed=public profile photo"
+      ],
+      "finding_id": "FND-2026-00002",
+      "first_seen": "2026-08-15T13:10:00.621090Z",
+      "last_seen": "2026-08-15T13:10:00.621091Z",
+      "references": [],
+      "remediation": "Advise the number's owner to tighten messaging-app privacy settings (hide profile photo / last seen / about from unknown contacts).",
+      "schema_name": "olympus.finding",
+      "schema_version": "1.0.0",
+      "severity": "medium",
+      "source": "argus",
+      "status": "new",
+      "title": "Registered on messaging platform (whatsapp)"
+    }
+  ],
+  "report": {
+    "carrier": "",
+    "country_code": 1,
+    "e164": "+16505550123",
+    "is_possible": true,
+    "is_valid": true,
+    "line_type": "fixed_line_or_mobile",
+    "location": "California",
+    "raw_input": "+16505550123",
+    "region_code": "US",
+    "timezones": [
+      "America/Los_Angeles"
+    ]
+  }
+}

@@ -16,6 +16,12 @@ olympus artemis check-scope --url https://portal.olympusdemocorp.example/app/log
 olympus artemis fetch --url https://portal.olympusdemocorp.example/app/login \
   --scope examples/input/artemis-scope.json --timeout 5 --max-bytes 1000000
 olympus artemis demo
+
+# Check CVE Metabase (CVE-2026-72898): fingerprint versione, NESSUN payload SQLi.
+# Metabase CVE check: version fingerprint only, NO SQLi payload is ever sent.
+olympus artemis metabase --url https://metabase.olympusdemocorp.example \
+  --scope examples/input/artemis-metabase-scope.json
+olympus artemis metabase-demo
 ```
 
 ## English
