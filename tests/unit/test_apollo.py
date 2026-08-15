@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from olympus.apollo import cli as apollo_cli
 from olympus.apollo.engine import evaluate
 from olympus.apollo.export import export_alerts
 from olympus.apollo.rules import load_rule
@@ -118,8 +117,3 @@ def test_apollo_cli_and_demo_export_alerts(tmp_path: Path, monkeypatch: pytest.M
     )
     assert result.exit_code == 0
     assert "1 alert" in result.stdout
-
-    monkeypatch.setattr(apollo_cli, "DEFAULT_OUTPUT", tmp_path / "demo-alerts.json")
-    demo = runner.invoke(app, ["apollo", "demo"])
-    assert demo.exit_code == 0
-    assert "1 synthetic alert" in demo.stdout

@@ -41,18 +41,3 @@ def scan(
     findings = to_findings("AST-DEMO-00001", observations)
     export_findings(findings, output)
     typer.echo(f"helios: exported {len(findings)} finding(s) to {output}")
-
-
-@app.command()
-def demo() -> None:
-    """Run offline against the synthetic Olympus Demo Corp connector."""
-    class DemoConnector:
-        def is_open(self, host: str, port: int, timeout: float) -> bool:
-            return host == "192.0.2.10" and port == 443 and timeout > 0
-
-    findings = to_findings(
-        "AST-2026-00001",
-        discover("192.0.2.10", [80, 443], DemoConnector()),
-    )
-    export_findings(findings, DEFAULT_OUTPUT)
-    typer.echo(f"helios: demo exported {len(findings)} synthetic finding(s)")

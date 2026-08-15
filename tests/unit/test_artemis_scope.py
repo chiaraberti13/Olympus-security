@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from olympus.artemis import cli as artemis_cli
 from olympus.artemis.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.cli import app
 
@@ -102,9 +101,3 @@ def test_cli_block_and_demo_are_network_free(
     )
     assert authorized.exit_code == 0
     assert "no network request performed" in authorized.stdout
-
-    monkeypatch.setattr(artemis_cli, "DEFAULT_SCOPE", scope)
-    monkeypatch.setattr(artemis_cli, "DEFAULT_LOG", log)
-    demo = runner.invoke(app, ["artemis", "demo"])
-    assert demo.exit_code == 0
-    assert "offline transport" in demo.stdout

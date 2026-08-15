@@ -5,11 +5,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from olympus.cli import app
-from olympus.hermes import cli as hermes_cli
 from olympus.hermes.sarif import to_sarif
 from olympus.hermes.scanner import scan_git_history, scan_path, scan_text
 
@@ -72,16 +70,6 @@ def test_git_history_scan_finds_removed_synthetic_secret(tmp_path: Path) -> None
     findings = scan_git_history(tmp_path)
 
     assert any(finding.rule == "aws-access-key" for finding in findings)
-
-
-def test_hermes_demo_exits_zero_and_masks_values(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(hermes_cli, "DEFAULT_OUTPUT", tmp_path / "results.sarif")
-    result = runner.invoke(app, ["hermes", "demo"])
-
-    assert result.exit_code == 0
-    assert "synthetic secret(s); values masked" in result.stdout
 
 
 def test_hermes_scan_writes_sarif_and_signals_findings(tmp_path: Path) -> None:

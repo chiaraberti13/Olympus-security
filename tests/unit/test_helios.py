@@ -72,10 +72,3 @@ def test_cli_scan_enforces_scope_and_exports(
 
     assert result.exit_code == 0
     assert output.exists()
-
-
-def test_helios_demo_is_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(helios_cli, "DEFAULT_OUTPUT", tmp_path / "findings.json")
-    result = runner.invoke(app, ["helios", "demo"])
-    assert result.exit_code == 0
-    assert "1 synthetic finding" in result.stdout

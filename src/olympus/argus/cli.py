@@ -154,32 +154,6 @@ def diff_command(before: Path, after: Path) -> None:
     typer.echo(json.dumps(result.__dict__, indent=2, sort_keys=True))
 
 
-@app.command()
-def demo() -> None:
-    """Run a self-contained demo on the synthetic 'Olympus Demo Corp' dataset."""
-    domain = "olympusdemocorp.example"
-
-    class DemoResolver:
-        """Resolve the synthetic dataset without network access."""
-
-        def resolve(self, name: str, record_type: str) -> list[str]:
-            records = {
-                (domain, "A"): ["203.0.113.10"],
-                (domain, "MX"): [f"10 mail.{domain}"],
-                (domain, "TXT"): ["v=spf1 -all"],
-                (f"_dmarc.{domain}", "TXT"): ["v=DMARC1; p=reject"],
-            }
-            return records.get((name, record_type), [])
-
-    class DemoCtClient:
-        """Return synthetic Certificate Transparency observations."""
-
-        def discover(self, requested_domain: str) -> list[str]:
-            return [f"portal.{requested_domain}"]
-
-    result = scan_domain(domain, DemoResolver(), DemoCtClient())
-    export_assets(recon_to_assets(result), DEFAULT_ASSETS_PATH)
-    typer.echo(f"argus: exported {len(recon_to_assets(result))} assets to {DEFAULT_ASSETS_PATH}")
 
 
 def _collect_enrichment(e164: str, *, enrich: bool, breach: bool) -> PhoneEnrichment | None:

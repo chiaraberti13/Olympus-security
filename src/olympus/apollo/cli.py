@@ -35,11 +35,3 @@ def test(
     typer.echo(f"apollo: {len(alerts)} alert(s); output: {output}")
 
 
-@app.command()
-def demo() -> None:
-    """Evaluate the synthetic Olympus Demo Corp detection fixture."""
-    rule = load_rule(Path("examples/input/apollo-rule.yaml"))
-    event = Event.model_validate_json(Path("examples/input/apollo-event.json").read_text())
-    alerts = evaluate([rule], event)
-    export_alerts(alerts, DEFAULT_OUTPUT)
-    typer.echo(f"apollo: demo produced {len(alerts)} synthetic alert(s)")

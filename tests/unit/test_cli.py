@@ -30,10 +30,12 @@ def test_export_schemas_outputs_valid_json() -> None:
     assert "olympus.incident" in payload
 
 
-def test_every_tool_is_wired() -> None:
+def test_no_module_exposes_a_demo_command() -> None:
+    # Every module ships real, working tools — no demo scaffolding anywhere.
     for tool in ("argus", "helios", "artemis", "proteus", "hermes", "apollo", "minerva", "vulcan"):
         result = runner.invoke(app, [tool, "--help"])
         assert result.exit_code == 0, tool
+        assert "demo" not in result.stdout, f"{tool} still exposes a demo command"
 
 
 def test_proteus_and_vulcan_are_real_tools() -> None:

@@ -37,12 +37,3 @@ def scan(
     typer.echo(f"hermes: {len(findings)} potential secret(s); SARIF: {output}")
     if findings:
         raise typer.Exit(code=1)
-
-
-@app.command()
-def demo() -> None:
-    """Scan the synthetic Olympus Demo Corp fixture without real credentials."""
-    fixture = Path("examples/input/hermes-demo.txt")
-    findings = scan_path(fixture)
-    write_sarif(findings, DEFAULT_OUTPUT)
-    typer.echo(f"hermes: demo detected {len(findings)} synthetic secret(s); values masked")

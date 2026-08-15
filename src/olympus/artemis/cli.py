@@ -10,7 +10,6 @@ import typer
 
 from olympus.artemis.http import (
     HttpClientError,
-    HttpResponse,
     PinnedTransport,
     SocketResolver,
     fetch_scoped,
@@ -90,36 +89,6 @@ def check_scope(
         typer.echo(f"artemis: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
     typer.echo(f"artemis: authorized {approved.url} (no network request performed)")
-
-
-@app.command()
-def demo() -> None:
-    """Run a redirecting synthetic GET flow using an offline transport."""
-    class DemoTransport:
-        def get(
-            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
-        ) -> HttpResponse:
-            del addresses, timeout, max_bytes
-            if url.endswith("/app/login"):
-                return HttpResponse(url, 302, {"location": "/app/home"}, b"")
-            return HttpResponse(url, 200, {"content-type": "text/html"}, b"<h1>Demo</h1>")
-
-    class DemoResolver:
-        def resolve(self, hostname: str, port: int) -> list[str]:
-            del hostname, port
-            return ["192.0.2.10"]
-
-    result = fetch_scoped(
-        "https://portal.olympusdemocorp.example/app/login",
-        DEFAULT_SCOPE,
-        DEFAULT_LOG,
-        DemoResolver(),
-        DemoTransport(),
-    )
-    typer.echo(
-        f"artemis: demo fetched {result.response.status} via {len(result.redirects)} "
-        "scoped redirect(s); offline transport"
-    )
 
 
 @app.command()
