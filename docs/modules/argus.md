@@ -63,10 +63,39 @@ dipende dalla rete: usa un dataset sintetico offline (`olympus.argus.demo_data`)
 Vedi `examples/input/argus-scope.json`, `examples/input/argus-assets-previous.json` e
 l'output reale prodotto da `argus demo` in `examples/output/argus-assets.json`.
 
+### Phone OSINT
+Argus profila anche i **numeri di telefono**. Il cuore è **offline** e non richiede chiavi:
+il parsing con `phonenumbers` deriva validità, prefisso paese, regione, operatore e tipo di
+linea dal numero stesso — è un tool reale, subito utilizzabile.
+
+```bash
+# Profilo offline (nessuna rete, nessuna chiave)
+olympus argus phone --number "+1 650 555 0123" --scope examples/input/argus-phone-scope.json
+
+# Arricchimenti reali OPZIONALI (uso autorizzato): operatore (Numverify), breach intel,
+# presenza su piattaforme di messaggistica. Richiedono --i-am-authorized.
+olympus argus phone --number "+39..." --enrich --breach --messaging --i-am-authorized
+
+# Demo offline e deterministica su un numero fittizio riservato
+olympus argus phone-demo
+```
+
+Lo scope dei numeri è a **prefissi E.164** (`examples/input/argus-phone-scope.json`,
+allowlist con block+log dedicato). Gli arricchimenti che interrogano terze parti sono
+**dormienti di default**: gli adapter con chiave (`OLYMPUS_NUMVERIFY_KEY`,
+`OLYMPUS_RAPIDAPI_KEY`) restano inattivi finché non fornisci le tue credenziali, e ogni
+lookup reale è protetto da `--i-am-authorized` con un disclaimer esplicito.
+
+> ⚠️ **Disclaimer / uso etico.** Gli arricchimenti reali interrogano dati su numeri di
+> persone reali. Usali solo con **autorizzazione/consenso documentati** (ingaggio di
+> pentest, il tuo numero, o studio su numeri che controlli). Olympus non emette nulla di
+> distruttivo e non usa evasione (User-Agent onesto, nessuna impersonazione).
+
 ### Etica
 Nessun dato reale: `olympus argus demo` opera solo su `olympusdemocorp.example` (TLD
 riservato alla documentazione, RFC 2606) e indirizzi nei blocchi riservati RFC 5737/3849.
-Non distruttivo: solo query DNS/CT standard, mai probing attivo degli host scoperti.
+Il core del phone-OSINT è offline; `phone-demo` usa un numero NANP fittizio riservato
+(555-0123) e doppi offline. Non distruttivo: solo query standard, mai probing attivo.
 
 ---
 
@@ -131,6 +160,34 @@ depends on the network: it uses an offline synthetic dataset
 ### Examples
 See `examples/input/argus-scope.json`, `examples/input/argus-assets-previous.json`, and the
 real output produced by `argus demo` in `examples/output/argus-assets.json`.
+
+### Phone OSINT
+Argus also profiles **phone numbers**. The core is **offline** and key-free: `phonenumbers`
+parsing derives validity, country code, region, carrier and line type from the number
+itself — a real, immediately usable tool.
+
+```bash
+# Offline profile (no network, no key)
+olympus argus phone --number "+1 650 555 0123" --scope examples/input/argus-phone-scope.json
+
+# OPTIONAL real enrichment (authorized use): carrier (Numverify), breach intel, messaging
+# -platform presence. These require --i-am-authorized.
+olympus argus phone --number "+39..." --enrich --breach --messaging --i-am-authorized
+
+# Deterministic offline demo on a reserved fictional number
+olympus argus phone-demo
+```
+
+Number scope is **E.164-prefix based** (`examples/input/argus-phone-scope.json`, an allowlist
+with its own block+log). Third-party enrichment is **dormant by default**: key-gated adapters
+(`OLYMPUS_NUMVERIFY_KEY`, `OLYMPUS_RAPIDAPI_KEY`) stay inert until you supply your own
+credentials, and every real lookup is gated by `--i-am-authorized` with an explicit
+disclaimer.
+
+> ⚠️ **Disclaimer / ethical use.** Real enrichment queries data about real people's numbers.
+> Use it only with **documented authorization/consent** (a pentest engagement, your own
+> number, or study on numbers you control). Olympus emits nothing destructive and uses no
+> evasion (honest User-Agent, no impersonation).
 
 ### Ethics
 No real data: `olympus argus demo` only ever operates on `olympusdemocorp.example` (TLD
