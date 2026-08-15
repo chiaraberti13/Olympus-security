@@ -102,15 +102,3 @@ def test_accounts_bad_registry(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 2
-
-
-def test_accounts_demo_isolated_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    out = tmp_path / "intel.json"
-    monkeypatch.setattr(argus_cli, "DEMO_ACCOUNT_OUTPUT_PATH", out)
-    result = runner.invoke(app, ["argus", "accounts-demo"])
-    assert result.exit_code == 0, result.output
-    payload = json.loads(out.read_text(encoding="utf-8"))
-    # demo double: found on DemoHub + DemoForum (2), not DemoGram
-    assert len(payload["assets"]) == 2

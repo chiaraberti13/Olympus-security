@@ -1,4 +1,4 @@
-"""CLI-level tests for `olympus argus phone` and `phone-demo`."""
+"""CLI-level tests for `olympus argus phone`."""
 
 from __future__ import annotations
 
@@ -120,17 +120,3 @@ def test_phone_full_enrichment_with_fakes(
     titles = {f["title"] for f in payload["findings"]}
     assert "Number appears in known data breaches" in titles
     assert any("Registered on messaging platform" in t for t in titles)
-
-
-def test_phone_demo_writes_isolated_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    out = tmp_path / "intel.json"
-    monkeypatch.setattr(argus_cli, "DEMO_PHONE_OUTPUT_PATH", out)
-    result = runner.invoke(app, ["argus", "phone-demo"])
-    assert result.exit_code == 0, result.output
-    assert out.exists()
-    payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["asset"]["asset_type"] == "phone"
-    # demo doubles inject a breach + messaging finding
-    assert len(payload["findings"]) == 2

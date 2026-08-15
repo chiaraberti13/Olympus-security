@@ -24,14 +24,6 @@ from olympus.argus.accounts_scope import (
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
-from olympus.argus.demo_data import (
-    DEMO_ACCOUNT_HANDLE,
-    DEMO_PHONE_NUMBER,
-    DemoAccountHttpClient,
-    DemoMessagingPresenceClient,
-    DemoPhoneEnrichmentClient,
-    demo_site_specs,
-)
 from olympus.argus.diff import diff_snapshots
 from olympus.argus.enrichment import (
     EnrichmentError,
@@ -70,12 +62,10 @@ DEFAULT_ASSETS_PATH = Path("examples/output/argus-assets.json")
 
 DEFAULT_PHONE_SCOPE_PATH = Path("examples/input/argus-phone-scope.json")
 DEFAULT_PHONE_BLOCK_LOG_PATH = Path("examples/output/argus-phone-blocked.log")
-DEMO_PHONE_OUTPUT_PATH = Path("examples/output/argus-phone-intel.json")
 
 DEFAULT_SITES_PATH = Path("examples/input/argus-sites.json")
 DEFAULT_ACCOUNT_SCOPE_PATH = Path("examples/input/argus-accounts-scope.json")
 DEFAULT_ACCOUNT_BLOCK_LOG_PATH = Path("examples/output/argus-accounts-blocked.log")
-DEMO_ACCOUNT_OUTPUT_PATH = Path("examples/output/argus-accounts-intel.json")
 
 _METADATA_DISCLAIMER = (
     "AUTHORIZED USE ONLY — extracting public profile metadata (avatar/bio/followers) about a "
@@ -292,31 +282,6 @@ def phone(
         typer.echo(f"argus: wrote phone intel ({len(findings)} finding(s)) to {output}", err=True)
 
 
-@app.command("phone-demo")
-def phone_demo() -> None:
-    """Run the phone-OSINT pipeline on a synthetic, fictional number, fully offline.
-
-    Deterministic and network-free: the number is a reserved fictional NANP
-    number and enrichment/messaging come from offline doubles, but every other
-    step (scope enforcement, offline parsing, asset/finding building, export)
-    is the same production code path used by ``argus phone``.
-    """
-    typer.echo(f"argus: phone-demo — profiling {DEMO_PHONE_NUMBER} (synthetic, fictional)")
-    enforce_phone_scope(DEMO_PHONE_NUMBER, DEFAULT_PHONE_SCOPE_PATH, DEFAULT_PHONE_BLOCK_LOG_PATH)
-
-    report = analyze_phone(DEMO_PHONE_NUMBER)
-    enrichment_result = DemoPhoneEnrichmentClient().enrich(DEMO_PHONE_NUMBER)
-    messaging_result = DemoMessagingPresenceClient().lookup(DEMO_PHONE_NUMBER)
-
-    asset = build_phone_asset(report)
-    findings = build_phone_findings(asset.asset_id, report, enrichment_result, messaging_result)
-    intel = PhoneIntel(report=report, asset=asset, findings=findings)
-
-    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
-    export_phone_intel(intel, DEMO_PHONE_OUTPUT_PATH)
-    typer.echo(f"argus: wrote phone intel ({len(findings)} finding(s)) to {DEMO_PHONE_OUTPUT_PATH}")
-
-
 def _build_account_intel(result: AccountScanResult) -> AccountIntel:
     """Turn a raw scan into assets + a summary finding bundle."""
     assets = build_account_assets(result)
@@ -375,29 +340,3 @@ def accounts(
     if output is not None:
         export_account_intel(intel, output)
         typer.echo(f"argus: wrote account intel to {output}", err=True)
-
-
-@app.command("accounts-demo")
-def accounts_demo() -> None:
-    """Enumerate a synthetic handle across synthetic sites, fully offline.
-
-    Deterministic and network-free: sites and responses come from
-    :mod:`olympus.argus.demo_data`, but the enumeration, asset/finding
-    building and export are the same production code path as ``argus accounts``.
-    """
-    typer.echo(f"argus: accounts-demo — enumerating {DEMO_ACCOUNT_HANDLE} (synthetic)")
-    enforce_account_scope(
-        DEMO_ACCOUNT_HANDLE, DEFAULT_ACCOUNT_SCOPE_PATH, DEFAULT_ACCOUNT_BLOCK_LOG_PATH
-    )
-
-    result = enumerate_accounts(
-        DEMO_ACCOUNT_HANDLE, demo_site_specs(), DemoAccountHttpClient(), want_metadata=True
-    )
-    intel = _build_account_intel(result)
-
-    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
-    export_account_intel(intel, DEMO_ACCOUNT_OUTPUT_PATH)
-    typer.echo(
-        f"argus: '{DEMO_ACCOUNT_HANDLE}' found on {len(result.existing())} site(s); "
-        f"wrote {DEMO_ACCOUNT_OUTPUT_PATH}"
-    )
