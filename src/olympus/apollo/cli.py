@@ -10,10 +10,11 @@ import typer
 from pydantic import BaseModel
 
 from olympus.apollo.alerting import generate_alerts
-from olympus.apollo.demo_data import demo_events
+from olympus.apollo.demo_data import demo_events, demo_web_events
 from olympus.apollo.rules import RuleError, load_rules
 from olympus.apollo.testing import LabeledEvent, run_rule_tests
-from olympus.core.models import Alert
+from olympus.core.enums import EventType
+from olympus.core.models import Alert, Event
 
 app = typer.Typer(
     help="Apollo — Detection engineering (SIEM-lite).",
@@ -47,7 +48,9 @@ def demo() -> None:
         typer.echo(f"apollo: rule error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    events = demo_events()
+    auth_events = demo_events()
+    web_events = demo_web_events()
+    events = [*auth_events, *web_events]
     _write_json(events, DEMO_EVENTS_OUTPUT_PATH)
     typer.echo(f"apollo: wrote {len(events)} synthetic event(s) to {DEMO_EVENTS_OUTPUT_PATH}")
 
@@ -57,15 +60,24 @@ def demo() -> None:
         all_alerts.extend(alerts)
         typer.echo(f"apollo: rule {rule.rule_id} ({rule.name}) matched {len(alerts)} event(s)")
 
-        # Illustrative detection test: the demo's first event is a known
-        # brute-force attempt, the fourth a known successful login.
-        cases = [
-            LabeledEvent(events[0], should_match=True, label="known brute-force attempt"),
-            LabeledEvent(events[3], should_match=False, label="known successful login"),
-        ]
-        report = run_rule_tests(rule, cases)
+        report = run_rule_tests(rule, _demo_cases_for(rule.event_type, auth_events, web_events))
         status = "PASS" if report.passed else "FAIL"
         typer.echo(f"apollo: detection test for {rule.rule_id}: {status}")
 
     _write_json(all_alerts, DEMO_ALERTS_OUTPUT_PATH)
     typer.echo(f"apollo: wrote {len(all_alerts)} alert(s) to {DEMO_ALERTS_OUTPUT_PATH}")
+
+
+def _demo_cases_for(
+    event_type: EventType, auth_events: list[Event], web_events: list[Event]
+) -> list[LabeledEvent]:
+    """Pick labeled detection-test cases appropriate to a rule's event type."""
+    if event_type is EventType.NETWORK:
+        return [
+            LabeledEvent(web_events[0], should_match=True, label="metabase reset_password SQLi"),
+            LabeledEvent(web_events[1], should_match=False, label="benign password reset"),
+        ]
+    return [
+        LabeledEvent(auth_events[0], should_match=True, label="known brute-force attempt"),
+        LabeledEvent(auth_events[3], should_match=False, label="known successful login"),
+    ]

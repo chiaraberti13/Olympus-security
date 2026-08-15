@@ -7,7 +7,7 @@
     ],
     "evidence": [
       {
-        "collected_at": "2026-08-13T09:24:28.577574Z",
+        "collected_at": "2026-08-15T09:14:56.221978Z",
         "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
         "evidence_id": "EVD-2026-00001",
         "evidence_type": "log_excerpt",
@@ -16,8 +16,8 @@
         "schema_version": "1.0.0"
       }
     ],
-    "first_seen": "2026-08-13T09:24:28.577602Z",
-    "last_seen": "2026-08-13T09:24:28.577604Z",
+    "first_seen": "2026-08-15T09:14:56.221998Z",
+    "last_seen": "2026-08-15T09:14:56.221998Z",
     "mitre_technique_id": "T1110",
     "rule_id": "APOLLO-BRUTE-FORCE-001",
     "schema_name": "olympus.alert",
@@ -35,7 +35,7 @@
     ],
     "evidence": [
       {
-        "collected_at": "2026-08-13T09:24:28.577614Z",
+        "collected_at": "2026-08-15T09:14:56.222005Z",
         "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
         "evidence_id": "EVD-2026-00002",
         "evidence_type": "log_excerpt",
@@ -44,8 +44,8 @@
         "schema_version": "1.0.0"
       }
     ],
-    "first_seen": "2026-08-13T09:24:28.577621Z",
-    "last_seen": "2026-08-13T09:24:28.577621Z",
+    "first_seen": "2026-08-15T09:14:56.222014Z",
+    "last_seen": "2026-08-15T09:14:56.222014Z",
     "mitre_technique_id": "T1110",
     "rule_id": "APOLLO-BRUTE-FORCE-001",
     "schema_name": "olympus.alert",
@@ -63,7 +63,7 @@
     ],
     "evidence": [
       {
-        "collected_at": "2026-08-13T09:24:28.577625Z",
+        "collected_at": "2026-08-15T09:14:56.222018Z",
         "description": "Event matched by rule APOLLO-BRUTE-FORCE-001",
         "evidence_id": "EVD-2026-00003",
         "evidence_type": "log_excerpt",
@@ -72,8 +72,8 @@
         "schema_version": "1.0.0"
       }
     ],
-    "first_seen": "2026-08-13T09:24:28.577630Z",
-    "last_seen": "2026-08-13T09:24:28.577630Z",
+    "first_seen": "2026-08-15T09:14:56.222023Z",
+    "last_seen": "2026-08-15T09:14:56.222023Z",
     "mitre_technique_id": "T1110",
     "rule_id": "APOLLO-BRUTE-FORCE-001",
     "schema_name": "olympus.alert",
@@ -82,5 +82,33 @@
     "source": "apollo",
     "status": "new",
     "title": "Repeated authentication failure"
+  },
+  {
+    "alert_id": "ALT-2026-00004",
+    "description": "Flags an exploitation attempt against the unauthenticated Metabase /api/session/reset_password endpoint (CVE-2026-72898): a POST to that path whose body carries a UNION-based SQL injection payload. Detection only \u2014 it matches attacker telemetry, it does not itself send any payload.",
+    "event_ids": [
+      "EVT-2026-00006"
+    ],
+    "evidence": [
+      {
+        "collected_at": "2026-08-15T09:14:56.222078Z",
+        "description": "Event matched by rule APOLLO-METABASE-RESET-PW-SQLI-001",
+        "evidence_id": "EVD-2026-00004",
+        "evidence_type": "log_excerpt",
+        "reference": "EVT-2026-00006",
+        "schema_name": "olympus.evidence",
+        "schema_version": "1.0.0"
+      }
+    ],
+    "first_seen": "2026-08-15T09:14:56.222083Z",
+    "last_seen": "2026-08-15T09:14:56.222084Z",
+    "mitre_technique_id": "T1190",
+    "rule_id": "APOLLO-METABASE-RESET-PW-SQLI-001",
+    "schema_name": "olympus.alert",
+    "schema_version": "1.0.0",
+    "severity": "critical",
+    "source": "apollo",
+    "status": "new",
+    "title": "Metabase reset-password SQL injection attempt"
   }
 ]

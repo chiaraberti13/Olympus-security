@@ -3,7 +3,7 @@
     "asset_id": null,
     "event_id": "EVT-2026-00001",
     "event_type": "authentication",
-    "occurred_at": "2026-08-13T09:24:28.577174Z",
+    "occurred_at": "2026-08-15T09:14:56.221439Z",
     "raw": {
       "outcome": "failure",
       "user": "admin"
@@ -17,7 +17,7 @@
     "asset_id": null,
     "event_id": "EVT-2026-00002",
     "event_type": "authentication",
-    "occurred_at": "2026-08-13T09:24:28.577189Z",
+    "occurred_at": "2026-08-15T09:14:56.221456Z",
     "raw": {
       "outcome": "failure",
       "user": "admin"
@@ -31,7 +31,7 @@
     "asset_id": null,
     "event_id": "EVT-2026-00003",
     "event_type": "authentication",
-    "occurred_at": "2026-08-13T09:24:28.577193Z",
+    "occurred_at": "2026-08-15T09:14:56.221460Z",
     "raw": {
       "outcome": "failure",
       "user": "admin"
@@ -45,7 +45,7 @@
     "asset_id": null,
     "event_id": "EVT-2026-00004",
     "event_type": "authentication",
-    "occurred_at": "2026-08-13T09:24:28.577197Z",
+    "occurred_at": "2026-08-15T09:14:56.221464Z",
     "raw": {
       "outcome": "success",
       "user": "jdoe"
@@ -59,7 +59,7 @@
     "asset_id": null,
     "event_id": "EVT-2026-00005",
     "event_type": "network",
-    "occurred_at": "2026-08-13T09:24:28.577200Z",
+    "occurred_at": "2026-08-15T09:14:56.221468Z",
     "raw": {
       "dest_port": "443"
     },
@@ -67,5 +67,35 @@
     "schema_version": "1.0.0",
     "source": "apollo",
     "summary": "outbound HTTPS connection"
+  },
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00006",
+    "event_type": "network",
+    "occurred_at": "2026-08-15T09:14:56.221474Z",
+    "raw": {
+      "http_body": "token=x' UNION SELECT id,email,password FROM core_user--",
+      "http_method": "POST",
+      "http_path": "/api/session/reset_password"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "POST /api/session/reset_password (suspicious)"
+  },
+  {
+    "asset_id": null,
+    "event_id": "EVT-2026-00007",
+    "event_type": "network",
+    "occurred_at": "2026-08-15T09:14:56.221478Z",
+    "raw": {
+      "http_body": "token=6a3f2b18-0000-4c00-8000-000000000000",
+      "http_method": "POST",
+      "http_path": "/api/session/reset_password"
+    },
+    "schema_name": "olympus.event",
+    "schema_version": "1.0.0",
+    "source": "apollo",
+    "summary": "POST /api/session/reset_password (benign reset)"
   }
 ]
