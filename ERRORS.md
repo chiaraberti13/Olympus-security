@@ -207,3 +207,35 @@
 - Causa / Cause: il test demo isolava il ledger ma non il nuovo path incident di T-303
 - Fix: anche `DEFAULT_INCIDENT` viene reindirizzato dentro `tmp_path`
 - Test di regressione / Regression test: working tree stabile dopo `make check`
+
+### ERR-2026-08-14-17 — Artemis HTTP: import order e Ruff S310
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-305, primo run di verifica
+- Sintomo / Symptom: I001 nel CLI e audit S310 sulla costruzione della richiesta
+- Causa / Cause: import aggiunti fuori ordine e transport privo di allowlist autonoma dello schema
+- Fix: import ordinati e difesa in profondità HTTP(S) applicata anche nel transport
+- Test di regressione / Regression test: `ruff check .` e test schema transport
+
+### ERR-2026-08-14-18 — Coverage T-305 sotto soglia
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: primo gate test del client HTTP Artemis
+- Sintomo / Symptom: 1311/1483 linee, 88,4% contro il minimo 90%
+- Causa / Cause: transport urllib e percorso CLI fetch non esercitati offline
+- Fix: aggiunti fake opener/response e test CLI con transport iniettato
+- Test di regressione / Regression test: gate coverage ≥ 90%
+
+### ERR-2026-08-14-19 — Ruff RUF012 nel fake HTTP
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-305, gate dopo i test transport
+- Sintomo / Symptom: dizionario headers mutabile dichiarato come attributo di classe
+- Causa / Cause: fake response modellata troppo fedelmente con default condiviso
+- Fix: headers inizializzato per istanza nel costruttore
+- Test di regressione / Regression test: `ruff check .`
+
+### ERR-2026-08-14-20 — Asserzione body confondeva il dominio Demo Corp
+- Stato / Status: RISOLTO / RESOLVED
+- Contesto / Context: T-305, test UX output CLI
+- Sintomo / Symptom: `"demo" not in stdout` falliva sul hostname `olympusdemocorp.example`
+- Causa / Cause: marker del body non univoco rispetto ai metadati leciti
+- Fix: body impostato a un marker distinto e asserzione mirata sul contenuto completo
+- Test di regressione / Regression test: test CLI non stampa il body

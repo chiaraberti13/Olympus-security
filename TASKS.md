@@ -54,9 +54,10 @@
 
 ### Artemis (🔴 Web recon)
 - [x] T-304 Scope URL/origin/path obbligatorio + blocco audit + demo bilingue — done: zero rete
+- [x] T-305 HTTP GET-only iniettabile + redirect scoped + timeout/size cap — done: transport offline
 
 ## ⏳ Backlog — resto W3 e W4
-Resto Artemis/Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-304 (vedi PLAN.md).
+Resto Artemis/Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-305 (vedi PLAN.md).
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
