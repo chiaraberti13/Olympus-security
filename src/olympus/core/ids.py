@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 _PREFIXES: dict[str, str] = {
     "asset": "AST",
     "finding": "FND",
+    "event": "EVT",
     "alert": "ALT",
     "incident": "INC",
     "risk": "RSK",

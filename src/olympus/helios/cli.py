@@ -1,17 +1,58 @@
-"""Command-line interface for the Helios module."""
+"""Command-line interface for authorized Helios surface discovery."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 
-app = typer.Typer(
-    help="Helios — Authorized network attack-surface mapper.",
-    no_args_is_help=True,
-)
+from olympus.helios.export import export_findings, to_findings
+from olympus.helios.scanner import SocketConnector, discover
+from olympus.helios.scope import OutOfScopeError, ScopeError, enforce_scope
+
+app = typer.Typer(help="Helios — authorized network attack-surface mapper.", no_args_is_help=True)
+DEFAULT_SCOPE = Path("examples/input/helios-scope.json")
+DEFAULT_LOG = Path("examples/output/helios-blocked.log")
+DEFAULT_OUTPUT = Path("examples/output/helios-findings.json")
+
+
+@app.command()
+def scan(
+    target: str,
+    ports: str = typer.Option("80,443", "--ports"),
+    scope: Path = typer.Option(DEFAULT_SCOPE, "--scope"),
+    log: Path = typer.Option(DEFAULT_LOG, "--log"),
+    output: Path = typer.Option(DEFAULT_OUTPUT, "--output"),
+) -> None:
+    """Perform bounded TCP discovery only after scope authorization."""
+    try:
+        address = enforce_scope(target, scope, log)
+        requested_ports = [int(port) for port in ports.split(",")]
+        observations = discover(str(address), requested_ports, SocketConnector())
+    except ScopeError as exc:
+        typer.echo(f"helios: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"helios: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except ValueError as exc:
+        typer.echo(f"helios: invalid ports: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    findings = to_findings("AST-DEMO-00001", observations)
+    export_findings(findings, output)
+    typer.echo(f"helios: exported {len(findings)} finding(s) to {output}")
 
 
 @app.command()
 def demo() -> None:
-    """Run a self-contained demo on the synthetic 'Olympus Demo Corp' dataset."""
-    # NOTE: scaffold only. The development loop implements this command.
-    typer.echo("helios: demo not implemented yet (scaffold).")
+    """Run offline against the synthetic Olympus Demo Corp connector."""
+    class DemoConnector:
+        def is_open(self, host: str, port: int, timeout: float) -> bool:
+            return host == "192.0.2.10" and port == 443 and timeout > 0
+
+    findings = to_findings(
+        "AST-2026-00001",
+        discover("192.0.2.10", [80, 443], DemoConnector()),
+    )
+    export_findings(findings, DEFAULT_OUTPUT)
+    typer.echo(f"helios: demo exported {len(findings)} synthetic finding(s)")

@@ -15,7 +15,7 @@ from olympus import __version__
 from olympus.apollo.cli import app as apollo_app
 from olympus.argus.cli import app as argus_app
 from olympus.artemis.cli import app as artemis_app
-from olympus.core.models import Asset, Finding
+from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident
 from olympus.helios.cli import app as helios_app
 from olympus.hermes.cli import app as hermes_app
 from olympus.minerva.cli import app as minerva_app
@@ -36,6 +36,10 @@ def export_schemas() -> None:
     schemas = {
         "olympus.asset": Asset.model_json_schema(),
         "olympus.finding": Finding.model_json_schema(),
+        "olympus.event": Event.model_json_schema(),
+        "olympus.evidence": Evidence.model_json_schema(),
+        "olympus.alert": Alert.model_json_schema(),
+        "olympus.incident": Incident.model_json_schema(),
     }
     typer.echo(json.dumps(schemas, indent=2, sort_keys=True))
 
