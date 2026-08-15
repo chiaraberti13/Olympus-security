@@ -10,6 +10,23 @@
 > file: full history in [CHANGELOG.md](CHANGELOG.md). From here on, per-module enhancement
 > backlog only, not started yet.
 
+## ✅ Fatto — Integrazione fonti esterne / External sources integrated
+> Concetti da progetti esterni reimplementati nella disciplina Olympus (scope+block+log,
+> adapter dormienti, consenso esplicito, nessuna evasione, nessun exploit). Dettagli e
+> motivazioni in [SECURITY.md](SECURITY.md).
+- [x] T-230 Argus **phone OSINT**: parsing offline `phonenumbers` + enrichment reale dormiente
+      (Numverify/breach-intel/messaging) — da SearchPhone + WhatsApp-OSINT
+- [x] T-231 Argus **account enumeration**: presenza + metadati pubblici su siti curati, senza
+      evasione TLS/proxy — da user-scanner
+- [x] T-232 Apollo **regola Metabase SQLi** `/api/session/reset_password` (CVE-2026-72898,
+      MITRE T1190) + detection test — da GHSA-vwf4-m7j8-wcjf
+- [x] T-233 Artemis **check esposizione Metabase** (CVE-2026-72898), fingerprint versione non
+      -exploitativo → Finding CRITICAL con rimedio — da GHSA-vwf4-m7j8-wcjf
+- [x] T-234 core: `AssetType.PHONE`/`ACCOUNT` + `core.http` HTTP client condiviso (User-Agent
+      onesto, nessuna impersonazione)
+- [x] T-235 `SECURITY.md`: fonti curate + esclusione esplicita di hackingtool (DDoS/RAT/
+      payload/evasion fuori dai limiti di Olympus)
+
 ## 🕓 Proposto — Argus (🔴 OSINT)
 - [ ] T-201 WHOIS/ASN passivo (ownership IP/dominio) come fonte OSINT aggiuntiva best-effort
 - [ ] T-202 Fingerprint tecnologico passivo via header HTTP (server/framework), no probing attivo

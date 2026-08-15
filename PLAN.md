@@ -34,6 +34,17 @@ are closed and no longer tracked here: the full history lives in
 [CHANGELOG.md](CHANGELOG.md). From here on `PLAN.md`/`TASKS.md` track only the
 **enhancement backlog**, organized per module instead of by chronological wave.
 
+## 🔌 Fonti esterne integrate / External sources integrated
+Concetti da progetti esterni reimplementati (non copiati) nella disciplina Olympus — vedi
+`TASKS.md` (T-230..T-235) e il modello di sicurezza in [SECURITY.md](SECURITY.md): phone
+OSINT + account enumeration in Argus, regola Apollo e check Artemis per la CVE Metabase
+(CVE-2026-72898). `hackingtool` è **escluso per design** (DDoS/RAT/payload/evasion).
+
+External-project concepts reimplemented (not copied) under Olympus's discipline — see
+`TASKS.md` (T-230..T-235) and the security model in [SECURITY.md](SECURITY.md): phone OSINT +
+account enumeration in Argus, an Apollo rule and an Artemis check for the Metabase CVE
+(CVE-2026-72898). `hackingtool` is **excluded by design** (DDoS/RAT/payload/evasion).
+
 ## 🔧 Backlog di potenziamento per modulo / Per-module enhancement backlog
 
 Ogni direttrice qui sotto ha i task puntuali corrispondenti in `TASKS.md` (`T-2xx`, non

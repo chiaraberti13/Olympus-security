@@ -5,6 +5,32 @@
 > 🇬🇧 Format inspired by [Keep a Changelog](https://keepachangelog.com/). Each entry
 > corresponds to a wave (`W0`..`W4`) of the self-correcting loop described in [PLAN.md](PLAN.md).
 
+## [Unreleased]
+
+🇮🇹 **Integrazione fonti esterne** — nuove funzionalità pratiche reimplementate nella
+disciplina Olympus (scope+block+log, adapter dormienti con chiavi via env, consenso
+esplicito, nessuna evasione, nessun exploit). Vedi [SECURITY.md](SECURITY.md).
+
+🇬🇧 **External-source integration** — new practical tools reimplemented under Olympus's
+discipline (scope+block+log, key-gated dormant adapters, explicit consent, no evasion, no
+exploitation). See [SECURITY.md](SECURITY.md).
+
+### Aggiunto / Added
+- **Argus — phone OSINT** (`argus phone` / `phone-demo`): parsing offline con `phonenumbers`
+  (operatore/regione/tipo linea) + enrichment reale **dormiente** (Numverify, breach intel,
+  presenza messaging) attivabile solo con chiavi via env. Nuovo `AssetType.PHONE`.
+- **Argus — account enumeration** (`argus accounts` / `accounts-demo`): presenza handle su
+  siti curati + metadati pubblici opzionali, **senza** impersonazione TLS/rotazione proxy.
+  Nuovo `AssetType.ACCOUNT`.
+- **Apollo — regola Metabase SQLi** (CVE-2026-72898, MITRE T1190) con detection test; il
+  `demo` è ora rule-aware.
+- **Artemis — check Metabase** (CVE-2026-72898): fingerprint di versione non-exploitativo →
+  Finding `CRITICAL` con rimedio; **nessun payload** inviato.
+- **core.http** — client HTTP condiviso (User-Agent onesto) come fonte unica per Artemis e
+  Argus.
+- **SECURITY.md** — modello di sicurezza trasversale, fonti curate ed esclusione esplicita di
+  `hackingtool`.
+
 ## [1.0.0] — 2026-08-13
 
 🇮🇹 **Prima release completa**: tutte le ondate pianificate (W0–W4) sono chiuse, `make check`
