@@ -1,2 +1,4 @@
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-97/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:08:16.680837+00:00"}
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-98/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:08:51.115157+00:00"}
+{"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-99/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:49:02.921260+00:00"}
+{"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-100/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-15T14:49:26.220670+00:00"}
