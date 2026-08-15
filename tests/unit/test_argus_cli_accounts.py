@@ -58,8 +58,8 @@ def test_accounts_real_with_fake_client(
         ],
     )
     assert result.exit_code == 0, result.output
-    # output combines the JSON bundle followed by a stderr summary line; slice the JSON.
-    json_text = result.output[: result.output.rfind("}") + 1]
+    # output combines stderr progress lines with the JSON bundle; slice out the JSON object.
+    json_text = result.output[result.output.find("{") : result.output.rfind("}") + 1]
     payload = json.loads(json_text)
     assert len(payload["assets"]) == 1
     assert payload["assets"][0]["metadata"]["site"] == "GitHub"
@@ -102,3 +102,32 @@ def test_accounts_bad_registry(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 2
+
+
+def test_accounts_requires_username_or_input(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["argus", "accounts", "--scope", str(_scope(tmp_path)), "--sites", str(_sites(tmp_path))],
+    )
+    assert result.exit_code == 2
+    assert "exactly one" in result.output
+
+
+def test_accounts_batch_skips_out_of_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(argus_cli, "UrllibHttpClient", _FakeClient)
+    handles = tmp_path / "handles.txt"
+    handles.write_text("olympus_demo\nintruder\n", encoding="utf-8")
+    result = runner.invoke(
+        app,
+        [
+            "argus", "accounts", "--input", str(handles),
+            "--scope", str(_scope(tmp_path)), "--sites", str(_sites(tmp_path)),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    json_text = result.output[result.output.find("[") : result.output.rfind("]") + 1]
+    payload = json.loads(json_text)
+    assert len(payload) == 1  # only the in-scope handle
+    assert "skipping out-of-scope" in result.output

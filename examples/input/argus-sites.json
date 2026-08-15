@@ -74,5 +74,29 @@
     "url_template": "https://soundcloud.com/{username}",
     "present_status": [200],
     "absent_status": [404]
+  },
+  {
+    "name": "npm",
+    "url_template": "https://www.npmjs.com/~{username}",
+    "present_status": [200],
+    "absent_status": [404]
+  },
+  {
+    "name": "PyPI",
+    "url_template": "https://pypi.org/user/{username}/",
+    "present_status": [200],
+    "absent_status": [404]
+  },
+  {
+    "name": "DockerHub",
+    "url_template": "https://hub.docker.com/u/{username}",
+    "present_status": [200],
+    "absent_status": [404]
+  },
+  {
+    "name": "About.me",
+    "url_template": "https://about.me/{username}",
+    "present_status": [200],
+    "absent_status": [404]
   }
 ]

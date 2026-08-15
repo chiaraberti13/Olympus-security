@@ -14,7 +14,6 @@ from olympus.argus.accounts import (
     build_account_assets,
     build_account_finding,
     enumerate_accounts,
-    export_account_intel,
     load_site_registry,
 )
 from olympus.argus.accounts_scope import (
@@ -214,10 +213,43 @@ def _collect_messaging(e164: str, *, messaging: bool) -> MessagingPresence | Non
         return None
 
 
+def _read_targets(path: Path) -> list[str]:
+    """Read one target per line, skipping blanks and ``#`` comments."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+
+
+def _profile_number(
+    number: str,
+    region: str | None,
+    scope: Path,
+    log: Path,
+    *,
+    wants_real: bool,
+    enrich: bool,
+    breach: bool,
+    messaging: bool,
+) -> PhoneIntel:
+    """Profile one number: parse, enforce scope, and (optionally) enrich."""
+    report = analyze_phone(number, region)
+    enforce_phone_scope(report.e164 or number, scope, log)
+    enrichment_result: PhoneEnrichment | None = None
+    messaging_result: MessagingPresence | None = None
+    if wants_real and report.e164 is not None:
+        enrichment_result = _collect_enrichment(report.e164, enrich=enrich, breach=breach)
+        messaging_result = _collect_messaging(report.e164, messaging=messaging)
+    asset = build_phone_asset(report)
+    findings = build_phone_findings(asset.asset_id, report, enrichment_result, messaging_result)
+    return PhoneIntel(report=report, asset=asset, findings=findings)
+
+
 @app.command()
 def phone(
-    number: str = typer.Option(
-        ..., "--number", help="Phone number: E.164 (e.g. +14155550123) or national with --region."
+    number: str | None = typer.Option(
+        None, "--number", help="E.164 (e.g. +14155550123) or national with --region."
+    ),
+    input_file: Path | None = typer.Option(
+        None, "--input", help="File with one number per line (batch mode)."
     ),
     region: str | None = typer.Option(
         None, "--region", help="ISO region (e.g. US, IT) for national-format numbers."
@@ -241,45 +273,68 @@ def phone(
         False, "--i-am-authorized", help="Confirm documented authorization for real lookups."
     ),
     output: Path | None = typer.Option(
-        None, "--output", help="If set, export the phone-intel bundle as JSON to this path."
+        None, "--output", help="If set, export the phone-intel bundle(s) as JSON to this path."
     ),
 ) -> None:
-    """Profile a single in-scope phone number (offline parsing + opt-in real lookups)."""
-    try:
-        report = analyze_phone(number, region)
-    except PhoneParseError as exc:
-        typer.echo(f"argus: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+    """Profile in-scope phone number(s): offline parsing + opt-in real lookups.
 
-    target = report.e164 or number
-    try:
-        enforce_phone_scope(target, scope, log)
-    except PhoneScopeError as exc:
-        typer.echo(f"argus: phone scope error: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-    except PhoneOutOfScopeError as exc:
-        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-        raise typer.Exit(code=3) from exc
+    Provide exactly one of --number (single) or --input (batch, one per line).
+    """
+    if (number is None) == (input_file is None):
+        typer.echo("argus: provide exactly one of --number or --input", err=True)
+        raise typer.Exit(code=2)
 
     wants_real = enrich or breach or messaging
     if wants_real and not i_am_authorized:
         typer.echo(f"argus: {_AUTH_DISCLAIMER}", err=True)
         raise typer.Exit(code=4)
 
-    enrichment_result: PhoneEnrichment | None = None
-    messaging_result: MessagingPresence | None = None
-    if wants_real and report.e164 is not None:
-        enrichment_result = _collect_enrichment(report.e164, enrich=enrich, breach=breach)
-        messaging_result = _collect_messaging(report.e164, messaging=messaging)
+    if number is not None:
+        try:
+            intel = _profile_number(
+                number, region, scope, log,
+                wants_real=wants_real, enrich=enrich, breach=breach, messaging=messaging,
+            )
+        except PhoneParseError as exc:
+            typer.echo(f"argus: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except PhoneScopeError as exc:
+            typer.echo(f"argus: phone scope error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except PhoneOutOfScopeError as exc:
+            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+            raise typer.Exit(code=3) from exc
+        typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+        if output is not None:
+            export_phone_intel(intel, output)
+            typer.echo(f"argus: wrote phone intel to {output}", err=True)
+        return
 
-    asset = build_phone_asset(report)
-    findings = build_phone_findings(asset.asset_id, report, enrichment_result, messaging_result)
-    intel = PhoneIntel(report=report, asset=asset, findings=findings)
+    # Batch mode: skip unparseable / out-of-scope numbers, never abort the run.
+    assert input_file is not None  # noqa: S101 (guaranteed by the exactly-one check above)
+    intels: list[PhoneIntel] = []
+    for target in _read_targets(input_file):
+        try:
+            intels.append(
+                _profile_number(
+                    target, region, scope, log,
+                    wants_real=wants_real, enrich=enrich, breach=breach, messaging=messaging,
+                )
+            )
+        except PhoneParseError:
+            typer.echo(f"argus: skipping unparseable number {target!r}", err=True)
+        except PhoneScopeError as exc:
+            typer.echo(f"argus: phone scope error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except PhoneOutOfScopeError:
+            typer.echo(f"argus: skipping out-of-scope number {target!r} (logged)", err=True)
 
-    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    payload = [intel.to_dict() for intel in intels]
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     if output is not None:
-        export_phone_intel(intel, output)
-        typer.echo(f"argus: wrote phone intel ({len(findings)} finding(s)) to {output}", err=True)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    typer.echo(f"argus: profiled {len(intels)} number(s)", err=True)
 
 
 def _build_account_intel(result: AccountScanResult) -> AccountIntel:
@@ -291,7 +346,12 @@ def _build_account_intel(result: AccountScanResult) -> AccountIntel:
 
 @app.command()
 def accounts(
-    username: str = typer.Option(..., "--username", help="Handle to enumerate across sites."),
+    username: str | None = typer.Option(
+        None, "--username", help="Handle to enumerate across sites."
+    ),
+    input_file: Path | None = typer.Option(
+        None, "--input", help="File with one handle per line (batch mode)."
+    ),
     scope: Path = typer.Option(
         DEFAULT_ACCOUNT_SCOPE_PATH, "--scope", help="JSON allowlist of authorized handles."
     ),
@@ -308,18 +368,16 @@ def accounts(
         False, "--i-am-authorized", help="Confirm documented authorization for metadata scraping."
     ),
     output: Path | None = typer.Option(
-        None, "--output", help="If set, export the account-intel bundle as JSON to this path."
+        None, "--output", help="If set, export the account-intel bundle(s) as JSON to this path."
     ),
 ) -> None:
-    """Enumerate a single in-scope handle across a curated list of public sites."""
-    try:
-        enforce_account_scope(username, scope, log)
-    except AccountScopeError as exc:
-        typer.echo(f"argus: account scope error: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-    except AccountOutOfScopeError as exc:
-        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-        raise typer.Exit(code=3) from exc
+    """Enumerate in-scope handle(s) across a curated list of public sites.
+
+    Provide exactly one of --username (single) or --input (batch, one per line).
+    """
+    if (username is None) == (input_file is None):
+        typer.echo("argus: provide exactly one of --username or --input", err=True)
+        raise typer.Exit(code=2)
 
     if metadata and not i_am_authorized:
         typer.echo(f"argus: {_METADATA_DISCLAIMER}", err=True)
@@ -331,12 +389,33 @@ def accounts(
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    result = enumerate_accounts(username, specs, UrllibHttpClient(), want_metadata=metadata)
-    intel = _build_account_intel(result)
+    client = UrllibHttpClient()
+    handles = [username] if username is not None else _read_targets(input_file)  # type: ignore[arg-type]
+    intels: list[AccountIntel] = []
+    for handle in handles:
+        try:
+            enforce_account_scope(handle, scope, log)
+        except AccountScopeError as exc:
+            typer.echo(f"argus: account scope error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except AccountOutOfScopeError as exc:
+            if username is not None:
+                typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+                raise typer.Exit(code=3) from exc
+            typer.echo(f"argus: skipping out-of-scope handle {handle!r} (logged)", err=True)
+            continue
+        result = enumerate_accounts(handle, specs, client, want_metadata=metadata)
+        intels.append(_build_account_intel(result))
+        typer.echo(
+            f"argus: '{handle}' found on {len(result.existing())}/{len(specs)} site(s)", err=True
+        )
 
-    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
-    hits = len(result.existing())
-    typer.echo(f"argus: '{username}' found on {hits}/{len(specs)} site(s)", err=True)
+    if username is not None:
+        payload: object = intels[0].to_dict() if intels else {}
+    else:
+        payload = [intel.to_dict() for intel in intels]
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     if output is not None:
-        export_account_intel(intel, output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         typer.echo(f"argus: wrote account intel to {output}", err=True)

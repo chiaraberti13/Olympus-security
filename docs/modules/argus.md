@@ -22,13 +22,14 @@ messaging presence, profile metadata) is optional, dormant (env keys) and gated 
 `--i-am-authorized`. No evasion (honest User-Agent).
 
 ```bash
-# Numero: parsing offline (nessuna chiave) + arricchimenti opzionali autorizzati
+# Numero singolo: parsing offline (nessuna chiave) + arricchimenti opzionali autorizzati
 olympus argus phone --number "+1 650 555 0123" --scope examples/input/argus-phone-scope.json
-olympus argus phone-demo
+# Batch: un numero per riga
+olympus argus phone --input numeri.txt --scope examples/input/argus-phone-scope.json
 
-# Username: presenza su siti curati + metadati pubblici (autorizzati)
+# Username singolo o batch: presenza su siti curati + metadati pubblici (autorizzati)
 olympus argus accounts --username olympus_demo --scope examples/input/argus-accounts-scope.json
-olympus argus accounts-demo
+olympus argus accounts --input handle.txt --scope examples/input/argus-accounts-scope.json
 ```
 
 ## English
