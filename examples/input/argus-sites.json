@@ -98,5 +98,21 @@
     "url_template": "https://about.me/{username}",
     "present_status": [200],
     "absent_status": [404]
+  },
+  {
+    "name": "TikTok",
+    "url_template": "https://www.tiktok.com/@{username}",
+    "present_status": [200],
+    "absent_status": [404],
+    "metadata_patterns": {
+      "followers": "\"followerCount\":(\\d+)",
+      "bio": "\"signature\":\"([^\"]*)\""
+    }
+  },
+  {
+    "name": "YouTube",
+    "url_template": "https://www.youtube.com/@{username}",
+    "present_status": [200],
+    "absent_status": [404]
   }
 ]
