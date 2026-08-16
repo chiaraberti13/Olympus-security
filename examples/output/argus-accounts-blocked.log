@@ -15,3 +15,4 @@
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-117/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-16T11:48:12.140996+00:00"}
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-119/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-16T11:50:27.152489+00:00"}
 {"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-120/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-16T16:28:01.416334+00:00"}
+{"action": "blocked_out_of_scope", "scope_file": "/tmp/pytest-of-root/pytest-121/test_accounts_batch_skips_out_0/scope.json", "target": "intruder", "timestamp": "2026-08-16T16:29:30.521245+00:00"}

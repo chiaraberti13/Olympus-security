@@ -7,10 +7,12 @@ from pathlib import Path
 
 import typer
 
+from olympus.core.enums import Severity
 from olympus.core.output import OutputFormat, render
 from olympus.vulcan.aggregate import (
     AggregationError,
     dedupe_findings,
+    filter_min_severity,
     load_alerts,
     load_assets,
     load_findings,
@@ -18,8 +20,9 @@ from olympus.vulcan.aggregate import (
 )
 from olympus.vulcan.report import (
     build_report,
-    export_markdown,
     export_report,
+    export_text,
+    render_html,
     render_markdown,
 )
 
@@ -47,6 +50,12 @@ def report(
     markdown: Path | None = typer.Option(
         None, "--markdown", help="If set, also write a Markdown report to this path."
     ),
+    html_output: Path | None = typer.Option(
+        None, "--html", help="If set, also write a self-contained HTML report to this path."
+    ),
+    min_severity: Severity | None = typer.Option(
+        None, "--min-severity", help="Only include findings at or above this severity."
+    ),
 ) -> None:
     """Aggregate, dedupe and rank module outputs into one consolidated report."""
     try:
@@ -57,14 +66,20 @@ def report(
         typer.echo(f"vulcan: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
+    if min_severity is not None:
+        finding_list = filter_min_severity(finding_list, min_severity)
+
     report_json = build_report(engagement, asset_list, finding_list, alert_list)
     export_report(report_json, output)
     typer.echo(json.dumps(report_json["summary"], indent=2, sort_keys=True))
     typer.echo(f"vulcan: wrote report to {output}", err=True)
 
     if markdown is not None:
-        export_markdown(render_markdown(engagement, asset_list, finding_list, alert_list), markdown)
+        export_text(render_markdown(engagement, asset_list, finding_list, alert_list), markdown)
         typer.echo(f"vulcan: wrote Markdown report to {markdown}", err=True)
+    if html_output is not None:
+        export_text(render_html(engagement, asset_list, finding_list, alert_list), html_output)
+        typer.echo(f"vulcan: wrote HTML report to {html_output}", err=True)
 
 
 @app.command()

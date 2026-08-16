@@ -126,3 +126,41 @@ def test_cli_report_bad_input(tmp_path: Path) -> None:
         app, ["vulcan", "report", "--engagement", "e", "--findings", str(tmp_path / "bad.json")]
     )
     assert result.exit_code == 2
+
+
+def test_filter_min_severity() -> None:
+    from olympus.vulcan.aggregate import filter_min_severity
+
+    findings = [_finding("a", Severity.LOW), _finding("b", Severity.CRITICAL)]
+    kept = filter_min_severity(findings, Severity.HIGH)
+    assert [f.severity for f in kept] == [Severity.CRITICAL]
+
+
+def test_render_html_is_self_contained() -> None:
+    from olympus.vulcan.report import render_html
+
+    html_doc = render_html("eng", [], [_finding("XSS<script>", Severity.HIGH)], [])
+    assert "<!doctype html>" in html_doc
+    assert "Security report" in html_doc
+    assert "&lt;script&gt;" in html_doc  # finding title is HTML-escaped
+    assert "http://" not in html_doc and "https://" not in html_doc  # no external assets
+
+
+def test_cli_report_html_and_min_severity(tmp_path: Path) -> None:
+    findings_path = _write(
+        tmp_path / "f.json", [_finding("low", Severity.LOW), _finding("crit", Severity.CRITICAL)]
+    )
+    out = tmp_path / "report.json"
+    html_out = tmp_path / "report.html"
+    result = runner.invoke(
+        app,
+        [
+            "vulcan", "report", "--engagement", "e", "--findings", str(findings_path),
+            "--output", str(out), "--html", str(html_out), "--min-severity", "high",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["summary"]["findings"] == 1  # only critical kept
+    assert html_out.exists()
+    assert "crit" in html_out.read_text(encoding="utf-8")

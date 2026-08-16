@@ -93,3 +93,9 @@ def severity_breakdown(findings: list[Finding]) -> dict[str, int]:
     for finding in findings:
         counts[finding.severity.value] += 1
     return counts
+
+
+def filter_min_severity(findings: list[Finding], minimum: Severity) -> list[Finding]:
+    """Keep only findings at or above ``minimum`` severity."""
+    threshold = _SEVERITY_ORDER[minimum]
+    return [f for f in findings if _SEVERITY_ORDER[f.severity] <= threshold]
