@@ -5,22 +5,38 @@ from pathlib import Path
 
 from olympus.core.enums import Severity, Source
 from olympus.core.models import Finding
-from olympus.helios.scanner import OpenPort
+from olympus.helios.scanner import OpenPort, is_risky
 
 
 def to_findings(asset_id: str, observations: list[OpenPort]) -> list[Finding]:
-    """Convert open ports into informational shared findings."""
-    return [
-        Finding(
-            asset_id=asset_id,
-            source=Source.HELIOS,
-            title=f"TCP port {item.port} exposed",
-            description=f"A bounded TCP handshake succeeded on {item.host}:{item.port}.",
-            severity=Severity.INFO,
-            evidence=[f"tcp://{item.host}:{item.port}"],
+    """Convert open ports into shared findings, flagging risky exposed services."""
+    findings: list[Finding] = []
+    for item in observations:
+        risky = is_risky(item.service)
+        findings.append(
+            Finding(
+                asset_id=asset_id,
+                source=Source.HELIOS,
+                title=f"TCP port {item.port} exposed ({item.service})",
+                description=(
+                    f"A bounded TCP handshake succeeded on {item.host}:{item.port} "
+                    f"(service: {item.service})."
+                    + (
+                        " Exposing this service to untrusted networks is high-risk."
+                        if risky
+                        else ""
+                    )
+                ),
+                severity=Severity.MEDIUM if risky else Severity.INFO,
+                evidence=[f"tcp://{item.host}:{item.port} ({item.service})"],
+                remediation=(
+                    "Restrict access to this service (firewall/VPN) or disable it if unused."
+                    if risky
+                    else ""
+                ),
+            )
         )
-        for item in observations
-    ]
+    return findings
 
 
 def export_findings(findings: list[Finding], output: Path) -> None:

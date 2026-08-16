@@ -40,7 +40,7 @@ def test_scope_accepts_ipv4_and_ipv6_and_logs_blocks(tmp_path: Path) -> None:
 
 def test_discovery_is_bounded_and_injectable() -> None:
     assert discover("192.0.2.10", [443, 80, 443], FakeConnector()) == [
-        OpenPort("192.0.2.10", 443)
+        OpenPort("192.0.2.10", 443, "https")
     ]
     with pytest.raises(ValueError):
         discover("192.0.2.10", [0], FakeConnector())
@@ -50,11 +50,34 @@ def test_discovery_is_bounded_and_injectable() -> None:
 
 def test_findings_round_trip_through_core(tmp_path: Path) -> None:
     output = tmp_path / "helios-findings.json"
-    export_findings(to_findings("AST-2026-00001", [OpenPort("192.0.2.10", 443)]), output)
+    export_findings(to_findings("AST-2026-00001", [OpenPort("192.0.2.10", 443, "https")]), output)
     payload = json.loads(output.read_text(encoding="utf-8"))
 
     findings = [Finding.model_validate(item) for item in payload["findings"]]
-    assert findings[0].evidence == ["tcp://192.0.2.10:443"]
+    assert findings[0].evidence == ["tcp://192.0.2.10:443 (https)"]
+
+
+def test_service_identification_and_risk() -> None:
+    from olympus.helios.scanner import is_risky, service_for
+
+    assert service_for(3389) == "rdp"
+    assert service_for(65000) == "unknown"
+    assert is_risky("rdp") is True
+    assert is_risky("https") is False
+
+
+def test_findings_flag_risky_services() -> None:
+    from olympus.core.enums import Severity
+
+    findings = to_findings("AST-1", [OpenPort("10.0.0.1", 3389, "rdp")])
+    assert findings[0].severity is Severity.MEDIUM
+    assert "high-risk" in findings[0].description
+    assert findings[0].remediation
+
+
+def test_discover_sets_service() -> None:
+    result = discover("192.0.2.10", [443], FakeConnector())
+    assert result and result[0].service == "https"
 
 
 def test_cli_scan_enforces_scope_and_exports(
