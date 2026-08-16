@@ -42,3 +42,17 @@ def test_proteus_and_vulcan_are_real_tools() -> None:
     # Both were scaffolds ("not implemented"); they now expose real commands.
     assert "campaign" in runner.invoke(app, ["proteus", "--help"]).stdout
     assert "report" in runner.invoke(app, ["vulcan", "--help"]).stdout
+
+
+def test_version_flag() -> None:
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.stdout
+
+
+def test_exit_codes_are_canonical() -> None:
+    from olympus.core.exit_codes import ExitCode
+
+    assert (ExitCode.OK, ExitCode.USAGE, ExitCode.OUT_OF_SCOPE, ExitCode.NOT_AUTHORIZED) == (
+        0, 2, 3, 4
+    )
