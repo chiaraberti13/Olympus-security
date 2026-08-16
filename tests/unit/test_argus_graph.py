@@ -54,3 +54,20 @@ def test_export_roundtrip(tmp_path: Path) -> None:
     export_investigation(graph, out)
     loaded = json.loads(out.read_text(encoding="utf-8"))
     assert loaded["entities"][0]["type"] == "phone"
+
+
+def test_to_dot_and_graphml() -> None:
+    graph = Investigation("case")
+    d = graph.add_entity(Entity(EntityType.DOMAIN, "x.example"))
+    ip = graph.add_entity(Entity(EntityType.IP, "203.0.113.1"))
+    graph.add_relationship(d, ip, "resolves_to")
+
+    dot = graph.to_dot()
+    assert dot.startswith("digraph olympus")
+    assert "x.example" in dot and "resolves_to" in dot
+
+    graphml = graph.to_graphml()
+    assert graphml.startswith("<?xml")
+    assert "<graphml" in graphml
+    assert "203.0.113.1" in graphml
+    assert 'edgedefault="directed"' in graphml

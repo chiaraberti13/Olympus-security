@@ -558,6 +558,12 @@ def investigate(
     mermaid: Path | None = typer.Option(
         None, "--mermaid", help="If set, also write a Mermaid diagram of the graph."
     ),
+    dot: Path | None = typer.Option(
+        None, "--dot", help="If set, also write a Graphviz DOT graph."
+    ),
+    graphml: Path | None = typer.Option(
+        None, "--graphml", help="If set, also write a GraphML graph (Gephi/Neo4j/yEd)."
+    ),
 ) -> None:
     """Build an OSINT investigation graph by pivoting from a seed entity (flowsint-style)."""
     if not i_am_authorized:
@@ -574,7 +580,7 @@ def investigate(
     ctx = TransformContext(
         resolver=DnspythonResolver(),
         ct_client=CrtShClient(),
-        http=UrllibHttpClient(),
+        http=UrllibHttpClient.from_config(),
         site_specs=site_specs,
         geolocate=geo,
     )
@@ -582,9 +588,14 @@ def investigate(
 
     typer.echo(json.dumps(graph.to_dict(), indent=2, sort_keys=True))
     export_investigation(graph, output)
-    if mermaid is not None:
-        mermaid.parent.mkdir(parents=True, exist_ok=True)
-        mermaid.write_text(graph.to_mermaid(), encoding="utf-8")
+    for target, renderer in (
+        (mermaid, graph.to_mermaid),
+        (dot, graph.to_dot),
+        (graphml, graph.to_graphml),
+    ):
+        if target is not None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(renderer(), encoding="utf-8")
     typer.echo(
         f"argus: investigation '{name}' — {len(graph.entities)} entit(y/ies), "
         f"{len(graph.relationships)} edge(s); {output}",

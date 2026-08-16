@@ -119,20 +119,69 @@ class Investigation:
             "relationships": [rel.to_dict() for rel in self._relationships],
         }
 
+    def _node_ids(self) -> dict[str, str]:
+        return {entity.id: f"n{index}" for index, entity in enumerate(self.entities)}
+
     def to_mermaid(self) -> str:
         """Render the graph as a Mermaid ``graph LR`` diagram."""
         lines = ["graph LR"]
-        node_ids: dict[str, str] = {}
-        for index, entity in enumerate(self.entities):
-            node = f"n{index}"
-            node_ids[entity.id] = node
+        node_ids = self._node_ids()
+        for entity in self.entities:
             label = f"{entity.entity_type.value}: {entity.value}".replace('"', "'")
-            lines.append(f'    {node}["{label}"]')
+            lines.append(f'    {node_ids[entity.id]}["{label}"]')
         for rel in self._relationships:
             source = node_ids.get(rel.source_id)
             target = node_ids.get(rel.target_id)
             if source and target:
                 lines.append(f"    {source} -->|{rel.label}| {target}")
+        return "\n".join(lines) + "\n"
+
+    def to_dot(self) -> str:
+        """Render the graph as Graphviz DOT (for `dot`, Gephi, etc.)."""
+
+        def esc(text: str) -> str:
+            return text.replace("\\", "\\\\").replace('"', '\\"')
+
+        node_ids = self._node_ids()
+        lines = ["digraph olympus {", "  rankdir=LR;", '  node [shape=box];']
+        for entity in self.entities:
+            label = esc(f"{entity.entity_type.value}: {entity.value}")
+            lines.append(f'  {node_ids[entity.id]} [label="{label}"];')
+        for rel in self._relationships:
+            source = node_ids.get(rel.source_id)
+            target = node_ids.get(rel.target_id)
+            if source and target:
+                lines.append(f'  {source} -> {target} [label="{esc(rel.label)}"];')
+        lines.append("}")
+        return "\n".join(lines) + "\n"
+
+    def to_graphml(self) -> str:
+        """Render the graph as GraphML (for yEd, Neo4j import, Gephi...)."""
+        from xml.sax.saxutils import escape
+
+        node_ids = self._node_ids()
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<graphml xmlns="http://graphml.graphdrawing.org/xmlns">',
+            '  <key id="label" for="node" attr.name="label" attr.type="string"/>',
+            '  <key id="etype" for="node" attr.name="type" attr.type="string"/>',
+            '  <key id="rel" for="edge" attr.name="label" attr.type="string"/>',
+            '  <graph edgedefault="directed">',
+        ]
+        for entity in self.entities:
+            node = node_ids[entity.id]
+            lines.append(f'    <node id="{node}">')
+            lines.append(f'      <data key="label">{escape(entity.value)}</data>')
+            lines.append(f'      <data key="etype">{escape(entity.entity_type.value)}</data>')
+            lines.append("    </node>")
+        for index, rel in enumerate(self._relationships):
+            source = node_ids.get(rel.source_id)
+            target = node_ids.get(rel.target_id)
+            if source and target:
+                lines.append(f'    <edge id="e{index}" source="{source}" target="{target}">')
+                lines.append(f'      <data key="rel">{escape(rel.label)}</data>')
+                lines.append("    </edge>")
+        lines += ["  </graph>", "</graphml>"]
         return "\n".join(lines) + "\n"
 
 

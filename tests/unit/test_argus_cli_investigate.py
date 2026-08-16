@@ -1,4 +1,5 @@
 """CLI-level tests for `olympus argus investigate`."""
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -24,6 +25,10 @@ class _CtClient:
 
 
 class _Http:
+    @classmethod
+    def from_config(cls, *, min_interval: object = None) -> _Http:
+        return cls()
+
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         return HttpResponse(status_code=404, headers={}, body="")
 
