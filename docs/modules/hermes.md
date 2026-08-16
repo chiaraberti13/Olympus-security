@@ -8,15 +8,21 @@ mascherati e identificati con fingerprint SHA-256.
 ```bash
 olympus hermes scan . --output examples/output/hermes-results.sarif
 olympus hermes scan . --history
-olympus hermes demo
+
+# Baseline: registra i fingerprint accettati, poi sopprimili nelle scansioni successive.
+olympus hermes scan . --write-baseline hermes-baseline.json   # exit 1: findings registrati
+olympus hermes scan . --baseline hermes-baseline.json         # exit 0: noti soppressi
 ```
 
-Il demo usa esclusivamente un token sintetico “Olympus Demo Corp” e termina con codice zero.
+Un **baseline** è un array JSON di fingerprint SHA-256 accettati: `--write-baseline` lo scrive
+dai finding correnti, `--baseline` scarta i finding già accettati (utile per accettare i
+sintetici noti e far emergere solo i nuovi secret).
 
 ## English
 Hermes detects tokens using known prefixes and configurable entropy, scans files, directories
 and Git history, and emits SARIF 2.1.0. Values are never written to output: they are masked and
 identified using SHA-256 fingerprints.
 
-The commands above run a working-tree scan, include Git history, or execute the offline demo.
-The demo uses only an unmistakably synthetic “Olympus Demo Corp” token and exits successfully.
+A **baseline** is a JSON array of accepted SHA-256 fingerprints: `--write-baseline` records the
+current findings, and `--baseline` drops findings already accepted — so a scan can accept known
+synthetic fixtures and surface only genuinely new secrets.

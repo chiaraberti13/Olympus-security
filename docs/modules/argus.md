@@ -9,7 +9,6 @@ fuori perimetro ed esporta asset conformi a `olympus.core.Asset`.
 olympus argus scan --domain olympusdemocorp.example \
   --scope examples/input/argus-scope.json --output examples/output/argus-assets.json
 olympus argus diff snapshot-prima.json snapshot-dopo.json
-olympus argus demo
 ```
 
 ### OSINT su persone / people OSINT
@@ -46,8 +45,13 @@ exports the graph as JSON + a Mermaid diagram.
 
 ```bash
 olympus argus investigate --seed-type email --seed-value jdoe@olympusdemocorp.example \
-  --depth 2 --geo --i-am-authorized --output grafo.json --mermaid grafo.mmd
+  --depth 2 --geo --i-am-authorized --output grafo.json \
+  --mermaid grafo.mmd --dot grafo.dot --graphml grafo.graphml
 ```
+
+Il grafo è esportabile in **Mermaid** (`--mermaid`), **Graphviz DOT** (`--dot`) e **GraphML**
+(`--graphml`, per Gephi/Neo4j/yEd), oltre al JSON canonico. / The graph exports to **Mermaid**,
+**Graphviz DOT** and **GraphML** (Gephi/Neo4j/yEd) alongside the canonical JSON.
 
 Ogni indagine richiede `--i-am-authorized` (fan-out di lookup su terze parti) e viene tracciata
 in un log di audit; i transform usano client iniettabili (quindi testabili offline).

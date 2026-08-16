@@ -12,15 +12,17 @@ duplicati ed emette un oggetto condiviso `olympus.core.Incident`.
 olympus minerva record examples/input/minerva-evidence.json custody.json \
   --actor analyst@example.test --action collected
 olympus minerva verify custody.json
+# Timeline cronologica della catena di custodia (tabella o json)
+olympus minerva timeline custody.json --format table
 olympus minerva triage examples/output/apollo-alerts.json \
   --title "Suspicious process" --owner demo-soc --output incident.json
-olympus minerva demo
 ```
 
 ## English
 Minerva maintains an append-only chain of custody for `olympus.core.Evidence` objects. Each
 event carries a sequence number, actor, action, timestamp, and a SHA-256 hash linked to the
 previous entry. The complete chain is validated before appending or verifying, detecting
-retroactive edits, reordering, and regressive timestamps. `minerva triage` validates an Apollo
-alert export, selects the highest severity, removes duplicate links and emits a shared
-`olympus.core.Incident`. The demo is synthetic and offline.
+retroactive edits, reordering, and regressive timestamps. `minerva timeline` verifies the
+ledger and prints its custody events in order (table or JSON). `minerva triage` validates an
+Apollo alert export, selects the highest severity, removes duplicate links and emits a shared
+`olympus.core.Incident`.

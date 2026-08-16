@@ -7,12 +7,23 @@ esporta `olympus.core.Alert`. Tag, anchor e costruttori YAML sono rifiutati: il 
 regole non viene mai eseguito.
 
 ```bash
+# Una regola contro un singolo evento normalizzato
 olympus apollo test examples/input/apollo-rule.yaml examples/input/apollo-event.json
-olympus apollo demo
+
+# Un'intera cartella di regole contro uno stream di eventi (NDJSON, un Event per riga).
+# Exit 1 se scattano alert.
+olympus apollo run --rules examples/input/apollo-ad --events eventi.ndjson --output alert.json
+
+# Carica e valida una cartella di regole, elencandole (tabella o json)
+olympus apollo rules --rules examples/input/apollo-ad --format table
 ```
 
 ## English
 Apollo loads a strict declarative YAML subset (mappings, lists and plain scalars), validates
 MITRE ATT&CK IDs, matches exact conditions against `olympus.core.Event`, and exports
 `olympus.core.Alert`. YAML tags, anchors and constructors are rejected, so rule content is
-never executed. The demo is fully synthetic and offline.
+never executed.
+
+`apollo test` evaluates one rule against one event fixture; `apollo run` evaluates a whole rule
+directory against an NDJSON event stream (exit code 1 when alerts fire, so it fits a pipeline);
+`apollo rules` loads and validates a rule directory and lists every rule as a table or JSON.

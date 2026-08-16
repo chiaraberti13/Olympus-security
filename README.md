@@ -121,10 +121,10 @@ Balance: **4 Red / 3 Blue / 2 Reporting-Range**.
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-olympus version
+olympus --version
 olympus --help
 olympus core export-schemas ./examples/output
-olympus argus demo
+olympus argus scan --domain example.com --scope examples/input/argus-scope.json
 ```
 
 ### Quality: "Green or not done"
