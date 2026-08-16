@@ -8,6 +8,7 @@ import typer
 from pydantic import ValidationError
 
 from olympus.core.models import Evidence
+from olympus.core.output import OutputFormat, render
 from olympus.minerva.custody import (
     CustodyAction,
     CustodyIntegrityError,
@@ -64,3 +65,30 @@ def verify(ledger: Path) -> None:
         typer.echo(f"minerva: custody integrity failure: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     typer.echo(f"minerva: custody verified ({len(entries)} entries)")
+
+
+@app.command()
+def timeline(
+    ledger: Path,
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.TABLE, "--format", help="Render as table (human) or json (machine)."
+    ),
+) -> None:
+    """Print the chain-of-custody timeline of a verified ledger, in order."""
+    try:
+        entries = load_ledger(ledger)
+    except (OSError, ValidationError, CustodyIntegrityError) as exc:
+        typer.echo(f"minerva: custody integrity failure: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    records: list[dict[str, object]] = [
+        {
+            "seq": entry.sequence,
+            "occurred_at": entry.occurred_at.isoformat(),
+            "action": entry.action.value,
+            "actor": entry.actor,
+            "evidence_id": entry.evidence_id,
+        }
+        for entry in entries
+    ]
+    columns = ["seq", "occurred_at", "action", "actor", "evidence_id"]
+    typer.echo(render(records, columns, output_format, title=f"Custody timeline ({len(entries)})"))

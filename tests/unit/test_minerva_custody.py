@@ -97,3 +97,14 @@ def test_record_and_verify_commands(tmp_path: Path) -> None:
     assert second.exit_code == 0, second.output
     assert verified.exit_code == 0
     assert "2 entries" in verified.stdout
+
+
+def test_timeline_command(tmp_path: Path) -> None:
+    ledger = tmp_path / "custody.json"
+    evidence = Evidence(evidence_type="disk-image", uri="file://c/d.raw", sha256="b" * 64)
+    append_entry(ledger, evidence, CustodyAction.COLLECTED, "resp")
+    append_entry(ledger, evidence, CustodyAction.ANALYZED, "forensics")
+    result = runner.invoke(app, ["minerva", "timeline", str(ledger), "--format", "json"])
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert [r["action"] for r in rows] == ["collected", "analyzed"]
