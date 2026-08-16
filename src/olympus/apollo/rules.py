@@ -99,6 +99,20 @@ def load_rule(path: Path) -> DetectionRule:
     return DetectionRule.model_validate(payload)
 
 
+def load_rules(directory: Path) -> list[DetectionRule]:
+    """Load every ``*.yml``/``*.yaml`` rule in ``directory``, sorted by path."""
+    paths = sorted(
+        path for pattern in ("*.yml", "*.yaml") for path in directory.glob(pattern)
+    )
+    rules = [load_rule(path) for path in paths]
+    seen: set[str] = set()
+    for rule in rules:
+        if rule.rule_id in seen:
+            raise ValueError(f"duplicate rule_id in {directory}: {rule.rule_id}")
+        seen.add(rule.rule_id)
+    return rules
+
+
 def matches(rule: DetectionRule, event: Event) -> bool:
     """Evaluate exact, deterministic event attribute conditions."""
     return event.event_type == rule.event_type and all(

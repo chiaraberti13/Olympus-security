@@ -117,3 +117,49 @@ def test_apollo_cli_and_demo_export_alerts(tmp_path: Path, monkeypatch: pytest.M
     )
     assert result.exit_code == 0
     assert "1 alert" in result.stdout
+
+
+def test_run_over_rule_dir_and_event_stream(tmp_path: Path) -> None:
+    from olympus.apollo.rules import load_rules
+
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    _rule(rules_dir / "r.yaml")
+    assert len(load_rules(rules_dir)) == 1
+
+    events = tmp_path / "events.ndjson"
+    events.write_text(
+        '{"event_type":"process.start","source":"apollo","attributes":{"image":"powershell.exe"}}\n'
+        "\n"
+        "{malformed json}\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "alerts.json"
+    result = runner.invoke(
+        app, ["apollo", "run", "--rules", str(rules_dir), "--events", str(events),
+              "--output", str(out)]
+    )
+    assert result.exit_code == 1  # an alert fired
+    assert "skipping malformed event" in result.output
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert len(payload["alerts"]) == 1
+
+
+def test_rules_command_lists_and_validates(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    _rule(rules_dir / "r.yaml")
+    result = runner.invoke(app, ["apollo", "rules", "--rules", str(rules_dir), "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload[0]["rule_id"] == "APL-DEMO"
+
+
+def test_rules_command_reports_duplicate_ids(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    _rule(rules_dir / "a.yaml")
+    _rule(rules_dir / "b.yaml")  # same rule_id APL-DEMO
+    result = runner.invoke(app, ["apollo", "rules", "--rules", str(rules_dir)])
+    assert result.exit_code == 2
+    assert "duplicate rule_id" in result.output
