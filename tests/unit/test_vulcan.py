@@ -112,7 +112,9 @@ def test_cli_rank(tmp_path: Path) -> None:
     findings_path = _write(
         tmp_path / "f.json", [_finding("low", Severity.LOW), _finding("crit", Severity.CRITICAL)]
     )
-    result = runner.invoke(app, ["vulcan", "rank", "--findings", str(findings_path)])
+    result = runner.invoke(
+        app, ["vulcan", "rank", "--findings", str(findings_path), "--format", "json"]
+    )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload[0]["severity"] == "critical"

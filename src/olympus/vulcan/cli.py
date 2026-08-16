@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from olympus.core.output import OutputFormat, render
 from olympus.vulcan.aggregate import (
     AggregationError,
     dedupe_findings,
@@ -71,6 +72,9 @@ def rank(
     findings: list[Path] = typer.Option(
         ..., "--findings", help="core.Finding JSON file(s) to rank (repeatable)."
     ),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.TABLE, "--format", help="Render as a table (human) or json (machine)."
+    ),
 ) -> None:
     """Load findings, deduplicate and print them ranked by severity."""
     try:
@@ -78,7 +82,8 @@ def rank(
     except AggregationError as exc:
         typer.echo(f"vulcan: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    payload = [
+    columns = ["severity", "title", "source", "asset_id"]
+    records: list[dict[str, object]] = [
         {
             "severity": f.severity.value,
             "title": f.title,
@@ -87,4 +92,4 @@ def rank(
         }
         for f in ranked
     ]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    typer.echo(render(records, columns, output_format, title="Findings (ranked)"))
