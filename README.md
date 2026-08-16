@@ -42,11 +42,22 @@ Bilanciamento: **4 Red / 3 Blue / 2 Reporting-Range**.
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-olympus version
+olympus --version
 olympus --help
-olympus core export-schemas ./examples/output   # esporta i JSON Schema
-olympus argus demo                               # demo su "Olympus Demo Corp"
+olympus core export-schemas ./examples/output    # esporta i JSON Schema
+olympus argus scan --domain example.com --scope examples/input/argus-scope.json
 ```
+
+## Usabilità & configurazione
+- **Formato output**: i comandi tabellari accettano `--format table|json` (es. `olympus vulcan
+  rank --findings ...`): tabella leggibile o JSON da pipe.
+- **Concorrenza & cortesia**: le enumerazioni di massa supportano `--concurrency` e `--rate`
+  (secondi minimi tra richieste). Il client HTTP fa retry con backoff su errori transitori
+  (rete, 429/5xx).
+- **Config file** (opzionale): `olympus.toml` (via `$OLYMPUS_CONFIG`, `./olympus.toml` o
+  `~/.olympus.toml`) per non ripetere i flag, es. `[http] timeout = 15 \n retries = 3 \n rate = 0.25`.
+- **Exit code canonici**: `0` ok · `1` finding rilevati · `2` errore d'uso/input · `3` fuori
+  scope (bloccato+loggato) · `4` autorizzazione mancante (`--i-am-authorized`).
 
 ## Qualità: "Verde o non fatto"
 Ogni modifica passa da tre gate prima di essere considerata fatta:
