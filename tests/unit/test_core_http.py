@@ -82,3 +82,75 @@ def test_network_error_is_wrapped(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_rejects_non_http_scheme() -> None:
     with pytest.raises(HttpRequestError, match="non-HTTP"):
         UrllibHttpClient().get("file:///etc/passwd")
+
+
+def test_retries_on_network_error_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    calls = {"n": 0}
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+    def _flaky(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise urllib.error.URLError("temporary")
+        return _FakeHttpResponse(200, {}, b"ok")
+
+    monkeypatch.setattr("urllib.request.urlopen", _flaky)
+    response = UrllibHttpClient(retries=2).get("https://olympusdemocorp.example/")
+    assert response.status_code == 200
+    assert calls["n"] == 3  # two failures then success
+
+
+def test_raises_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+    def _always_fail(request: Any, timeout: float = 0.0) -> Any:
+        raise urllib.error.URLError("down")
+
+    monkeypatch.setattr("urllib.request.urlopen", _always_fail)
+    with pytest.raises(HttpRequestError, match="HTTP GET failed"):
+        UrllibHttpClient(retries=1).get("https://olympusdemocorp.example/")
+
+
+def test_retries_on_retryable_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+    def _rate_limited(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeHttpResponse(429, {}, b"slow down")
+        return _FakeHttpResponse(200, {}, b"ok")
+
+    monkeypatch.setattr("urllib.request.urlopen", _rate_limited)
+    response = UrllibHttpClient(retries=2).get("https://olympusdemocorp.example/")
+    assert response.status_code == 200
+    assert calls["n"] == 2
+
+
+def test_returns_last_response_when_retries_exhausted_on_5xx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda request, timeout=0.0: _FakeHttpResponse(503, {}, b"busy")
+    )
+    response = UrllibHttpClient(retries=1).get("https://olympusdemocorp.example/")
+    assert response.status_code == 503  # handed back, not raised
+
+
+def test_rate_limit_sleeps_between_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda seconds: slept.append(seconds))
+    times = iter([0.0, 0.0, 0.0, 0.1])  # monotonic() readings
+    monkeypatch.setattr("time.monotonic", lambda: next(times))
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda request, timeout=0.0: _FakeHttpResponse(200, {}, b"ok")
+    )
+    client = UrllibHttpClient(min_interval=1.0)
+    client.get("https://olympusdemocorp.example/a")
+    client.get("https://olympusdemocorp.example/b")
+    assert any(s > 0 for s in slept)  # throttled the second request
