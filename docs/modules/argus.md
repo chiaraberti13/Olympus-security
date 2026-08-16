@@ -9,7 +9,6 @@ fuori perimetro ed esporta asset conformi a `olympus.core.Asset`.
 olympus argus scan --domain olympusdemocorp.example \
   --scope examples/input/argus-scope.json --output examples/output/argus-assets.json
 olympus argus diff snapshot-prima.json snapshot-dopo.json
-olympus argus demo
 ```
 
 ### OSINT su persone / people OSINT
@@ -22,14 +21,40 @@ messaging presence, profile metadata) is optional, dormant (env keys) and gated 
 `--i-am-authorized`. No evasion (honest User-Agent).
 
 ```bash
-# Numero: parsing offline (nessuna chiave) + arricchimenti opzionali autorizzati
+# Numero singolo: parsing offline (nessuna chiave) + arricchimenti opzionali autorizzati
 olympus argus phone --number "+1 650 555 0123" --scope examples/input/argus-phone-scope.json
-olympus argus phone-demo
+# Batch: un numero per riga
+olympus argus phone --input numeri.txt --scope examples/input/argus-phone-scope.json
 
-# Username: presenza su siti curati + metadati pubblici (autorizzati)
+# Username singolo o batch: presenza su siti curati + metadati pubblici (autorizzati)
 olympus argus accounts --username olympus_demo --scope examples/input/argus-accounts-scope.json
-olympus argus accounts-demo
+olympus argus accounts --input handle.txt --scope examples/input/argus-accounts-scope.json
+
+# IP: classificazione offline + geolocation/ASN opzionale (ip-api.com, autorizzata)
+olympus argus ip --ip 203.0.113.10 --scope examples/input/argus-ip-scope.json
+olympus argus ip --ip 8.8.8.8 --geo --i-am-authorized --scope examples/input/argus-ip-scope.json
 ```
+
+### Investigation graph / grafo d'indagine (flowsint-style)
+`argus investigate` costruisce un **grafo OSINT**: da un'entità seed (email, dominio, IP,
+username, telefono) esegue *transform* che scoprono entità collegate (email→username+dominio,
+dominio→IP/sottodomini, IP→geo/ASN, username→account) fino a `--depth` salti. Esporta il grafo
+in JSON e in **Mermaid** per visualizzarlo. / `argus investigate` builds an **OSINT graph**:
+from a seed entity it runs transforms that pivot to linked entities, up to `--depth` hops, and
+exports the graph as JSON + a Mermaid diagram.
+
+```bash
+olympus argus investigate --seed-type email --seed-value jdoe@olympusdemocorp.example \
+  --depth 2 --geo --i-am-authorized --output grafo.json \
+  --mermaid grafo.mmd --dot grafo.dot --graphml grafo.graphml
+```
+
+Il grafo è esportabile in **Mermaid** (`--mermaid`), **Graphviz DOT** (`--dot`) e **GraphML**
+(`--graphml`, per Gephi/Neo4j/yEd), oltre al JSON canonico. / The graph exports to **Mermaid**,
+**Graphviz DOT** and **GraphML** (Gephi/Neo4j/yEd) alongside the canonical JSON.
+
+Ogni indagine richiede `--i-am-authorized` (fan-out di lookup su terze parti) e viene tracciata
+in un log di audit; i transform usano client iniettabili (quindi testabili offline).
 
 ## English
 Argus performs strictly passive reconnaissance on authorized domains: DNS, email posture and

@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from olympus import __version__
-from olympus.argus import cli as argus_cli
 from olympus.cli import app
 
 runner = CliRunner()
@@ -33,18 +30,29 @@ def test_export_schemas_outputs_valid_json() -> None:
     assert "olympus.incident" in payload
 
 
-def test_argus_demo_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(argus_cli, "DEFAULT_ASSETS_PATH", tmp_path / "argus-assets.json")
-    result = runner.invoke(app, ["argus", "demo"])
-    assert result.exit_code == 0
-    assert "exported 2 assets" in result.stdout
-
-
-def test_all_tool_demos_run() -> None:
-    for tool in (
-        "proteus",
-        "vulcan",
-    ):
-        result = runner.invoke(app, [tool, "demo"])
+def test_no_module_exposes_a_demo_command() -> None:
+    # Every module ships real, working tools — no demo scaffolding anywhere.
+    for tool in ("argus", "helios", "artemis", "proteus", "hermes", "apollo", "minerva", "vulcan"):
+        result = runner.invoke(app, [tool, "--help"])
         assert result.exit_code == 0, tool
-        assert "not implemented" in result.stdout
+        assert "demo" not in result.stdout, f"{tool} still exposes a demo command"
+
+
+def test_proteus_and_vulcan_are_real_tools() -> None:
+    # Both were scaffolds ("not implemented"); they now expose real commands.
+    assert "campaign" in runner.invoke(app, ["proteus", "--help"]).stdout
+    assert "report" in runner.invoke(app, ["vulcan", "--help"]).stdout
+
+
+def test_version_flag() -> None:
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.stdout
+
+
+def test_exit_codes_are_canonical() -> None:
+    from olympus.core.exit_codes import ExitCode
+
+    assert (ExitCode.OK, ExitCode.USAGE, ExitCode.OUT_OF_SCOPE, ExitCode.NOT_AUTHORIZED) == (
+        0, 2, 3, 4
+    )

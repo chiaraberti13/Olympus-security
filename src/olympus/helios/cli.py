@@ -22,6 +22,9 @@ def scan(
     ports: str = typer.Option("80,443", "--ports"),
     scope: Path = typer.Option(DEFAULT_SCOPE, "--scope"),
     log: Path = typer.Option(DEFAULT_LOG, "--log"),
+    asset_id: str = typer.Option(
+        "AST-HELIOS-00001", "--asset-id", help="core.Asset id to attach findings to."
+    ),
     output: Path = typer.Option(DEFAULT_OUTPUT, "--output"),
 ) -> None:
     """Perform bounded TCP discovery only after scope authorization."""
@@ -38,21 +41,6 @@ def scan(
     except ValueError as exc:
         typer.echo(f"helios: invalid ports: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    findings = to_findings("AST-DEMO-00001", observations)
+    findings = to_findings(asset_id, observations)
     export_findings(findings, output)
     typer.echo(f"helios: exported {len(findings)} finding(s) to {output}")
-
-
-@app.command()
-def demo() -> None:
-    """Run offline against the synthetic Olympus Demo Corp connector."""
-    class DemoConnector:
-        def is_open(self, host: str, port: int, timeout: float) -> bool:
-            return host == "192.0.2.10" and port == 443 and timeout > 0
-
-    findings = to_findings(
-        "AST-2026-00001",
-        discover("192.0.2.10", [80, 443], DemoConnector()),
-    )
-    export_findings(findings, DEFAULT_OUTPUT)
-    typer.echo(f"helios: demo exported {len(findings)} synthetic finding(s)")

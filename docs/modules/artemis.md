@@ -15,13 +15,16 @@ olympus artemis check-scope --url https://portal.olympusdemocorp.example/app/log
   --scope examples/input/artemis-scope.json
 olympus artemis fetch --url https://portal.olympusdemocorp.example/app/login \
   --scope examples/input/artemis-scope.json --timeout 5 --max-bytes 1000000
-olympus artemis demo
 
 # Check CVE Metabase (CVE-2026-72898): fingerprint versione, NESSUN payload SQLi.
 # Metabase CVE check: version fingerprint only, NO SQLi payload is ever sent.
 olympus artemis metabase --url https://metabase.olympusdemocorp.example \
   --scope examples/input/artemis-metabase-scope.json
-olympus artemis metabase-demo
+
+# Reflected XSS: marker benigno (nessuno script), flag solo se riflesso non-escaped.
+# Reflected XSS: benign marker (no script), flags only an unescaped reflection.
+olympus artemis xss --url "https://portal.olympusdemocorp.example/app/search?q=x" --param q \
+  --scope examples/input/artemis-scope.json
 ```
 
 ## English
@@ -30,6 +33,8 @@ default ports and path; allows HTTP(S) only, rejects URL credentials, and compar
 path prefixes on segment boundaries. Out-of-scope targets are blocked and audited without
 query strings, preventing accidental tokens from entering logs. The GET-only client disables
 automatic redirects, reapplies scope before every hop, and limits timeout, redirect count and
-body size. It never submits forms or executes JavaScript. The demo uses an offline transport.
+body size. It never submits forms or executes JavaScript. `artemis metabase` fingerprints the
+Metabase version to flag CVE-2026-72898 (no SQLi payload is ever sent); `artemis xss` reflects
+a benign structural marker and flags only an unescaped reflection.
 Each hostname is resolved once per hop: every answer must match `allowed_ip_networks`, and the
 transport connects directly to an already authorized IP without a second DNS lookup.

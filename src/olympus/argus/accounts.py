@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
@@ -145,10 +146,29 @@ def check_site(
 
 
 def enumerate_accounts(
-    handle: str, specs: list[SiteSpec], client: HttpClient, *, want_metadata: bool = False
+    handle: str,
+    specs: list[SiteSpec],
+    client: HttpClient,
+    *,
+    want_metadata: bool = False,
+    concurrency: int = 1,
 ) -> AccountScanResult:
-    """Run every site check for ``handle`` and collect the results."""
-    checks = [check_site(handle, spec, client, want_metadata=want_metadata) for spec in specs]
+    """Run every site check for ``handle`` and collect the results.
+
+    With ``concurrency > 1`` the (I/O-bound) per-site checks run in a thread
+    pool; results keep the site-registry order regardless.
+    """
+    if concurrency <= 1 or len(specs) <= 1:
+        checks = [check_site(handle, spec, client, want_metadata=want_metadata) for spec in specs]
+        return AccountScanResult(handle=handle, checks=checks)
+
+    workers = min(concurrency, len(specs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        checks = list(
+            pool.map(
+                lambda spec: check_site(handle, spec, client, want_metadata=want_metadata), specs
+            )
+        )
     return AccountScanResult(handle=handle, checks=checks)
 
 

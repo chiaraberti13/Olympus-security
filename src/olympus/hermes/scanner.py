@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import re
 import shutil
@@ -81,6 +82,26 @@ def scan_path(path: Path, entropy_threshold: float = 4.5) -> list[SecretFinding]
             continue
         findings.extend(scan_text(text, str(file), entropy_threshold))
     return findings
+
+
+def load_baseline(path: Path) -> set[str]:
+    """Load a baseline: a JSON array of accepted-finding fingerprints."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError(f"baseline {path} must be a JSON array of fingerprints")
+    return {str(item) for item in raw}
+
+
+def apply_baseline(findings: list[SecretFinding], baseline: set[str]) -> list[SecretFinding]:
+    """Drop findings whose fingerprint is in the accepted ``baseline``."""
+    return [finding for finding in findings if finding.fingerprint not in baseline]
+
+
+def write_baseline(findings: list[SecretFinding], path: Path) -> None:
+    """Write the fingerprints of ``findings`` as a JSON baseline (accept them)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fingerprints = sorted({finding.fingerprint for finding in findings})
+    path.write_text(json.dumps(fingerprints, indent=2) + "\n", encoding="utf-8")
 
 
 def scan_git_history(repository: Path, entropy_threshold: float = 4.5) -> list[SecretFinding]:

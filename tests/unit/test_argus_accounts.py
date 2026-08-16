@@ -182,3 +182,15 @@ def test_export_intel_roundtrips(tmp_path: Path) -> None:
     loaded = json.loads(out.read_text(encoding="utf-8"))
     assert loaded["assets"][0]["asset_type"] == "account"
     assert loaded["scan"]["handle"] == "bob"
+
+
+def test_enumerate_concurrent_preserves_order() -> None:
+    specs = [
+        _spec(name=str(i), url_template=f"https://s{i}.example/{{username}}") for i in range(6)
+    ]
+    # site s3 is the only "present" one; result order must still match spec order.
+    client = _RoutingClient({"s3.example": HttpResponse(status_code=200, body="ok")})
+    result = enumerate_accounts("bob", specs, client, concurrency=4)
+    assert [c.name for c in result.checks] == [str(i) for i in range(6)]
+    assert len(result.existing()) == 1
+    assert result.existing()[0].name == "3"

@@ -5,11 +5,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from olympus.cli import app
-from olympus.hermes import cli as hermes_cli
 from olympus.hermes.sarif import to_sarif
 from olympus.hermes.scanner import scan_git_history, scan_path, scan_text
 
@@ -74,16 +72,6 @@ def test_git_history_scan_finds_removed_synthetic_secret(tmp_path: Path) -> None
     assert any(finding.rule == "aws-access-key" for finding in findings)
 
 
-def test_hermes_demo_exits_zero_and_masks_values(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(hermes_cli, "DEFAULT_OUTPUT", tmp_path / "results.sarif")
-    result = runner.invoke(app, ["hermes", "demo"])
-
-    assert result.exit_code == 0
-    assert "synthetic secret(s); values masked" in result.stdout
-
-
 def test_hermes_scan_writes_sarif_and_signals_findings(tmp_path: Path) -> None:
     source = tmp_path / "demo.env"
     output = tmp_path / "results.sarif"
@@ -97,3 +85,33 @@ def test_hermes_scan_writes_sarif_and_signals_findings(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert output.exists()
     assert SYNTHETIC_KEY not in output.read_text(encoding="utf-8")
+
+
+def test_baseline_suppresses_known_findings(tmp_path: Path) -> None:
+    from olympus.hermes.scanner import apply_baseline, load_baseline, scan_text, write_baseline
+
+    findings = scan_text(SYNTHETIC_KEY, "demo.env")
+    assert findings
+    baseline_path = tmp_path / "baseline.json"
+    write_baseline(findings, baseline_path)
+    baseline = load_baseline(baseline_path)
+    assert apply_baseline(findings, baseline) == []  # all accepted -> none reported
+
+
+def test_cli_scan_with_baseline_exits_zero(tmp_path: Path) -> None:
+    source = tmp_path / "demo.env"
+    source.write_text(SYNTHETIC_KEY, encoding="utf-8")
+    baseline = tmp_path / "baseline.json"
+    out = tmp_path / "r.sarif"
+    # First: record the finding as a baseline.
+    first = runner.invoke(
+        app,
+        ["hermes", "scan", str(source), "--output", str(out), "--write-baseline", str(baseline)],
+    )
+    assert first.exit_code == 1  # finding present on first run
+    # Second: with the baseline applied, the known finding is suppressed.
+    second = runner.invoke(
+        app, ["hermes", "scan", str(source), "--output", str(out), "--baseline", str(baseline)]
+    )
+    assert second.exit_code == 0, second.output
+    assert "0 potential secret" in second.stdout

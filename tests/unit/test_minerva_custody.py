@@ -9,7 +9,6 @@ from typer.testing import CliRunner
 
 from olympus.cli import app
 from olympus.core.models import Evidence
-from olympus.minerva import cli as minerva_cli
 from olympus.minerva.custody import (
     CustodyAction,
     CustodyIntegrityError,
@@ -74,15 +73,38 @@ def test_regressive_timestamp_is_rejected(tmp_path: Path) -> None:
     assert len(load_ledger(ledger)) == 1
 
 
-def test_demo_and_verify_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ledger = tmp_path / "demo-custody.json"
-    monkeypatch.setattr(minerva_cli, "DEFAULT_LEDGER", ledger)
-    monkeypatch.setattr(minerva_cli, "DEFAULT_INCIDENT", tmp_path / "incident.json")
+def test_record_and_verify_commands(tmp_path: Path) -> None:
+    ledger = tmp_path / "custody.json"
+    evidence_path = tmp_path / "evidence.json"
+    evidence = Evidence(
+        evidence_type="memory-image", uri="file://case/mem.raw", sha256="a" * 64
+    )
+    evidence_path.write_text(evidence.model_dump_json(), encoding="utf-8")
 
-    demo = runner.invoke(app, ["minerva", "demo"])
+    first = runner.invoke(
+        app,
+        ["minerva", "record", str(evidence_path), str(ledger),
+         "--actor", "responder", "--action", "collected"],
+    )
+    second = runner.invoke(
+        app,
+        ["minerva", "record", str(evidence_path), str(ledger),
+         "--actor", "forensics", "--action", "transferred"],
+    )
     verified = runner.invoke(app, ["minerva", "verify", str(ledger)])
 
-    assert demo.exit_code == 0
-    assert "2 synthetic entries" in demo.stdout
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
     assert verified.exit_code == 0
     assert "2 entries" in verified.stdout
+
+
+def test_timeline_command(tmp_path: Path) -> None:
+    ledger = tmp_path / "custody.json"
+    evidence = Evidence(evidence_type="disk-image", uri="file://c/d.raw", sha256="b" * 64)
+    append_entry(ledger, evidence, CustodyAction.COLLECTED, "resp")
+    append_entry(ledger, evidence, CustodyAction.ANALYZED, "forensics")
+    result = runner.invoke(app, ["minerva", "timeline", str(ledger), "--format", "json"])
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert [r["action"] for r in rows] == ["collected", "analyzed"]

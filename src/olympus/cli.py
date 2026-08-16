@@ -2,7 +2,7 @@
 
 Every module is exposed as a sub-command, so the whole platform is driven
 through a single binary: ``olympus <tool> <command>`` (e.g. ``olympus argus
-demo``). ``olympus core`` groups data-contract utilities.
+scan``). ``olympus core`` groups data-contract utilities.
 """
 
 from __future__ import annotations
@@ -26,6 +26,26 @@ app = typer.Typer(
     help="Olympus — offensive-security platform (Red + Blue).",
     no_args_is_help=True,
 )
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the Olympus version and exit.",
+    ),
+) -> None:
+    """Olympus — a single binary driving every Red and Blue module."""
 
 core_app = typer.Typer(help="Core data-contract utilities.", no_args_is_help=True)
 

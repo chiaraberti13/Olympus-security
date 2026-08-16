@@ -17,3 +17,8 @@ def evaluate(rules: list[DetectionRule], event: Event) -> list[Alert]:
         for rule in rules
         if matches(rule, event)
     ]
+
+
+def evaluate_stream(rules: list[DetectionRule], events: list[Event]) -> list[Alert]:
+    """Evaluate every rule against every event, returning all fired alerts."""
+    return [alert for event in events for alert in evaluate(rules, event)]

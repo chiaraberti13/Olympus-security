@@ -1,4 +1,4 @@
-"""CLI-level tests for `olympus argus phone` and `phone-demo`."""
+"""CLI-level tests for `olympus argus phone`."""
 
 from __future__ import annotations
 
@@ -122,15 +122,28 @@ def test_phone_full_enrichment_with_fakes(
     assert any("Registered on messaging platform" in t for t in titles)
 
 
-def test_phone_demo_writes_isolated_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    out = tmp_path / "intel.json"
-    monkeypatch.setattr(argus_cli, "DEMO_PHONE_OUTPUT_PATH", out)
-    result = runner.invoke(app, ["argus", "phone-demo"])
+def test_phone_requires_number_or_input(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["argus", "phone", "--scope", str(_scope_file(tmp_path))])
+    assert result.exit_code == 2
+    assert "exactly one" in result.output
+
+
+def test_phone_batch_skips_invalid_and_out_of_scope(tmp_path: Path) -> None:
+    numbers = tmp_path / "nums.txt"
+    numbers.write_text(
+        "# batch of numbers\n+16505550123\nnot-a-number\n+14155550000\n", encoding="utf-8"
+    )
+    result = runner.invoke(
+        app,
+        [
+            "argus", "phone", "--input", str(numbers),
+            "--scope", str(_scope_file(tmp_path)), "--log", str(tmp_path / "log"),
+        ],
+    )
     assert result.exit_code == 0, result.output
-    assert out.exists()
-    payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["asset"]["asset_type"] == "phone"
-    # demo doubles inject a breach + messaging finding
-    assert len(payload["findings"]) == 2
+    json_text = result.output[result.output.find("[") : result.output.rfind("]") + 1]
+    payload = json.loads(json_text)
+    assert len(payload) == 1  # only the in-scope, parseable number survives
+    assert payload[0]["report"]["e164"] == DEMO_NUMBER
+    assert "skipping unparseable" in result.output
+    assert "skipping out-of-scope" in result.output
