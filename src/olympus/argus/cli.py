@@ -396,7 +396,7 @@ def accounts(
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    client = UrllibHttpClient(min_interval=rate)
+    client = UrllibHttpClient.from_config(min_interval=rate if rate > 0.0 else None)
     handles = [username] if username is not None else _read_targets(input_file)  # type: ignore[arg-type]
     intels: list[AccountIntel] = []
     for handle in handles:

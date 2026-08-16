@@ -22,6 +22,10 @@ class _FakeClient:
         # Accept the same construction kwargs as UrllibHttpClient (e.g. min_interval).
         pass
 
+    @classmethod
+    def from_config(cls, *, min_interval: object = None) -> _FakeClient:
+        return cls()
+
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         if "github.com" in url:
             return HttpResponse(status_code=200, headers={}, body="<html>profile</html>")

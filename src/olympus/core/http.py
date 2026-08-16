@@ -71,6 +71,24 @@ class UrllibHttpClient:
         self._min_interval = max(min_interval, 0.0)
         self._last_request_at = 0.0
 
+    @classmethod
+    def from_config(cls, *, min_interval: float | None = None) -> UrllibHttpClient:
+        """Build a client using ``[http]`` config defaults (CLI overrides win).
+
+        ``min_interval`` from the caller (e.g. a ``--rate`` flag) takes
+        precedence over the config file; everything else comes from ``[http]``.
+        """
+        from olympus.core import config
+
+        data = config.load_config()
+        rate = min_interval if min_interval is not None else config.get("http", "rate", 0.0, data)
+        return cls(
+            config.get("http", "timeout", 10.0, data),
+            retries=config.get("http", "retries", 2, data),
+            backoff=config.get("http", "backoff", 0.5, data),
+            min_interval=rate,
+        )
+
     def _throttle(self) -> None:
         """Sleep just enough to honor the configured minimum request interval."""
         if self._min_interval <= 0.0:
