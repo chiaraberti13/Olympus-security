@@ -368,6 +368,12 @@ def accounts(
     i_am_authorized: bool = typer.Option(
         False, "--i-am-authorized", help="Confirm documented authorization for metadata scraping."
     ),
+    concurrency: int = typer.Option(
+        8, "--concurrency", min=1, max=64, help="Parallel site checks per handle."
+    ),
+    rate: float = typer.Option(
+        0.0, "--rate", min=0.0, help="Minimum seconds between requests (politeness rate limit)."
+    ),
     output: Path | None = typer.Option(
         None, "--output", help="If set, export the account-intel bundle(s) as JSON to this path."
     ),
@@ -390,7 +396,7 @@ def accounts(
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    client = UrllibHttpClient()
+    client = UrllibHttpClient(min_interval=rate)
     handles = [username] if username is not None else _read_targets(input_file)  # type: ignore[arg-type]
     intels: list[AccountIntel] = []
     for handle in handles:
@@ -405,7 +411,9 @@ def accounts(
                 raise typer.Exit(code=3) from exc
             typer.echo(f"argus: skipping out-of-scope handle {handle!r} (logged)", err=True)
             continue
-        result = enumerate_accounts(handle, specs, client, want_metadata=metadata)
+        result = enumerate_accounts(
+            handle, specs, client, want_metadata=metadata, concurrency=concurrency
+        )
         intels.append(_build_account_intel(result))
         typer.echo(
             f"argus: '{handle}' found on {len(result.existing())}/{len(specs)} site(s)", err=True

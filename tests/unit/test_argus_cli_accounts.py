@@ -18,6 +18,10 @@ runner = CliRunner()
 class _FakeClient:
     """Offline HttpClient double: first configured host is 'present', rest 404."""
 
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        # Accept the same construction kwargs as UrllibHttpClient (e.g. min_interval).
+        pass
+
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         if "github.com" in url:
             return HttpResponse(status_code=200, headers={}, body="<html>profile</html>")
