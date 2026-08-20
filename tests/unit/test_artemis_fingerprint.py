@@ -92,7 +92,15 @@ def test_cli_fingerprint_reports_detected_stack(
     out = tmp_path / "fp.json"
     result = runner.invoke(
         app,
-        ["artemis", "fingerprint", "--url", URL, "--output", str(out)],
+        [
+            "artemis",
+            "fingerprint",
+            "--url",
+            URL,
+            "--i-am-authorized",
+            "--output",
+            str(out),
+        ],
     )
     assert result.exit_code == 0, result.output
     findings = json.loads(out.read_text(encoding="utf-8"))
@@ -104,7 +112,20 @@ def test_cli_fingerprint_reports_detected_stack(
 def test_cli_fingerprint_blocks_out_of_scope(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
-        ["artemis", "fingerprint", "--url", "https://evil.example/app",
-         "--log", str(tmp_path / "blocked.log")],
+        [
+            "artemis",
+            "fingerprint",
+            "--url",
+            "https://evil.example/app",
+            "--i-am-authorized",
+            "--log",
+            str(tmp_path / "blocked.log"),
+        ],
     )
     assert result.exit_code == 2  # scope/transport failure is surfaced, no network
+
+
+def test_cli_fingerprint_requires_explicit_authorization() -> None:
+    result = runner.invoke(app, ["artemis", "fingerprint", "--url", URL])
+    assert result.exit_code == 4
+    assert "AUTHORIZED USE ONLY" in result.output
