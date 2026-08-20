@@ -182,6 +182,7 @@ def report_to_asset(report: FrontingReport, asset_id: str) -> Asset:
         asset_id=asset_id,
         asset_type=AssetType.DOMAIN,
         hostname=report.domain,
+        source=Source.ARGUS,
         ip_addresses=list(report.apex_ips),
         tags=["fronting", *(p.lower().replace(" ", "-") for p in report.providers)],
         metadata={

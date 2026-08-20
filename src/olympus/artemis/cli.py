@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 import typer
 
+from olympus.artemis.fingerprint import fingerprint_response, fingerprints_to_findings
 from olympus.artemis.http import (
     HttpClientError,
     PinnedTransport,
@@ -71,6 +72,38 @@ def fetch(
         "status": result.response.status,
     }
     typer.echo(json.dumps(metadata, indent=2, sort_keys=True))
+
+
+@app.command()
+def fingerprint(
+    url: str = typer.Option(..., "--url", help="Base URL to fetch once and fingerprint."),
+    scope: Path = typer.Option(DEFAULT_SCOPE, "--scope"),
+    log: Path = typer.Option(DEFAULT_LOG, "--log"),
+    timeout: float = typer.Option(5.0, "--timeout"),
+    max_bytes: int = typer.Option(1_000_000, "--max-bytes"),
+    asset_id: str = typer.Option(
+        "AST-ARTEMIS-FP-1", "--asset-id", help="core.Asset id to attach findings to."
+    ),
+    output: Path | None = typer.Option(None, "--output", help="Export findings JSON to this path."),
+) -> None:
+    """Identify the technology stack from one scope-safe GET (passive, no extra requests)."""
+    try:
+        result = fetch_scoped(
+            url, scope, log, SocketResolver(), PinnedTransport(),
+            timeout=timeout, max_bytes=max_bytes,
+        )
+    except (ScopeError, OutOfScopeError, HttpClientError, ValueError) as exc:
+        typer.echo(f"artemis: fingerprint blocked or failed: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    fingerprints = fingerprint_response(result.response)
+    findings = fingerprints_to_findings(asset_id, result.response.url, fingerprints)
+    typer.echo(_render_findings(findings))
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(_render_findings(findings), encoding="utf-8")
+    products = ", ".join(f.product for f in fingerprints) or "no known technology"
+    typer.echo(f"artemis: fingerprint identified {products}", err=True)
 
 
 @app.command("check-scope")
