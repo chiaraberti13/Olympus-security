@@ -8,6 +8,12 @@ from urllib.parse import parse_qsl, urlsplit
 
 import typer
 
+from olympus.artemis.content import (
+    WordlistError,
+    discover_content,
+    discoveries_to_findings,
+    load_wordlist,
+)
 from olympus.artemis.fingerprint import fingerprint_response, fingerprints_to_findings
 from olympus.artemis.http import (
     HttpClientError,
@@ -104,6 +110,57 @@ def fingerprint(
         output.write_text(_render_findings(findings), encoding="utf-8")
     products = ", ".join(f.product for f in fingerprints) or "no known technology"
     typer.echo(f"artemis: fingerprint identified {products}", err=True)
+
+
+@app.command()
+def content(
+    url: str = typer.Option(..., "--url", help="Authorized base URL to discover paths under."),
+    wordlist: Path = typer.Option(..., "--wordlist", help="Newline-delimited candidate paths."),
+    scope: Path = typer.Option(DEFAULT_SCOPE, "--scope"),
+    log: Path = typer.Option(DEFAULT_LOG, "--log"),
+    timeout: float = typer.Option(5.0, "--timeout"),
+    max_bytes: int = typer.Option(1_000_000, "--max-bytes"),
+    rate: float = typer.Option(
+        0.0, "--rate", help="Minimum seconds between requests (politeness throttle)."
+    ),
+    asset_id: str = typer.Option(
+        "AST-ARTEMIS-CONTENT-1", "--asset-id", help="core.Asset id to attach findings to."
+    ),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm you are authorized to test this target."
+    ),
+    output: Path | None = typer.Option(None, "--output", help="Export findings JSON to this path."),
+) -> None:
+    """Discover existing paths/files under an authorized base URL (real dirbusting).
+
+    Every candidate is re-checked against scope before the request, so discovery
+    only ever touches authorized origins/path-prefixes. GET-only, bounded and
+    rate-limited — it discovers, it never exploits.
+    """
+    if not i_am_authorized:
+        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4)
+    try:
+        words = load_wordlist(wordlist)
+    except WordlistError as exc:
+        typer.echo(f"artemis: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    discovered = discover_content(
+        url, words, scope, log, SocketResolver(), PinnedTransport(),
+        timeout=timeout, max_bytes=max_bytes, min_interval=rate,
+    )
+    findings = discoveries_to_findings(asset_id, discovered)
+    typer.echo(_render_findings(findings))
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(_render_findings(findings), encoding="utf-8")
+    typer.echo(
+        f"artemis: content discovery tried {len(words)} path(s), "
+        f"found {len(discovered)}", err=True
+    )
+    if discovered:
+        raise typer.Exit(code=1)
 
 
 @app.command("check-scope")
