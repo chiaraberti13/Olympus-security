@@ -47,10 +47,24 @@ difensivo: DCSync, Kerberoasting, pass-the-hash, LLMNR poisoning, golden ticket)
 **GhostTrack** → **IP OSINT** in Argus (classificazione offline + geolocation/ASN keyless);
 **flowsint** → **grafo d'indagine** in Argus (`investigate`): entità + relazioni + transform di
 pivot Maltego-style, con gate di autorizzazione e log di audit.
+**CloudFail** → **fronting/origin-leak self-check** difensivo in Argus (`argus fronting`): rileva
+se un dominio autorizzato è dietro CDN/WAF e segnala eventuali IP d'origine esposti usando solo
+DNS + CT passivi — **senza** brute-force di sottodomini, database che espongono l'origine, Tor o
+evasione, e senza mai connettersi all'origine. **dismap** → **fingerprinting tecnologico** passivo
+in Artemis (`artemis fingerprint`): identifica il prodotto/versione dalla singola risposta già
+recuperata, senza richieste extra. **BlueTeam-Tools** → pack di **detection** endpoint/persistence
+in Apollo (LSASS dumping, PowerShell encoded, servizi/scheduled-task, log clearing, Office→shell).
 
 ### Escluso per design / Excluded by design
-- **hackingtool** — launcher di ~215 tool esterni, molti distruttivi (DDoS, RAT, payload,
-  phishing con credenziali reali): fuori dai limiti di Olympus.
+- **hackingtool / fsociety** — launcher di centinaia di tool esterni, molti distruttivi (DDoS,
+  RAT, payload, exploitation, password cracking, phishing con credenziali reali): fuori dai
+  limiti di Olympus. Se ne prende solo il *pattern* di sicurezza (autorizzazione, no auto-exec).
+- **KLogger** — keylogger: sorveglianza e furto di credenziali. Rifiutato integralmente.
+- **symbiote** (hasanfirnas) — cattura webcam furtiva via pagina di phishing + tunneling per
+  nascondere l'infrastruttura: sorveglianza + evasione. Rifiutato integralmente (viola sia il
+  "mai catturare dati reali" di Proteus sia il "nessuna evasione").
+- **RedTeam-Tools** — catalogo di tool offensivi: se ne trae solo *metodologia* per le
+  detection difensive; nessun codice offensivo importato.
 - **Wireless Pentest Tools** — richiedono hardware radio e deauth (DoS).
 - **adhammer** (stack offensivo AD: DCSync/pass-the-hash/relay/golden-ticket) — se ne prende
   solo l'eventuale lato *detection*, mai l'esecuzione offensiva.

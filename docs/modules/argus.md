@@ -33,7 +33,21 @@ olympus argus accounts --input handle.txt --scope examples/input/argus-accounts-
 # IP: classificazione offline + geolocation/ASN opzionale (ip-api.com, autorizzata)
 olympus argus ip --ip 203.0.113.10 --scope examples/input/argus-ip-scope.json
 olympus argus ip --ip 8.8.8.8 --geo --i-am-authorized --scope examples/input/argus-ip-scope.json
+
+# CDN/WAF fronting + origin-leak self-check (difensivo): il dominio è dietro CDN?
+# qualche sottodominio pubblico (da CT) espone l'IP d'origine? Solo DNS+CT passivi.
+olympus argus fronting --domain olympusdemocorp.example --scope examples/input/argus-scope.json
 ```
+
+### Fronting & origin-leak self-check / auto-diagnosi (CloudFail-style)
+`argus fronting` verifica passivamente se un dominio autorizzato è servito da un CDN/WAF noto
+(range pubblici curati) e segnala come *candidato leak* ogni sottodominio da Certificate
+Transparency che risolve a un IP pubblico fuori da quei range mentre l'apex è frontato. Non fa
+brute-force di sottodomini, non usa database che espongono l'origine, non usa Tor/evasione e non
+si connette mai all'origine (exit 1 se trova un leak). / `argus fronting` passively checks
+whether an authorized domain is CDN/WAF-fronted and flags any Certificate-Transparency subdomain
+resolving to a public IP outside those ranges as a *candidate* origin leak — no subdomain
+brute-force, no origin-exposing databases, no Tor/evasion, and it never connects to the origin.
 
 ### Investigation graph / grafo d'indagine (flowsint-style)
 `argus investigate` costruisce un **grafo OSINT**: da un'entità seed (email, dominio, IP,

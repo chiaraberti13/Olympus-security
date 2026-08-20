@@ -33,6 +33,12 @@ from olympus.argus.enrichment import (
     PhoneEnrichment,
     RapidApiMessagingClient,
 )
+from olympus.argus.fronting import (
+    assess_fronting,
+    export_fronting,
+    report_to_asset,
+    report_to_findings,
+)
 from olympus.argus.graph import EntityType, export_investigation
 from olympus.argus.ip_osint import (
     IpApiClient,
@@ -144,6 +150,50 @@ def scan(
         raise typer.Exit(code=4) from exc
     export_assets(recon_to_assets(result), output)
     typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+
+
+@app.command()
+def fronting(
+    domain: str = typer.Option(..., "--domain", help="Domain to assess for CDN/WAF fronting."),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH, "--scope", help="JSON scope file listing authorized domains."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH, "--log", help="Path to the out-of-scope audit log."
+    ),
+    asset_id: str = typer.Option(
+        "AST-ARGUS-FRONT-1", "--asset-id", help="core.Asset id to attach findings to."
+    ),
+    output: Path = typer.Option(
+        Path("examples/output/argus-fronting.json"), "--output", help="Fronting report JSON."
+    ),
+) -> None:
+    """Passively check whether an in-scope domain is CDN/WAF-fronted and leaks its origin IP."""
+    try:
+        enforce_scope(domain, scope, log)
+    except ScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+
+    try:
+        report = assess_fronting(domain, DnspythonResolver(), CrtShClient())
+    except CertificateTransparencyError as exc:
+        typer.echo(f"argus: Certificate Transparency error: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+
+    asset = report_to_asset(report, asset_id)
+    findings = report_to_findings(report, asset_id)
+    export_fronting(report, asset, findings, output)
+    typer.echo(
+        f"argus: {domain} — fronted={report.fronted} "
+        f"({', '.join(report.providers) or 'no CDN'}); "
+        f"{len(report.origin_leaks)} candidate origin leak(s); {output}"
+    )
+    if report.origin_leaks:
+        raise typer.Exit(code=1)
 
 
 @app.command("diff")
