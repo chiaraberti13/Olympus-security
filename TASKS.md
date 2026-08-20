@@ -60,6 +60,11 @@
 ## ⏳ Backlog — resto W3 e W4
 Resto Artemis/Minerva, Proteus, Vulcan e Mars saranno scomposti dopo T-306 (vedi PLAN.md).
 
+## ✅ Done — extra
+- [x] T-921 Apollo: pack `apollo-redteam` (RedTeam-Tools, tattiche MITRE non coperte da
+  apollo-ad/apollo-blueteam: Discovery, Lateral Movement, Collection, C2, Exfiltration,
+  Impact) — done: 4 test, `make check` verde
+
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [x] T-901 Ripristinare il gate coverage installando le dipendenze dev e rieseguire `make check`
   (ERR-2026-08-14-01) — done: coverage ≥ 90% verificata
