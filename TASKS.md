@@ -66,6 +66,10 @@ Resto Artemis/Minerva, Proteus, Vulcan e Mars sarà scomposto dopo T-307 (vedi P
 - [x] T-921 Apollo: pack `apollo-redteam` (RedTeam-Tools, tattiche MITRE non coperte da
   apollo-ad/apollo-blueteam: Discovery, Lateral Movement, Collection, C2, Exfiltration,
   Impact) — done: 4 test, `make check` verde
+- [x] T-922 Mars: scenario purple end-to-end (`mars-post-exploitation.ndjson`) — traccia di
+  eventi sintetici che riproduce cosa produrrebbe un endpoint compromesso da tecniche stile
+  KLogger/symbiote, rilevata da `apollo-redteam` (mai una cattura reale) — done: 3 test,
+  `make check` verde
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [ ] T-903 Isolare il log bloccati del test CLI account Argus per mantenere il working tree
