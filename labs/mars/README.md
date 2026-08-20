@@ -50,9 +50,27 @@ olympus artemis xss --url "http://127.0.0.1:8081/app/search?q=x" --param q \
 # 4) Metabase CVE-2026-72898 (solo fingerprint, nessun payload SQLi)
 olympus artemis metabase --url http://127.0.0.1:8081 --scope $S --i-am-authorized
 #   -> versione v0.60.10 nel range affetto
+
+# 5) Blue: rileva il post-exploitation su un endpoint dopo il foothold (purple end-to-end)
+olympus apollo run --rules examples/input/apollo-redteam \
+  --events labs/mars/target/mars-post-exploitation.ndjson
+#   -> 7 alert: discovery, lateral movement, keylogging, webcam nascosta, C2 su DNS,
+#      exfiltration, impact — le stesse tecniche di KLogger/symbiote, solo *rilevate*
 ```
+
+Il passo 5 chiude il ciclo purple: il red side (1-4) ottiene un foothold sul target;
+`mars-post-exploitation.ndjson` è una traccia di **eventi sintetici**, mai una cattura reale,
+che riproduce cosa produrrebbe un endpoint compromesso in quella fase — e il blue side (Apollo)
+la rileva. Nessun tastiera/webcam viene mai davvero acceduta: è così che si dimostra la tecnica
+senza costruire lo spyware.
 
 Ogni comando applica comunque lo **scope** (`practice-scope.json`): fuori perimetro viene
 bloccato e loggato. Puoi generare un report unico con Vulcan a partire dai `--output` JSON dei
 singoli tool. / Every command still enforces **scope**; out-of-scope targets are blocked and
 logged. Feed each tool's `--output` JSON into Vulcan for one consolidated report.
+
+Step 5 closes the purple loop: the red side (1-4) gets a foothold on the target;
+`mars-post-exploitation.ndjson` is a **synthetic** event trace — never a real capture — that
+reproduces what a compromised endpoint would emit at that stage, and the blue side (Apollo)
+detects it. No keyboard or webcam is ever actually accessed: that is how the technique gets
+demonstrated without building the spyware.
