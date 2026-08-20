@@ -16,7 +16,15 @@ olympus apollo run --rules examples/input/apollo-ad --events eventi.ndjson --out
 
 # Carica e valida una cartella di regole, elencandole (tabella o json)
 olympus apollo rules --rules examples/input/apollo-ad --format table
+
+# Pack di detection Blue Team (endpoint/persistence) su telemetria Windows/Sysmon
+olympus apollo rules --rules examples/input/apollo-blueteam --format table
 ```
+
+Pack di regole inclusi: **apollo-ad** (Active Directory: DCSync, Kerberoasting, pass-the-hash,
+LLMNR poisoning, golden ticket) e **apollo-blueteam** (endpoint/persistence: LSASS credential
+dumping, PowerShell encoded, installazione servizi e scheduled-task, cancellazione event log,
+Office che lancia una shell). Tutti solo *detection*: Olympus non esegue mai la tecnica.
 
 ## English
 Apollo loads a strict declarative YAML subset (mappings, lists and plain scalars), validates

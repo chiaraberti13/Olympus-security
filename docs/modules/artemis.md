@@ -25,7 +25,19 @@ olympus artemis metabase --url https://metabase.olympusdemocorp.example \
 # Reflected XSS: benign marker (no script), flags only an unescaped reflection.
 olympus artemis xss --url "https://portal.olympusdemocorp.example/app/search?q=x" --param q \
   --scope examples/input/artemis-scope.json
+
+# Fingerprint tecnologico passivo: identifica prodotto/versione dalla singola risposta
+# già recuperata (nessuna richiesta extra). Passive tech fingerprint from one fetched response.
+olympus artemis fingerprint --url https://portal.olympusdemocorp.example/app \
+  --scope examples/input/artemis-scope.json
 ```
+
+`artemis fingerprint` esegue un solo GET scope-safe (come `fetch`) e confronta header e body con
+un set di firme curate (web server, CDN/WAF, CMS, framework, app) per nominare lo stack ed
+estrarne le versioni, emettendo finding informativi. Non invia richieste a path indovinati né
+calcola probe favicon. / `artemis fingerprint` performs one scope-safe GET (like `fetch`) and
+matches headers/body against a curated signature set to name the stack and extract versions as
+informational findings — no requests to guessed paths, no favicon probes.
 
 ## English
 Artemis enforces scope before any future web request. Validation normalizes scheme, IDNA host,
