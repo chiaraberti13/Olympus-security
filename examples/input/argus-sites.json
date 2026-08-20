@@ -106,7 +106,12 @@
     "absent_status": [404],
     "metadata_patterns": {
       "followers": "\"followerCount\":(\\d+)",
-      "bio": "\"signature\":\"([^\"]*)\""
+      "following": "\"followingCount\":(\\d+)",
+      "likes": "\"heartCount\":(\\d+)",
+      "videos": "\"videoCount\":(\\d+)",
+      "bio": "\"signature\":\"([^\"]*)\"",
+      "avatar": "\"avatarLarger\":\"([^\"]*)\"",
+      "verified": "\"verified\":(true|false)"
     }
   },
   {
