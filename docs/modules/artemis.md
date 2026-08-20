@@ -30,7 +30,24 @@ olympus artemis xss --url "https://portal.olympusdemocorp.example/app/search?q=x
 # già recuperata (nessuna richiesta extra). Passive tech fingerprint from one fetched response.
 olympus artemis fingerprint --url https://portal.olympusdemocorp.example/app \
   --scope examples/input/artemis-scope.json
+
+# Content/directory discovery reale (stile gobuster): scopre path/file esistenti sotto una
+# base URL autorizzata. Real dirbusting: discovers existing paths under an authorized base.
+olympus artemis content --url https://portal.olympusdemocorp.example/app \
+  --wordlist examples/input/artemis-content-wordlist.txt \
+  --scope examples/input/artemis-scope.json --i-am-authorized --rate 0.2
 ```
+
+`artemis content` è un motore di content-discovery **reale e funzionante**: richiede una lista
+di path candidati sotto la base URL e riporta quelli esistenti. Ogni candidato è ri-controllato
+contro lo scope prima della richiesta (la discovery può toccare solo origin/prefissi
+autorizzati; i bloccati sono loggati), è solo-GET tramite il transport DNS-pinned, limitato e
+con throttle (`--rate`): scopre, non sfrutta. I nomi sensibili (`.git`, `.env`, `backup`,
+`admin`) sono alzati a `LOW` con remediation. È gated da `--i-am-authorized`. Per allenarsi c'è
+un bersaglio legale: **`labs/mars`** (vedi il suo README per il walkthrough completo). /
+`artemis content` is a real, working content-discovery engine, gated by `--i-am-authorized`;
+every candidate is re-checked against scope before the request. Practise it against the legal
+local range in **`labs/mars`**.
 
 `artemis fingerprint` esegue un solo GET scope-safe (come `fetch`) e confronta header e body con
 un set di firme curate (web server, CDN/WAF, CMS, framework, app) per nominare lo stack ed
