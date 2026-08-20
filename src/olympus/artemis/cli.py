@@ -90,9 +90,15 @@ def fingerprint(
     asset_id: str = typer.Option(
         "AST-ARTEMIS-FP-1", "--asset-id", help="core.Asset id to attach findings to."
     ),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm you are authorized to test this target."
+    ),
     output: Path | None = typer.Option(None, "--output", help="Export findings JSON to this path."),
 ) -> None:
     """Identify the technology stack from one scope-safe GET (passive, no extra requests)."""
+    if not i_am_authorized:
+        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4)
     try:
         result = fetch_scoped(
             url, scope, log, SocketResolver(), PinnedTransport(),

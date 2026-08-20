@@ -29,7 +29,7 @@ olympus artemis xss --url "https://portal.olympusdemocorp.example/app/search?q=x
 # Fingerprint tecnologico passivo: identifica prodotto/versione dalla singola risposta
 # già recuperata (nessuna richiesta extra). Passive tech fingerprint from one fetched response.
 olympus artemis fingerprint --url https://portal.olympusdemocorp.example/app \
-  --scope examples/input/artemis-scope.json
+  --scope examples/input/artemis-scope.json --i-am-authorized
 
 # Content/directory discovery reale (stile gobuster): scopre path/file esistenti sotto una
 # base URL autorizzata. Real dirbusting: discovers existing paths under an authorized base.
@@ -55,6 +55,8 @@ estrarne le versioni, emettendo finding informativi. Non invia richieste a path 
 calcola probe favicon. / `artemis fingerprint` performs one scope-safe GET (like `fetch`) and
 matches headers/body against a curated signature set to name the stack and extract versions as
 informational findings — no requests to guessed paths, no favicon probes.
+Because it still performs one live request, the command requires an explicit
+`--i-am-authorized` confirmation before any DNS lookup or network traffic.
 
 ## English
 Artemis enforces scope before any future web request. Validation normalizes scheme, IDNA host,

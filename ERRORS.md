@@ -3,6 +3,14 @@
 > Ogni voce APERTA genera un task in TASKS.md. / Every OPEN entry spawns a TASKS.md task.
 > Formato / format: ERR-YYYY-MM-DD-nn.
 
+### ERR-2026-08-20-01 — Test Argus account modifica un log tracciato
+- Stato / Status: APERTO / OPEN
+- Contesto / Context: gate finale T-307, audit del working tree dopo `make check`
+- Sintomo / Symptom: la suite modifica `examples/output/argus-accounts-blocked.log`
+- Causa / Cause: almeno un test CLI usa il path di output predefinito invece di un file temporaneo
+- Fix proposto / Proposed fix: iniettare `tmp_path` come log in tutti i test coinvolti
+- Test di regressione / Regression test: working tree stabile dopo `make check`
+
 ### ERR-2026-08-10-01 — Ruff: StrEnum, datetime.UTC, righe troppo lunghe
 - Stato / Status: RISOLTO / RESOLVED
 - Contesto / Context: T-001..T-005, primo run di `ruff check`
