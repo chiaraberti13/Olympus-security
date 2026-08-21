@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" width="1200" height="260" role="img" aria-label="Olympus Security">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="peakGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="260" fill="url(#bg)"/>
+
+  <!-- distant skyline, kept low so it never crosses the text block -->
+  <polygon points="-20,260 110,175 260,260" fill="#1e293b"/>
+  <polygon points="200,260 330,195 470,260" fill="#1e293b"/>
+  <polygon points="740,260 880,190 1010,260" fill="#1e293b"/>
+  <polygon points="950,260 1090,170 1220,260" fill="#1e293b"/>
+  <polygon points="450,260 600,150 750,260" fill="#243044"/>
+  <polygon points="565,190 600,150 635,190" fill="url(#peakGold)"/>
+
+  <!-- red / blue accent strips framing the platform -->
+  <rect x="0" y="0" width="10" height="260" fill="#ef4444"/>
+  <rect x="1190" y="0" width="10" height="260" fill="#3b82f6"/>
+
+  <text x="600" y="70" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" letter-spacing="7" fill="#94a3b8">RED TEAM · BLUE TEAM</text>
+
+  <text x="600" y="122" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="3" fill="#f8fafc">OLYMPUS SECURITY</text>
+
+  <text x="600" y="155" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#cbd5e1">One CLI. Nine modules. Authorized penetration testing, done right.</text>
+</svg>
