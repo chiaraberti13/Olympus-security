@@ -194,3 +194,40 @@ def test_enumerate_concurrent_preserves_order() -> None:
     assert [c.name for c in result.checks] == [str(i) for i in range(6)]
     assert len(result.existing()) == 1
     assert result.existing()[0].name == "3"
+
+
+def _tiktok_spec() -> SiteSpec:
+    registry = load_site_registry(Path("examples/input/argus-sites.json"))
+    matches = [spec for spec in registry if spec.name == "TikTok"]
+    assert matches, "TikTok entry missing from the bundled site registry"
+    return matches[0]
+
+
+def test_tiktok_registry_entry_extracts_full_profile_metadata() -> None:
+    # A synthetic stand-in for the JSON TikTok embeds in a profile page (SIGI_STATE-style),
+    # covering the same fields TokIntel reports via its paid API — bio, followers, following,
+    # likes, videos, avatar, verified — extracted here from one honest GET, no API key needed.
+    body = (
+        '{"UserModule":{"users":{"bob":{"signature":"hello world","avatarLarger":'
+        '"https://example.com/avatar.jpg","verified":true}},"stats":{"bob":'
+        '{"followerCount":1200,"followingCount":80,"heartCount":9001,"videoCount":42}}}}'
+    )
+    client = _RoutingClient({"tiktok.com": HttpResponse(status_code=200, body=body)})
+    check = check_site("bob", _tiktok_spec(), client, want_metadata=True)
+    assert check.exists is True
+    assert check.metadata == {
+        "followers": "1200",
+        "following": "80",
+        "likes": "9001",
+        "videos": "42",
+        "bio": "hello world",
+        "avatar": "https://example.com/avatar.jpg",
+        "verified": "true",
+    }
+
+
+def test_tiktok_registry_entry_absent_profile() -> None:
+    client = _RoutingClient({"tiktok.com": HttpResponse(status_code=404, body="")})
+    check = check_site("nobody", _tiktok_spec(), client, want_metadata=True)
+    assert check.exists is False
+    assert check.metadata == {}

@@ -70,6 +70,9 @@ Resto Artemis/Minerva, Proteus, Vulcan e Mars sarà scomposto dopo T-307 (vedi P
   eventi sintetici che riproduce cosa produrrebbe un endpoint compromesso da tecniche stile
   KLogger/symbiote, rilevata da `apollo-redteam` (mai una cattura reale) — done: 3 test,
   `make check` verde
+- [x] T-923 Argus accounts: metadati profilo TikTok estesi (following, like, video, avatar,
+  verificato) — stessi campi di TokIntel via GET onesta sulla pagina pubblica, nessuna chiave
+  a pagamento — done: 2 test, `make check` verde
 
 ## 🔁 Generati da ERRORS.md / Generated from ERRORS.md
 - [ ] T-903 Isolare il log bloccati del test CLI account Argus per mantenere il working tree
