@@ -17,3 +17,13 @@ htmlcov/
 *.key
 # OS
 .DS_Store
+
+# Vendored-tool runtime artifacts (source is committed; runtime state is not)
+vendor/**/vap.db
+vendor/**/vap.db-*
+vendor/**/*.sqlite
+vendor/**/reports/*
+!vendor/**/reports/.gitkeep
+vendor/**/scans/*
+!vendor/**/scans/.gitkeep
+vendor/**/.venv/

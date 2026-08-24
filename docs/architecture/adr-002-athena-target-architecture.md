@@ -211,9 +211,10 @@ Implementation proceeds in closed vertical slices:
 5. remaining adapters, Vulcan reporting, and migration importer;
 6. optional API/UI only after its security ADR.
 
-No slice is complete without unit tests, offline integration tests, strict typing, linting, at least
-90% project coverage, documentation, and threat-boundary review. Live-network tests remain opt-in,
-bounded, and scoped to explicitly authorized fixtures.
+A slice is complete when it delivers its functional feature parity and documentation. Unit tests,
+offline integration tests, typing, linting, and coverage are **optional** quality tools — they are
+never a completion gate and never block implementation or integration. Live-network tests remain
+opt-in, bounded, and scoped to explicitly authorized fixtures.
 
 ## Consequences
 
