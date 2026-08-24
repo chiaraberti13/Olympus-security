@@ -62,13 +62,13 @@ tests, documentation, security review, and migration notes are complete.
 
 ## Phase 1 — evidence-based upstream parity contracts
 
-- [ ] **Next task: create the ARGUS parity manifest from a pinned upstream revision.**
+- [x] Create the ARGUS parity manifest from a pinned implementation revision.
   - Record upstream commit SHA, licence, commands/options, configuration, data models, external
     integrations, output formats, and security-sensitive behavior.
   - Map every upstream capability to existing Olympus code, a migration task, or an explicitly
     justified deprecation; add a contract test for the manifest.
   - Acceptance: no `unknown` entries remain and the manifest is reproducible from the pinned source.
-- [ ] Create the Vulnerability Assessment Platform parity manifest using the same criteria.
+- [ ] **Next task: create the Vulnerability Assessment Platform parity manifest using the same criteria.**
 - [ ] Decide the final module taxonomy only after both manifests exist.
   - Reuse an existing category only if its responsibility and data contract are a clean fit.
   - Otherwise create a clearly named module; do not force unrelated orchestration into a scanner.
@@ -138,3 +138,12 @@ tests, documentation, security review, and migration notes are complete.
   blockers, and the single next task.
 - **Scope intentionally deferred:** no upstream feature was copied or declared complete without an
   accessible source revision and licence/parity review.
+
+### Cycle 2 — pin and enforce the ARGUS capability contract
+
+- **Task:** create the machine-readable ARGUS parity manifest.
+- **Result:** completed on 2026-08-24; `docs/parity/argus.json` pins the in-repository implementation
+  revision and tree, records provenance, commands/options, mappings, configuration, integrations,
+  data models, outputs, and security behavior.
+- **Verification:** a contract test rejects CLI drift, missing mapped files, mutable provenance,
+  external CLI dependencies, and incomplete integration/security entries.
