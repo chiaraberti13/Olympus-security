@@ -7,7 +7,6 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
-from click import Group
 from typer.main import get_command
 
 from olympus.argus.cli import app
@@ -33,7 +32,10 @@ def test_manifest_has_pinned_provenance_and_no_external_cli_dependency() -> None
 
 
 def test_manifest_covers_every_command_and_option() -> None:
-    click_app = cast(Group, get_command(app))
+    # Typer returns a Click group at runtime. Keep the contract test typed as
+    # ``Any`` so strict mypy does not require Click's optional type metadata or
+    # a direct Click dependency merely to introspect Typer's generated command.
+    click_app = cast(Any, get_command(app))
     manifest_commands = _manifest()["commands"]
 
     assert set(manifest_commands) == set(click_app.commands)

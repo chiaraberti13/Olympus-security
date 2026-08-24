@@ -59,6 +59,9 @@ tests, documentation, security review, and migration notes are complete.
   upstream capabilities.
 - [!] `Makefile` documents `olympus core export-schemas ./examples/output`, while the current CLI
   implementation prints schemas to stdout and accepts no destination argument.
+- [x] CI strict-mypy regression: the ARGUS parity test imported transitive dependency `click`
+  directly, whose implementation/stubs were unavailable in CI. Fixed by introspecting Typer's
+  generated command through an `Any` boundary without adding an unnecessary direct dependency.
 
 ## Phase 1 — evidence-based upstream parity contracts
 
@@ -186,3 +189,11 @@ tests, documentation, security review, and migration notes are complete.
   translates errors, exports assets, and renders output.
 - **Verification:** direct offline tests prove successful orchestration and prove that out-of-scope
   targets are audited before either network-capable dependency is called.
+
+### Cycle 7 — restore strict mypy portability in CI
+
+- **Task:** fix the `click` import failure reported by the strict-mypy CI job.
+- **Result:** completed on 2026-08-24; the parity test no longer imports Click directly and confines
+  runtime CLI introspection to an explicit `Any` boundary around Typer's generated command.
+- **Verification:** the focused contract test, strict mypy, Ruff, and the complete quality gate pass
+  without weakening mypy configuration or ignoring missing imports.
