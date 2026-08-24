@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "tool": "ARGUS",
+  "source": {
+    "repository": "https://github.com/chiaraberti13/ARGUS",
+    "implementation_revision": "578e0d2fe7f443c57c9707e7f8b14d609ab59b83",
+    "implementation_tree": "dff551988142f96d44a71dfa6b2ca2e59fd80035",
+    "license": "MIT",
+    "license_file": "LICENSE",
+    "provenance_note": "The immutable revision is the last Olympus commit that changed the in-repository ARGUS implementation; the tree hash pins the complete src/olympus/argus snapshot. Olympus is the durable implementation and has no runtime dependency on the standalone repository."
+  },
+  "package": "olympus.argus",
+  "entrypoint": "olympus argus",
+  "runtime_external_cli_dependencies": [],
+  "commands": {
+    "accounts": {
+      "options": ["--username", "--input", "--scope", "--log", "--sites", "--metadata", "--i-am-authorized", "--concurrency", "--rate", "--output"],
+      "capabilities": ["account-presence", "public-profile-metadata", "batch"],
+      "mapping": ["accounts.py", "accounts_scope.py"]
+    },
+    "diff": {
+      "options": ["before", "after"],
+      "capabilities": ["offline-snapshot-diff"],
+      "mapping": ["diff.py"]
+    },
+    "fronting": {
+      "options": ["--domain", "--scope", "--log", "--asset-id", "--output"],
+      "capabilities": ["cdn-waf-detection", "passive-origin-leak-candidates"],
+      "mapping": ["fronting.py", "ct.py", "resolver.py", "scope.py"]
+    },
+    "investigate": {
+      "options": ["--seed-type", "--seed-value", "--name", "--depth", "--sites", "--geo", "--log", "--i-am-authorized", "--output", "--mermaid", "--dot", "--graphml"],
+      "capabilities": ["entity-pivots", "bounded-graph-expansion", "graph-export"],
+      "mapping": ["graph.py", "transforms.py"]
+    },
+    "ip": {
+      "options": ["--ip", "--input", "--scope", "--log", "--geo", "--i-am-authorized", "--output"],
+      "capabilities": ["offline-ip-classification", "optional-geo-asn", "batch"],
+      "mapping": ["ip_osint.py", "ip_scope.py"]
+    },
+    "phone": {
+      "options": ["--number", "--input", "--region", "--scope", "--log", "--enrich", "--breach", "--messaging", "--i-am-authorized", "--output"],
+      "capabilities": ["offline-phone-analysis", "optional-carrier", "optional-breach-intelligence", "optional-messaging-presence", "batch"],
+      "mapping": ["phone.py", "phone_scope.py", "enrichment.py"]
+    },
+    "scan": {
+      "options": ["--domain", "--scope", "--log", "--output"],
+      "capabilities": ["dns", "mx", "spf", "dmarc", "certificate-transparency"],
+      "mapping": ["application.py", "recon.py", "resolver.py", "ct.py", "assets.py", "scope.py"]
+    }
+  },
+  "configuration": {
+    "files": ["scope JSON", "account scope JSON", "IP scope JSON", "phone scope JSON", "site registry JSON"],
+    "environment": ["OLYMPUS_NUMVERIFY_KEY", "OLYMPUS_RAPIDAPI_KEY"],
+    "secret_handling": "API keys are read from the environment and are neither exported nor logged."
+  },
+  "external_integrations": [
+    {"name": "DNS", "purpose": "passive records and resolution", "mandatory": true},
+    {"name": "crt.sh", "purpose": "Certificate Transparency", "mandatory": true},
+    {"name": "Numverify", "purpose": "optional phone carrier enrichment", "mandatory": false},
+    {"name": "Hudson Rock", "purpose": "optional breach exposure", "mandatory": false},
+    {"name": "RapidAPI", "purpose": "optional messaging presence", "mandatory": false},
+    {"name": "ip-api.com", "purpose": "optional IP geolocation and ASN", "mandatory": false},
+    {"name": "curated public sites", "purpose": "account presence and optional metadata", "mandatory": false}
+  ],
+  "data_models": ["AccountIntel", "Asset", "Finding", "FrontingReport", "InvestigationGraph", "IpIntel", "PhoneIntel", "ReconResult"],
+  "outputs": ["core.Asset JSON", "core.Finding JSON", "snapshot diff JSON", "Argus bundle JSON", "Mermaid", "Graphviz DOT", "GraphML", "NDJSON audit logs"],
+  "security_contract": [
+    "scope is checked before target network activity",
+    "out-of-scope attempts are blocked and audited",
+    "privacy-sensitive enrichment requires --i-am-authorized",
+    "investigation depth is limited to three hops",
+    "account concurrency is limited to 64",
+    "HTTP uses shared bounded timeout, retry, size and rate controls",
+    "origin leak assessment never connects to a candidate origin"
+  ]
+}
