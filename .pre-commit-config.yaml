@@ -1,3 +1,6 @@
+# OPTIONAL developer convenience hooks. pre-commit is opt-in (you must run
+# `pre-commit install`) and is never a required gate: any commit can bypass it
+# with `git commit --no-verify`. Nothing here may block implementation.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9

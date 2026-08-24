@@ -215,10 +215,47 @@ olympus vap migrate                       # apply the VAP database migrations
 olympus vap serve --host 127.0.0.1 --port 8000   # serve the full VAP web app
 ```
 
-External scanner **binaries** (nmap, nuclei, sqlmap, wpscan, …) and the full
-runtime (Redis/Celery) are provisioned reproducibly by the vendored
-`installer.sh` and `docker-compose.yml`; a scanner with no binary present
-reports a clear "tool not installed" state rather than failing silently.
+### Running the complete VAP platform: native or Docker
+
+**Native (single process, via Olympus):**
+
+```bash
+pip install -e ".[vap]"            # or: bash scripts/setup-vendored-tools.sh
+olympus vap migrate               # apply the database migrations
+olympus vap serve --host 127.0.0.1 --port 8000
+```
+
+Redis is optional on the native path: synchronous features work without it, and
+queued scans are disabled with a clear warning until Redis is running.
+
+**Docker (full stack, one command):**
+
+```bash
+docker compose up --build         # redis + migrate + app + worker
+docker compose down               # stop
+docker compose down -v            # stop and remove the data volumes
+# ...with the open-source scanner binaries baked in:
+docker compose -f docker-compose.yml -f docker-compose.scanners.yml up --build
+```
+
+| Aspect | What the root `docker-compose.yml` provides |
+| --- | --- |
+| **Services** | `redis` (broker + result backend + API cache), `migrate` (one-shot Alembic), `app` (FastAPI web app), `worker` (Celery scan worker) |
+| **Ports** | app on `http://localhost:8000` (override with `VAP_PORT`); Redis is **not** published to the host |
+| **Volumes** | `vap-data` → `/data` (SQLite DB + generated reports), `redis-data` |
+| **Initialization / migrations** | `migrate` runs `alembic upgrade head` and must finish (`service_completed_successfully`) before `app` and `worker` start; the app also self-migrates on boot |
+| **Health checks** | app `GET /health`, `redis-cli ping`, `celery inspect ping` (with `depends_on: condition: service_healthy`) |
+| **Environment** | `VAP_PORT`, `VAP_ENABLE_LIVE_SCANS` (default `false`), `VAP_REQUIRE_HTTPS`, `VAP_DATABASE_URL`, `VAP_CELERY_*`, `VAP_API_CACHE_*`, and secrets `VAP_API_KEY` / `VAP_JWT_SECRET` / `VAP_CSRF_SECRET` — documented in [`.env.docker.example`](.env.docker.example) |
+| **Scanner dependencies** | The default image is Python-only, so a scanner whose binary is absent reports a clear "tool not installed" state. `docker-compose.scanners.yml` + [`docker/Dockerfile.scanners`](docker/Dockerfile.scanners) add the reliably-installable open-source scanners (nmap, nikto, whatweb, sqlmap, wafw00f, arjun, wapiti); Go-based (nuclei, httpx, katana, subfinder, dalfox), Ruby (wpscan), and commercial engines (burp, acunetix, nessus, openvas) are installed separately per their own licences |
+| **Safe defaults** | live scanning off, HTTPS enforcement configurable, Redis unpublished, secrets blank by default |
+
+For a hardened/HTTPS deployment or PostgreSQL instead of SQLite, set the
+corresponding `VAP_*` variables (see `vendor/vulnerability-assessment-platform/.env.example`).
+
+External scanner **binaries** and the full runtime (Redis/Celery) are also
+provisioned by the vendored `installer.sh` for a non-container setup; a scanner
+with no binary present always reports "tool not installed" rather than failing
+silently.
 
 Olympus also ships **native** re-implementations: `olympus argus …`
 (scope-first OSINT) and `olympus athena …` (assessment orchestration). Their

@@ -1,10 +1,21 @@
 # ADR-001: Athena owns vulnerability-assessment orchestration
 
-- **Status:** Accepted
-- **Date:** 2026-08-24
+- **Status:** Accepted — **non-binding guideline**
+- **Date:** 2026-08-24 (flexibility note added 2026-08-24)
 - **Decision owners:** Olympus maintainers
 - **Input contracts:** `docs/parity/argus.json` and
   `docs/parity/vulnerability-assessment-platform.json`
+
+> **Non-binding.** This ADR is an informational design note, not a development
+> constraint. Nothing here may block, limit, reject, postpone, or reduce a
+> feature. Modules may add web UIs, APIs, databases, background workers,
+> containers, plugins, or new dependencies; modules may import each other;
+> patterns may change freely at any time **without** a superseding ADR. The
+> only items that remain requirements are the *security* consequences below
+> (authorization, scope, SSRF protection, secret redaction, least-privilege)
+> and the project-wide functional rules (real, fully-functional tools; upstream
+> licences preserved). Read the "must"/"must not" wording below as historical
+> recommendation, not policy.
 
 ## Context
 
@@ -31,7 +42,10 @@ workflow is functional.
 
 ### Taxonomy
 
-| Module | Category | Owns | Must not own |
+> The "usually delegates" column is a suggestion for separation of concerns, not a prohibition — any
+> module may take on any of these responsibilities if that is the better design.
+
+| Module | Category | Owns | Usually delegates |
 |---|---|---|---|
 | `core` | shared kernel | versioned models, validation primitives, IDs, errors | workflows, network scanning, persistence policy |
 | `argus` | discovery | passive OSINT and asset discovery | assessment lifecycle |
@@ -44,11 +58,16 @@ workflow is functional.
 | `vulcan` | reporting | normalization, deduplication, ranking, report rendering | job lifecycle and target authorization |
 | `athena` | orchestration | plans, jobs, cancellation, adapter coordination, assessment state | scanner algorithms, detection rules, report rendering |
 
-### Boundary rules
+### Boundary rules (recommendations, not restrictions)
+
+> These are default suggestions to keep modules easy to reason about. They are
+> **not** enforced and never block a change. Rules 4, 5, and 8 are the exception:
+> they are *security* defaults and must not be weakened.
 
 1. Athena may depend on `core` contracts and on narrow scanner/reporting adapter interfaces.
-2. Existing modules must never import Athena; they remain independently runnable and testable.
-3. Tool-specific invocation details belong in Athena adapters, not in the orchestration domain.
+2. By default existing modules stay independently runnable; importing Athena is allowed whenever it
+   is useful.
+3. Tool-specific invocation details usually belong in Athena adapters, but this is not enforced.
 4. Athena passes validated scope and authorization context to every adapter; an adapter must still
    enforce its own module-level scope as defense in depth.
 5. Athena stores references to redacted results and evidence, never provider credentials or raw
@@ -94,6 +113,6 @@ jobs.
 ## Verification criteria
 
 - The platform parity manifest names Athena and `olympus athena` as the selected boundary.
-- The checklist records this decision before implementation begins.
-- Future architecture and implementation work conforms to the dependency and ownership rules above
-  or supersedes this ADR explicitly with another accepted ADR.
+- The checklist records this decision.
+- Future architecture and implementation work **may** follow the recommendations above, adapt them,
+  or diverge from them freely — no superseding ADR is required to change any non-security guideline.
