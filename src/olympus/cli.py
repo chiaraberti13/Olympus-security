@@ -20,7 +20,12 @@ from olympus.athena.cli import app as athena_app
 from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident
 from olympus.helios.cli import app as helios_app
 from olympus.hermes.cli import app as hermes_app
-from olympus.integrations.cli import register_argus_native, vap_app
+from olympus.integrations.cli import (
+    aegis_app,
+    register_argus_native,
+    register_doctor,
+    register_vap_shim,
+)
 from olympus.minerva.cli import app as minerva_app
 from olympus.proteus.cli import app as proteus_app
 from olympus.vulcan.cli import app as vulcan_app
@@ -91,7 +96,9 @@ app.add_typer(minerva_app, name="minerva")
 app.add_typer(vulcan_app, name="vulcan")
 # Complete vendored upstream tools, wired in as first-class subcommands.
 register_argus_native(app)
-app.add_typer(vap_app, name="vap")
+app.add_typer(aegis_app, name="aegis")
+register_vap_shim(app)  # deprecated 'olympus vap' -> forwards to 'olympus aegis'
+register_doctor(app)  # 'olympus doctor'
 
 
 @app.command()

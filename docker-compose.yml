@@ -6,16 +6,16 @@
 #
 # Services:
 #   * redis    — broker + result backend + API cache for Celery/async scans
-#   * migrate  — one-shot: applies the Alembic database migrations, then exits
-#   * app      — the complete VAP FastAPI web application (~40 routes, 24 scanners)
-#   * worker   — the Celery worker that actually runs queued scans
+#   * aegis-migrate — one-shot: applies the Alembic database migrations, then exits
+#   * aegis-app     — the complete AEGIS FastAPI web application (~40 routes, 24 scanners)
+#   * aegis-worker  — the Celery worker that actually runs queued scans
 #
 # The FastAPI app and the Celery worker are built from the complete vendored
 # upstream source (vendor/vulnerability-assessment-platform) using its own
 # Dockerfile, so nothing about the tool is reduced or reimplemented here.
 #
-# `olympus vap serve|migrate|scanners|info` remains available as the native
-# (non-container) entry point — see README.md / README-IT.md.
+# `olympus aegis serve|migrate|workers|scanners|deps|doctor` remains available
+# as the native (non-container) entry point — see README.md / README-IT.md.
 
 x-vap-build: &vap-build
   context: ./vendor/vulnerability-assessment-platform
@@ -54,7 +54,7 @@ services:
     volumes:
       - redis-data:/data
 
-  migrate:
+  aegis-migrate:
     build: *vap-build
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment: *vap-env
@@ -62,7 +62,7 @@ services:
       - vap-data:/data
     restart: "no"
 
-  app:
+  aegis-app:
     build: *vap-build
     command: ["python", "app.py"]
     environment: *vap-env
@@ -71,7 +71,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      migrate:
+      aegis-migrate:
         condition: service_completed_successfully
     volumes:
       - vap-data:/data
@@ -87,14 +87,14 @@ services:
       retries: 10
       start_period: 20s
 
-  worker:
+  aegis-worker:
     build: *vap-build
     command: ["celery", "-A", "celery_app.celery_app", "worker", "--loglevel=info", "-Q", "scans"]
     environment: *vap-env
     depends_on:
       redis:
         condition: service_healthy
-      migrate:
+      aegis-migrate:
         condition: service_completed_successfully
     volumes:
       - vap-data:/data

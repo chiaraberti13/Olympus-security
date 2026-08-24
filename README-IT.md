@@ -90,7 +90,7 @@ $ olympus athena run plan.json --storage ./.athena
 | **Vulcan** | `olympus vulcan` | Aggregazione, deduplica, ranking e rendering dei report. |
 | **core** | `olympus core` | Utility del contratto dati condiviso (es. `export-schemas`). |
 | **ARGUS (completo)** | `olympus argus-native` | La CLI OSINT ARGUS standalone completa, importata verbatim in `vendor/` — tutti i sottocomandi originali più il menu interattivo. |
-| **VAP (completo)** | `olympus vap` | La Vulnerability Assessment Platform completa, importata verbatim — web app FastAPI, tutti i **24 scanner**, database + migrazioni, report. |
+| **AEGIS (completo)** | `olympus aegis` | La Vulnerability Assessment Platform completa, importata verbatim — web app FastAPI, tutti i **24 scanner**, database + migrazioni, report. |
 
 > [!TIP]
 > Esegui qualsiasi modulo con `--help` per vederne i comandi, oppure
@@ -213,9 +213,9 @@ bash scripts/setup-vendored-tools.sh      # installa le dipendenze di entrambi
 olympus argus-native --help               # la CLI ARGUS completa (verbatim)
 olympus argus-native ip 8.8.8.8
 
-olympus vap scanners                      # tutti i 24 scanner
-olympus vap migrate                       # applica le migrazioni DB di VAP
-olympus vap serve --host 127.0.0.1 --port 8000   # avvia la web app VAP completa
+olympus aegis scanners                      # tutti i 24 scanner
+olympus aegis migrate                       # applica le migrazioni DB di VAP
+olympus aegis serve --host 127.0.0.1 --port 8000   # avvia la web app VAP completa
 ```
 
 ### Avviare la piattaforma VAP completa: nativa o Docker
@@ -223,9 +223,9 @@ olympus vap serve --host 127.0.0.1 --port 8000   # avvia la web app VAP completa
 **Nativa (processo singolo, tramite Olympus):**
 
 ```bash
-pip install -e ".[vap]"            # oppure: bash scripts/setup-vendored-tools.sh
-olympus vap migrate               # applica le migrazioni del database
-olympus vap serve --host 127.0.0.1 --port 8000
+pip install -e ".[aegis]"            # oppure: bash scripts/setup-vendored-tools.sh
+olympus aegis migrate               # applica le migrazioni del database
+olympus aegis serve --host 127.0.0.1 --port 8000
 ```
 
 Redis è opzionale sul percorso nativo: le funzioni sincrone funzionano senza, e

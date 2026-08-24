@@ -1,18 +1,16 @@
 """First-class Olympus CLI surface for the complete vendored upstream tools.
 
-These commands run the full, unmodified upstream tools that live under
-``vendor/``:
+* ``olympus argus-native`` runs the complete standalone ARGUS CLI verbatim.
+* ``olympus aegis`` drives the complete vendored Vulnerability Assessment
+  Platform (FastAPI web app, database + migrations, Celery workers, and the full
+  24-scanner catalogue). AEGIS is the Olympus-facing name for this platform; the
+  vendored upstream source under ``vendor/`` is unchanged and keeps its own
+  ``VAP_*`` configuration contract, which the integration layer passes through.
+* ``olympus vap`` is a deprecated alias that forwards to ``olympus aegis``.
 
-* ``olympus argus-native`` runs the complete standalone ARGUS CLI (all of its
-  original subcommands and its interactive menu), forwarding every argument
-  verbatim.
-* ``olympus vap`` drives the complete Vulnerability Assessment Platform — its
-  FastAPI web app, database migrations, and full 24-scanner catalogue.
-
-Heavy upstream dependencies are imported lazily, only when a command actually
-runs, and missing dependencies or external scanner binaries fail gracefully
-with actionable installation guidance rather than being treated as absent
-features.
+Heavy upstream dependencies are imported lazily; missing dependencies, services,
+or external scanner binaries fail gracefully with actionable guidance and are
+never reported as working.
 """
 
 from __future__ import annotations
@@ -23,7 +21,23 @@ import sys
 
 import typer
 
+from olympus.integrations import scanners as scanner_registry
+from olympus.integrations.diagnostics import (
+    Check,
+    Report,
+    check_binary,
+    check_env_set,
+    check_python_module,
+    check_tcp,
+    check_writable_dir,
+)
 from olympus.integrations.vendored import ARGUS_DIR, VAP_DIR, ensure_on_path, tool_path
+
+
+def _os_environ() -> dict[str, str]:
+    import os
+
+    return dict(os.environ)
 
 
 # --------------------------------------------------------------------------- #
@@ -45,12 +59,7 @@ def run_argus_native(args: list[str]) -> int:
 
 
 def register_argus_native(parent: typer.Typer) -> None:
-    """Register ``argus-native`` on ``parent`` as a raw-passthrough command.
-
-    It captures every following token (subcommand, flags, values) and forwards
-    them unchanged to the complete vendored ARGUS CLI, e.g.
-    ``olympus argus-native ip 8.8.8.8`` or ``olympus argus-native --help``.
-    """
+    """Register ``argus-native`` on ``parent`` as a raw-passthrough command."""
 
     @parent.command(
         "argus-native",
@@ -66,45 +75,37 @@ def register_argus_native(parent: typer.Typer) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Vulnerability Assessment Platform (complete app)
+# AEGIS — the complete vendored Vulnerability Assessment Platform
 # --------------------------------------------------------------------------- #
-vap_app = typer.Typer(
+aegis_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Drive the complete vendored Vulnerability Assessment Platform.",
+    help="AEGIS — Olympus vulnerability-assessment & scanner-orchestration platform.",
 )
 
 
-def _scanner_names() -> list[str]:
-    """Return the names of every vendored VAP scanner (dependency-free)."""
-    scanners = tool_path(VAP_DIR) / "scanners"
-    return sorted(
-        path.stem.removesuffix("_scanner")
-        for path in scanners.glob("*_scanner.py")
-    )
+def _emit_report(report: Report) -> None:
+    typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
 
 
-@vap_app.command("serve")
-def vap_serve(
+@aegis_app.command("serve")
+def aegis_serve(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the web app."),
     port: int = typer.Option(8000, "--port", help="Port for the web app."),
 ) -> None:
-    """Serve the complete VAP FastAPI application (Ctrl-C to stop)."""
+    """Serve the complete AEGIS FastAPI web application (Ctrl-C to stop)."""
     path = tool_path(VAP_DIR)
     env = {**_os_environ(), "VAP_HOST": host, "VAP_PORT": str(port)}
-    typer.echo(f"olympus: starting VAP web app on http://{host}:{port} (from {path})", err=True)
-    try:
-        completed = subprocess.run(
-            [sys.executable, "app.py"], cwd=str(path), env=env, check=False
-        )
-    except KeyboardInterrupt:  # pragma: no cover - interactive
-        raise typer.Exit(code=0) from None
+    typer.echo(f"olympus: starting AEGIS web app on http://{host}:{port} (from {path})", err=True)
+    completed = subprocess.run(
+        [sys.executable, "app.py"], cwd=str(path), env=env, check=False
+    )
     raise typer.Exit(code=completed.returncode)
 
 
-@vap_app.command("migrate")
-def vap_migrate() -> None:
-    """Run the VAP database migrations (alembic upgrade head)."""
+@aegis_app.command("migrate")
+def aegis_migrate() -> None:
+    """Run the AEGIS database migrations (alembic upgrade head)."""
     path = tool_path(VAP_DIR)
     completed = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
@@ -115,32 +116,253 @@ def vap_migrate() -> None:
     raise typer.Exit(code=completed.returncode)
 
 
-@vap_app.command("scanners")
-def vap_scanners() -> None:
-    """List the complete VAP scanner catalogue (all 24 integrations)."""
-    names = _scanner_names()
-    typer.echo(json.dumps({"count": len(names), "scanners": names}, indent=2, sort_keys=True))
+@aegis_app.command("workers")
+def aegis_workers(
+    queue: str = typer.Option("scans", "--queue", help="Celery queue to consume."),
+    loglevel: str = typer.Option("info", "--loglevel", help="Celery worker log level."),
+) -> None:
+    """Start an AEGIS Celery worker that runs queued scans (Ctrl-C to stop)."""
+    path = tool_path(VAP_DIR)
+    typer.echo(f"olympus: starting AEGIS Celery worker on queue '{queue}' (from {path})", err=True)
+    completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        ["celery", "-A", "celery_app.celery_app", "worker", "-Q", queue, "--loglevel", loglevel],  # noqa: S607
+        cwd=str(path),
+        env=_os_environ(),
+        check=False,
+    )
+    raise typer.Exit(code=completed.returncode)
 
 
-@vap_app.command("info")
-def vap_info() -> None:
-    """Show where the vendored VAP lives and whether its stack is importable."""
+@aegis_app.command("scanners")
+def aegis_scanners(
+    check: bool = typer.Option(
+        False, "--check", help="Also report whether each scanner's binary is available."
+    ),
+) -> None:
+    """List the complete AEGIS scanner catalogue (all 24 integrations)."""
+    specs = scanner_registry.REGISTRY
+    if not check:
+        typer.echo(
+            json.dumps(
+                {"count": len(specs), "scanners": scanner_registry.names()},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+    rows = [
+        {
+            "name": spec.name,
+            "category": spec.category,
+            "binary": spec.binary,
+            "licence": spec.licence,
+            "redistributable": spec.redistributable,
+            "in_scanner_image": spec.in_scanner_image,
+            "available": spec.available(),
+            "install": spec.install,
+        }
+        for spec in sorted(specs, key=lambda s: s.name)
+    ]
+    available = sum(1 for r in rows if r["available"])
+    typer.echo(
+        json.dumps(
+            {"count": len(rows), "available_binaries": available, "scanners": rows},
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@aegis_app.command("deps")
+def aegis_deps() -> None:
+    """Report AEGIS runtime dependencies: web stack, services, and scanner binaries."""
+    report = Report("aegis deps")
+    ensure_on_path(VAP_DIR)
+    for module in ("fastapi", "uvicorn", "sqlalchemy", "alembic", "celery", "redis"):
+        report.add(check_python_module(module, optional=True))
+    for spec in scanner_registry.REGISTRY:
+        if spec.binary:
+            report.add(check_binary(spec.binary, optional=True))
+    _emit_report(report)
+
+
+@aegis_app.command("info")
+def aegis_info() -> None:
+    """Show where AEGIS lives and whether its stack is importable."""
     import importlib.util
 
     path = tool_path(VAP_DIR)
     ensure_on_path(VAP_DIR)
     importable = importlib.util.find_spec("fastapi") is not None
+    binaries = sum(1 for s in scanner_registry.REGISTRY if s.available())
     payload = {
+        "name": "AEGIS (vendored Vulnerability Assessment Platform)",
         "path": str(path),
-        "scanners": len(_scanner_names()),
+        "scanners": len(scanner_registry.REGISTRY),
+        "scanner_binaries_available": binaries,
         "web_stack_importable": importable,
-        "install_hint": 'pip install -e ".[vap]"  (or vendor installer.sh / docker-compose.yml)',
-        "docker_compose": str(path / "docker-compose.yml"),
+        "install_hint": 'pip install -e ".[aegis]"  (or vendor installer.sh / docker compose)',
+        "docker_compose": "docker-compose.yml (services: redis, migrate, app, worker)",
     }
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
-def _os_environ() -> dict[str, str]:
+@aegis_app.command("scan")
+def aegis_scan(
+    target: str = typer.Option(..., "--target", help="Authorized target to scan."),
+    base_url: str = typer.Option(
+        "http://127.0.0.1:8000", "--url", help="Base URL of a running AEGIS server."
+    ),
+    profile: str | None = typer.Option(
+        None, "--profile", help="Scan profile/preset name (server-defined)."
+    ),
+) -> None:
+    """Enqueue a scan via a running AEGIS server's API (thin, honest HTTP client).
+
+    This posts to ``<url>/api/v1/scans``; the AEGIS server is the authority on the
+    request schema, authorization, and scope. Requires the server to be running
+    (``olympus aegis serve``) and a worker (``olympus aegis workers``).
+    """
+    import urllib.error
+    import urllib.request
+
+    body: dict[str, object] = {"target": target}
+    if profile:
+        body["profile"] = profile
+    request = urllib.request.Request(  # noqa: S310 - scheme is operator-provided base URL
+        f"{base_url.rstrip('/')}/api/v1/scans",
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
+            payload = response.read().decode("utf-8", "replace")
+            typer.echo(payload)
+    except urllib.error.HTTPError as exc:
+        # The server rejected the request (e.g. auth/scope/schema) — surface it.
+        detail = exc.read().decode("utf-8", "replace")
+        typer.echo(f"olympus: AEGIS server returned {exc.code}: {detail}", err=True)
+        raise typer.Exit(code=1) from exc
+    except urllib.error.URLError as exc:
+        typer.echo(
+            f"olympus: could not reach an AEGIS server at {base_url} ({exc.reason}). "
+            "Start it with:  olympus aegis serve",
+            err=True,
+        )
+        raise typer.Exit(code=4) from exc
+
+
+@aegis_app.command("doctor")
+def aegis_doctor() -> None:
+    """Diagnose the AEGIS runtime: web stack, DB dir, Redis, scanners, config."""
     import os
 
-    return dict(os.environ)
+    report = Report("aegis doctor")
+    ensure_on_path(VAP_DIR)
+    for module in ("fastapi", "uvicorn", "sqlalchemy", "alembic", "celery", "redis"):
+        report.add(check_python_module(module, optional=True))
+    # Redis reachability (parsed from the broker URL host/port, best effort).
+    broker = os.environ.get("VAP_CELERY_BROKER_URL", "redis://localhost:6379/0")
+    host, port = _redis_host_port(broker)
+    report.add(check_tcp(host, port, name="service:redis", optional=True))
+    report.add(check_writable_dir(os.environ.get("VAP_REPORTS_DIR", "reports"), optional=True))
+    live = os.environ.get("VAP_ENABLE_LIVE_SCANS", "false").lower() == "true"
+    live_detail = (
+        "live scans ENABLED"
+        if live
+        else "live scans disabled (scanners run in simulated mode)"
+    )
+    report.add(report_flag("config:VAP_ENABLE_LIVE_SCANS", live, live_detail))
+    for secret in ("VAP_API_KEY", "VAP_JWT_SECRET", "VAP_CSRF_SECRET"):
+        report.add(check_env_set(secret, optional=True, secret=True))
+    binaries = sum(1 for s in scanner_registry.REGISTRY if s.available())
+    report.add(
+        report_flag(
+            "scanners:binaries_available",
+            binaries > 0,
+            f"{binaries}/{len(scanner_registry.REGISTRY)} scanner binaries on PATH",
+        )
+    )
+    _emit_report(report)
+
+
+def _redis_host_port(url: str) -> tuple[str, int]:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    return (parsed.hostname or "localhost", parsed.port or 6379)
+
+
+def report_flag(name: str, ok: bool, detail: str) -> Check:
+    """Build an optional diagnostics :class:`Check` for a boolean condition."""
+    return Check(name, ok, detail, optional=True)
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated ``olympus vap`` alias -> forwards to ``olympus aegis``
+# --------------------------------------------------------------------------- #
+def register_vap_shim(parent: typer.Typer) -> None:
+    """Register a deprecated ``vap`` passthrough that forwards to ``aegis``.
+
+    Planned removal: the ``vap`` alias will be removed in a future release. Use
+    ``olympus aegis`` instead.
+    """
+
+    @parent.command(
+        "vap",
+        context_settings={
+            "allow_extra_args": True,
+            "ignore_unknown_options": True,
+            "help_option_names": [],
+        },
+        help="[DEPRECATED] Alias for 'olympus aegis' — forwards all arguments.",
+    )
+    def _vap(ctx: typer.Context) -> None:
+        from typer.main import get_command
+
+        typer.echo(
+            "olympus: 'olympus vap' is deprecated and will be removed in a future release; "
+            "use 'olympus aegis' instead.",
+            err=True,
+        )
+        command = get_command(aegis_app)
+        try:
+            command.main(args=list(ctx.args), prog_name="olympus aegis", standalone_mode=False)
+        except SystemExit as exc:  # pragma: no cover - click may raise SystemExit
+            raise typer.Exit(code=int(exc.code or 0)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# Top-level ``olympus doctor``
+# --------------------------------------------------------------------------- #
+def register_doctor(parent: typer.Typer) -> None:
+    """Register the ecosystem-wide ``olympus doctor`` diagnostic command."""
+
+    @parent.command("doctor", help="Diagnose the Olympus environment (binaries, services, deps).")
+    def _doctor() -> None:
+        report = Report("olympus doctor")
+        # Core Olympus deps.
+        for module in ("pydantic", "typer", "rich", "dns", "phonenumbers"):
+            report.add(check_python_module(module, optional=True))
+        # Common external tooling.
+        for binary in ("git", "docker", "redis-cli", "curl"):
+            report.add(check_binary(binary, optional=True))
+        # ARGUS + AEGIS stacks (importable?).
+        report.add(check_python_module("requests", optional=True))
+        report.add(check_python_module("fastapi", optional=True))
+        # Scanner binary coverage.
+        binaries = sum(1 for s in scanner_registry.REGISTRY if s.available())
+        report.add(
+            report_flag(
+                "aegis:scanner_binaries",
+                binaries > 0,
+                f"{binaries}/{len(scanner_registry.REGISTRY)} scanner binaries on PATH",
+            )
+        )
+        # Redis (default local).
+        report.add(check_tcp("localhost", 6379, name="service:redis", optional=True))
+        import tempfile
+
+        report.add(check_writable_dir(tempfile.gettempdir(), optional=True))
+        _emit_report(report)

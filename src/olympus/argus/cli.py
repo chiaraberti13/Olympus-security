@@ -931,3 +931,17 @@ def whois(
     if output is not None:
         export_whois_report(report, asset, output)
         typer.echo(f"argus: wrote WHOIS report to {output}", err=True)
+
+
+@app.command()
+def doctor() -> None:
+    """Diagnose Argus: required libraries and optional enrichment API keys."""
+    from olympus.integrations.diagnostics import Report, check_env_set, check_python_module
+
+    report = Report("argus doctor")
+    for module in ("dns", "phonenumbers"):
+        report.add(check_python_module(module, optional=False))
+    # Optional third-party enrichment keys (presence only, never the value).
+    for key in ("OLYMPUS_NUMVERIFY_KEY", "OLYMPUS_RAPIDAPI_KEY"):
+        report.add(check_env_set(key, optional=True, secret=True))
+    typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
