@@ -68,8 +68,8 @@ tests, documentation, security review, and migration notes are complete.
   - Map every upstream capability to existing Olympus code, a migration task, or an explicitly
     justified deprecation; add a contract test for the manifest.
   - Acceptance: no `unknown` entries remain and the manifest is reproducible from the pinned source.
-- [ ] **Next task: create the Vulnerability Assessment Platform parity manifest using the same criteria.**
-- [ ] Decide the final module taxonomy only after both manifests exist.
+- [x] Create the Vulnerability Assessment Platform parity manifest using the same criteria.
+- [ ] **Next task: decide the final module taxonomy now that both manifests exist.**
   - Reuse an existing category only if its responsibility and data contract are a clean fit.
   - Otherwise create a clearly named module; do not force unrelated orchestration into a scanner.
 - [ ] Produce a target architecture decision record covering package boundaries, dependency
@@ -147,3 +147,12 @@ tests, documentation, security review, and migration notes are complete.
   data models, outputs, and security behavior.
 - **Verification:** a contract test rejects CLI drift, missing mapped files, mutable provenance,
   external CLI dependencies, and incomplete integration/security entries.
+
+### Cycle 3 — inventory the Vulnerability Assessment Platform boundary
+
+- **Task:** create the machine-readable platform parity and gap manifest.
+- **Result:** completed on 2026-08-24; the manifest pins the audited Olympus baseline, maps reusable
+  capabilities, identifies every missing or partial platform responsibility, and concludes that
+  orchestration requires a new application boundary rather than being forced into a scanner.
+- **Verification:** contract tests reject mutable provenance, external CLI dependencies, invalid or
+  incomplete parity decisions, unsafe file mappings, and missing platform contracts.
