@@ -109,11 +109,24 @@ successfully. No prior experience with Olympus is needed.
 
 Open a terminal and paste:
 
+First verify that Python 3.11 or newer is available (macOS commonly exposes it as `python3`,
+not `python`):
+
+```bash
+python3 --version
+```
+
+If that command is missing on macOS, install Python from
+[python.org](https://www.python.org/downloads/macos/) or with Homebrew (`brew install python`),
+then open a new terminal. Do not use the legacy system Python.
+
 ```bash
 git clone https://github.com/chiaraberti13/olympus-security.git
 cd olympus-security
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
 
 The `venv` is an isolated Python environment: everything you install stays inside the `.venv`
@@ -439,11 +452,25 @@ successo. Non serve alcuna esperienza precedente con Olympus.
 
 Apri un terminale e incolla:
 
+Verifica prima che sia disponibile Python 3.11 o successivo (su macOS è normalmente esposto
+come `python3`, non come `python`):
+
+```bash
+python3 --version
+```
+
+Se su macOS anche questo comando non esiste, installa Python da
+[python.org](https://www.python.org/downloads/macos/) oppure con Homebrew
+(`brew install python`), quindi apri un nuovo terminale. Non usare il vecchio Python di
+sistema.
+
 ```bash
 git clone https://github.com/chiaraberti13/olympus-security.git
 cd olympus-security
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
 
 Il `venv` è un ambiente Python isolato: tutto quello che installi resta dentro la cartella
@@ -684,4 +711,3 @@ cd .. && rm -rf olympus-security   # rimuove il repository stesso, se non ti ser
 ```
 
 Non tocca nulla fuori dalla cartella del progetto: nessun file scritto altrove sul sistema.
-
