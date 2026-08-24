@@ -46,7 +46,7 @@
     "scan": {
       "options": ["--domain", "--scope", "--log", "--output"],
       "capabilities": ["dns", "mx", "spf", "dmarc", "certificate-transparency"],
-      "mapping": ["recon.py", "resolver.py", "ct.py", "assets.py", "scope.py"]
+      "mapping": ["application.py", "recon.py", "resolver.py", "ct.py", "assets.py", "scope.py"]
     }
   },
   "configuration": {

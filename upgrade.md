@@ -78,7 +78,10 @@ tests, documentation, security review, and migration notes are complete.
 
 ## Phase 2 — shared architecture and safe execution
 
-- [ ] **Next task: separate domain logic from Typer command handlers in every affected module.**
+- [~] Separate domain logic from Typer command handlers in every affected module.
+  - [x] Argus `scan`: scoped application service with injected DNS and CT ports.
+  - [ ] **Next task: Argus `fronting` application service.**
+  - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
 - [ ] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
@@ -174,3 +177,12 @@ tests, documentation, security review, and migration notes are complete.
   authorization/audit rules, an honest CLI-first UX, and capability-led migration.
 - **Verification:** architecture contract tests require every decision section and critical security
   invariant; `make check` remains the completion gate.
+
+### Cycle 6 — separate Argus domain scan from Typer
+
+- **Task:** extract the first closed domain/application slice from the Argus `scan` handler.
+- **Result:** completed on 2026-08-24; `DomainScanService` now owns scope-first orchestration through
+  injected DNS and Certificate Transparency ports, while Typer only constructs dependencies,
+  translates errors, exports assets, and renders output.
+- **Verification:** direct offline tests prove successful orchestration and prove that out-of-scope
+  targets are audited before either network-capable dependency is called.
