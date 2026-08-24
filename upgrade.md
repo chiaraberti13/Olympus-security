@@ -72,13 +72,13 @@ tests, documentation, security review, and migration notes are complete.
 - [x] Decide the final module taxonomy now that both manifests exist.
   - Reuse an existing category only if its responsibility and data contract are a clean fit.
   - Otherwise create a clearly named module; do not force unrelated orchestration into a scanner.
-- [ ] **Next task: produce a target architecture decision record covering package boundaries,
+- [x] Produce a target architecture decision record covering package boundaries,
   dependency direction, execution model, persistence, CLI/possible UI boundaries, and migration
-  strategy.**
+  strategy.
 
 ## Phase 2 — shared architecture and safe execution
 
-- [ ] Separate domain logic from Typer command handlers in every affected module.
+- [ ] **Next task: separate domain logic from Typer command handlers in every affected module.**
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
 - [ ] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
@@ -165,3 +165,12 @@ tests, documentation, security review, and migration notes are complete.
   reserves `olympus athena`, while keeping scanner algorithms and reporting in their current owners.
 - **Verification:** the platform manifest contract locks the selected module and entrypoint; the ADR
   defines ownership, dependency, UX, and security boundaries without exposing a placeholder CLI.
+
+### Cycle 5 — define Athena's target architecture
+
+- **Task:** decide package boundaries, dependencies, execution, persistence, interfaces, and migration.
+- **Result:** completed on 2026-08-24; ADR-002 defines an inward-dependency architecture, immutable
+  domain contracts, typed ports/adapters, bounded local execution, transactional SQLite recovery,
+  authorization/audit rules, an honest CLI-first UX, and capability-led migration.
+- **Verification:** architecture contract tests require every decision section and critical security
+  invariant; `make check` remains the completion gate.
