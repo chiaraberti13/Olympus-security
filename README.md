@@ -14,10 +14,13 @@
 *A single binary, one shared data contract, offline-first and scope-safe by design.*
 
 <p align="center">
+  <a href="README.md">🇬🇧 English</a> | <a href="README-IT.md">🇮🇹 Italiano</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/chiaraberti13/olympus-security/actions"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue?style=for-the-badge" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge" alt="Python 3.11+">
-  <img src="https://img.shields.io/badge/typed-strict%20mypy-informational?style=for-the-badge" alt="Strict mypy">
   <img src="https://img.shields.io/badge/modules-10-blue?style=for-the-badge" alt="10 modules">
 </p>
 
@@ -40,7 +43,7 @@
 - **[Quick start](#-quick-start)** — a verified recon → assessment → report path.
 - **[Configuration](#-configuration)** — scope files, config, and secrets.
 - **[Project structure](#-project-structure)** — how the repository is laid out.
-- **[Development](#-development)** — the single `make check` quality gate.
+- **[Development](#-development)** — optional quality tooling (never a gate).
 - **[Security model](#-security-model)** — scope, authorization, SSRF, audit.
 - **[Migration](#-migration)** — ARGUS and the Vulnerability Assessment Platform.
 - **[License](#-license)** — MIT, for the whole repository.
@@ -86,6 +89,8 @@ $ olympus athena run plan.json --storage ./.athena
 | **Minerva** | `olympus minerva` | Incident triage and chain-of-custody records. |
 | **Vulcan** | `olympus vulcan` | Aggregation, deduplication, ranking and report rendering. |
 | **core** | `olympus core` | Shared data-contract utilities (e.g. `export-schemas`). |
+| **ARGUS (complete)** | `olympus argus-native` | The full standalone ARGUS OSINT CLI, vendored verbatim under `vendor/` — every original subcommand plus the interactive menu. |
+| **VAP (complete)** | `olympus vap` | The full Vulnerability Assessment Platform, vendored verbatim — FastAPI web app, all **24 scanners**, database + migrations, reports. |
 
 > [!TIP]
 > Run any module with `--help` to see its commands, or
@@ -164,15 +169,20 @@ tests/                # offline, deterministic unit & contract tests
 
 ## 🧪 Development
 
-The project has a single quality gate — *green or not done*:
+Quality tooling is **optional** and never blocks work: linting, type checking,
+tests, and coverage are helpers, not a completion gate. A tool is "complete"
+when it has 100% functional feature parity — not when a gate passes.
 
 ```bash
-make check     # ruff (lint) + strict mypy + tests with ≥90% coverage
+make lint      # ruff (optional)
+make type      # mypy   (optional)
+make test      # pytest (optional)
+make check     # runs all three, non-blocking — informational only
 ```
 
-Ruff, strict `mypy`, and a dependency-free coverage gate all run in CI.
-See [`docs/architecture/`](docs/architecture) for the accepted design decisions
-and [`docs/parity/`](docs/parity) for the upstream capability manifests.
+See [`docs/architecture/`](docs/architecture) for the accepted design decisions,
+[`docs/parity/`](docs/parity) for the upstream capability manifests, and
+[`vendor/`](vendor) for the complete, in-repository upstream tools.
 
 ## 🔐 Security model
 
@@ -186,19 +196,36 @@ and [`docs/parity/`](docs/parity) for the upstream capability manifests.
 - **Redacted audit trail**: append-only events with allowlisted metadata only —
   never credentials, bodies, or raw findings.
 
-## 🔁 Migration
+## 🔁 Migration & vendored tools
 
 The standalone **ARGUS** OSINT toolkit and **Vulnerability Assessment Platform**
 are implemented **inside this repository** — no submodule, wrapper, or external
-CLI at runtime. Their capability contracts and provenance are pinned in
-[`docs/parity/`](docs/parity), and Athena's target architecture is recorded in
-[ADR-002](docs/architecture/adr-002-athena-target-architecture.md).
+CLI at runtime. The **complete, unmodified upstream source** of each is vendored
+under [`vendor/`](vendor) and wired into `olympus` as first-class commands, so
+the original repositories can be deleted without losing anything:
 
-- ARGUS commands map to `olympus argus …` (see the module `--help`).
-- Vulnerability-assessment orchestration maps to `olympus athena …`.
+```bash
+bash scripts/setup-vendored-tools.sh      # install both tools' dependencies
 
-Exhaustive command walkthroughs (including the guided practice-target path) live
-in [`docs/reference.md`](docs/reference.md).
+olympus argus-native --help               # the complete ARGUS CLI (verbatim)
+olympus argus-native ip 8.8.8.8
+
+olympus vap scanners                      # all 24 scanner integrations
+olympus vap migrate                       # apply the VAP database migrations
+olympus vap serve --host 127.0.0.1 --port 8000   # serve the full VAP web app
+```
+
+External scanner **binaries** (nmap, nuclei, sqlmap, wpscan, …) and the full
+runtime (Redis/Celery) are provisioned reproducibly by the vendored
+`installer.sh` and `docker-compose.yml`; a scanner with no binary present
+reports a clear "tool not installed" state rather than failing silently.
+
+Olympus also ships **native** re-implementations: `olympus argus …`
+(scope-first OSINT) and `olympus athena …` (assessment orchestration). Their
+capability contracts and provenance are pinned in
+[`docs/parity/`](docs/parity) and [`docs/provenance.md`](docs/provenance.md);
+Athena's architecture is [ADR-002](docs/architecture/adr-002-athena-target-architecture.md).
+Exhaustive walkthroughs live in [`docs/reference.md`](docs/reference.md).
 
 ## 📄 License
 

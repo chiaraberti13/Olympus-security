@@ -1,0 +1,8 @@
+# Core runtime dependencies for Argus
+requests>=2.31.0
+phonenumbers>=8.13.0
+rich>=13.0.0
+
+# Optional but recommended — enables real MX-record checks in the email module.
+# Install with:  pip install dnspython
+# dnspython>=2.4.0
