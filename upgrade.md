@@ -69,11 +69,12 @@ tests, documentation, security review, and migration notes are complete.
     justified deprecation; add a contract test for the manifest.
   - Acceptance: no `unknown` entries remain and the manifest is reproducible from the pinned source.
 - [x] Create the Vulnerability Assessment Platform parity manifest using the same criteria.
-- [ ] **Next task: decide the final module taxonomy now that both manifests exist.**
+- [x] Decide the final module taxonomy now that both manifests exist.
   - Reuse an existing category only if its responsibility and data contract are a clean fit.
   - Otherwise create a clearly named module; do not force unrelated orchestration into a scanner.
-- [ ] Produce a target architecture decision record covering package boundaries, dependency
-  direction, execution model, persistence, CLI/possible UI boundaries, and migration strategy.
+- [ ] **Next task: produce a target architecture decision record covering package boundaries,
+  dependency direction, execution model, persistence, CLI/possible UI boundaries, and migration
+  strategy.**
 
 ## Phase 2 — shared architecture and safe execution
 
@@ -156,3 +157,11 @@ tests, documentation, security review, and migration notes are complete.
   orchestration requires a new application boundary rather than being forced into a scanner.
 - **Verification:** contract tests reject mutable provenance, external CLI dependencies, invalid or
   incomplete parity decisions, unsafe file mappings, and missing platform contracts.
+
+### Cycle 4 — select the final module taxonomy
+
+- **Task:** decide whether assessment orchestration belongs to an existing category or a new one.
+- **Result:** completed on 2026-08-24; ADR-001 assigns orchestration to the new `athena` module and
+  reserves `olympus athena`, while keeping scanner algorithms and reporting in their current owners.
+- **Verification:** the platform manifest contract locks the selected module and entrypoint; the ADR
+  defines ownership, dependency, UX, and security boundaries without exposing a placeholder CLI.
