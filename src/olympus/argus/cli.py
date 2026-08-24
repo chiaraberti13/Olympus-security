@@ -22,6 +22,7 @@ from olympus.argus.accounts_scope import (
     AccountScopeError,
     enforce_account_scope,
 )
+from olympus.argus.application import DomainScanRequest, DomainScanService
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.diff import diff_snapshots
@@ -69,7 +70,6 @@ from olympus.argus.phone_scope import (
     PhoneScopeError,
     enforce_phone_scope,
 )
-from olympus.argus.recon import scan_domain
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.argus.transforms import TransformContext, run_investigation
@@ -135,7 +135,9 @@ def scan(
 ) -> None:
     """Run passive DNS/MX/SPF/DMARC recon against a single in-scope domain."""
     try:
-        enforce_scope(domain, scope, log)
+        result = DomainScanService(DnspythonResolver(), CrtShClient()).run(
+            DomainScanRequest(domain=domain, scope_path=scope, audit_log_path=log)
+        )
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -143,8 +145,6 @@ def scan(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    try:
-        result = scan_domain(domain, DnspythonResolver(), CrtShClient())
     except CertificateTransparencyError as exc:
         typer.echo(f"argus: Certificate Transparency error: {exc}", err=True)
         raise typer.Exit(code=4) from exc
