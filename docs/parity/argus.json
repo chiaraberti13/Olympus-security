@@ -23,6 +23,26 @@
       "capabilities": ["offline-snapshot-diff"],
       "mapping": ["diff.py"]
     },
+    "dns": {
+      "options": ["--domain", "--types", "--scope", "--log", "--output"],
+      "capabilities": ["doh-record-enumeration", "scope-enforced"],
+      "mapping": ["dns_records.py", "scope.py"]
+    },
+    "email": {
+      "options": ["--email", "--enrich", "--scope", "--log", "--i-am-authorized", "--output"],
+      "capabilities": ["offline-email-analysis", "optional-mx-check", "optional-gravatar-presence"],
+      "mapping": ["email_osint.py", "resolver.py", "scope.py"]
+    },
+    "mac": {
+      "options": ["--mac", "--vendor", "--output"],
+      "capabilities": ["offline-mac-classification", "optional-oui-vendor"],
+      "mapping": ["mac.py"]
+    },
+    "myip": {
+      "options": ["--geo", "--output"],
+      "capabilities": ["public-ip-discovery", "optional-self-geo"],
+      "mapping": ["myip.py", "ip_osint.py"]
+    },
     "fronting": {
       "options": ["--domain", "--scope", "--log", "--asset-id", "--output"],
       "capabilities": ["cdn-waf-detection", "passive-origin-leak-candidates"],
@@ -47,6 +67,16 @@
       "options": ["--domain", "--scope", "--log", "--output"],
       "capabilities": ["dns", "mx", "spf", "dmarc", "certificate-transparency"],
       "mapping": ["application.py", "recon.py", "resolver.py", "ct.py", "assets.py", "scope.py"]
+    },
+    "web": {
+      "options": ["--url", "--scope", "--log", "--output"],
+      "capabilities": ["passive-http-recon", "security-header-audit", "scope-enforced"],
+      "mapping": ["web.py", "scope.py"]
+    },
+    "whois": {
+      "options": ["--domain", "--scope", "--log", "--output"],
+      "capabilities": ["rdap-registration", "scope-enforced"],
+      "mapping": ["whois.py", "dns_records.py", "scope.py"]
     }
   },
   "configuration": {
@@ -61,10 +91,15 @@
     {"name": "Hudson Rock", "purpose": "optional breach exposure", "mandatory": false},
     {"name": "RapidAPI", "purpose": "optional messaging presence", "mandatory": false},
     {"name": "ip-api.com", "purpose": "optional IP geolocation and ASN", "mandatory": false},
-    {"name": "curated public sites", "purpose": "account presence and optional metadata", "mandatory": false}
+    {"name": "curated public sites", "purpose": "account presence and optional metadata", "mandatory": false},
+    {"name": "Cloudflare/Google DoH", "purpose": "DNS record enumeration over HTTPS", "mandatory": false},
+    {"name": "rdap.org", "purpose": "domain registration data (WHOIS successor)", "mandatory": false},
+    {"name": "Gravatar", "purpose": "optional public avatar presence for an email", "mandatory": false},
+    {"name": "macvendors.com", "purpose": "optional OUI-to-vendor resolution", "mandatory": false},
+    {"name": "ipify/ifconfig.co", "purpose": "operator public IP discovery", "mandatory": false}
   ],
-  "data_models": ["AccountIntel", "Asset", "Finding", "FrontingReport", "InvestigationGraph", "IpIntel", "PhoneIntel", "ReconResult"],
-  "outputs": ["core.Asset JSON", "core.Finding JSON", "snapshot diff JSON", "Argus bundle JSON", "Mermaid", "Graphviz DOT", "GraphML", "NDJSON audit logs"],
+  "data_models": ["AccountIntel", "Asset", "DnsRecordReport", "EmailIntel", "Finding", "FrontingReport", "InvestigationGraph", "IpIntel", "MacIntel", "PhoneIntel", "ReconResult", "WebIntel", "WhoisReport"],
+  "outputs": ["core.Asset JSON", "core.Finding JSON", "snapshot diff JSON", "Argus bundle JSON", "email/mac/web intel JSON", "DNS/WHOIS report JSON", "Mermaid", "Graphviz DOT", "GraphML", "NDJSON audit logs"],
   "security_contract": [
     "scope is checked before target network activity",
     "out-of-scope attempts are blocked and audited",
@@ -72,6 +107,9 @@
     "investigation depth is limited to three hops",
     "account concurrency is limited to 64",
     "HTTP uses shared bounded timeout, retry, size and rate controls",
-    "origin leak assessment never connects to a candidate origin"
+    "origin leak assessment never connects to a candidate origin",
+    "web, dns and whois lookups enforce engagement scope before connecting",
+    "email enrichment is gated behind explicit authorization and domain scope",
+    "email address hashes are recorded but never resolved back to plaintext secrets"
   ]
 }

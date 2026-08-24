@@ -8,6 +8,7 @@ scan``). ``olympus core`` groups data-contract utilities.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 
@@ -15,6 +16,7 @@ from olympus import __version__
 from olympus.apollo.cli import app as apollo_app
 from olympus.argus.cli import app as argus_app
 from olympus.artemis.cli import app as artemis_app
+from olympus.athena.cli import app as athena_app
 from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident
 from olympus.helios.cli import app as helios_app
 from olympus.hermes.cli import app as hermes_app
@@ -51,8 +53,13 @@ core_app = typer.Typer(help="Core data-contract utilities.", no_args_is_help=Tru
 
 
 @core_app.command("export-schemas")
-def export_schemas() -> None:
-    """Print the JSON Schema of the core models to stdout."""
+def export_schemas(
+    output_dir: Path | None = typer.Argument(
+        None,
+        help="Optional directory to write schemas.json into; prints to stdout when omitted.",
+    ),
+) -> None:
+    """Print the JSON Schema of the core models, or write it to a directory."""
     schemas = {
         "olympus.asset": Asset.model_json_schema(),
         "olympus.finding": Finding.model_json_schema(),
@@ -61,11 +68,19 @@ def export_schemas() -> None:
         "olympus.alert": Alert.model_json_schema(),
         "olympus.incident": Incident.model_json_schema(),
     }
-    typer.echo(json.dumps(schemas, indent=2, sort_keys=True))
+    payload = json.dumps(schemas, indent=2, sort_keys=True)
+    if output_dir is None:
+        typer.echo(payload)
+        return
+    output_dir.mkdir(parents=True, exist_ok=True)
+    destination = output_dir / "schemas.json"
+    destination.write_text(payload, encoding="utf-8")
+    typer.echo(f"olympus: wrote core schemas to {destination}", err=True)
 
 
 app.add_typer(core_app, name="core")
 app.add_typer(argus_app, name="argus")
+app.add_typer(athena_app, name="athena")
 app.add_typer(helios_app, name="helios")
 app.add_typer(artemis_app, name="artemis")
 app.add_typer(proteus_app, name="proteus")

@@ -26,6 +26,22 @@ from olympus.argus.application import DomainScanRequest, DomainScanService
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.diff import diff_snapshots
+from olympus.argus.dns_records import (
+    DnsRecordError,
+    build_dns_asset,
+    export_dns_report,
+    resolve_records,
+)
+from olympus.argus.email_osint import (
+    EmailEnrichment,
+    EmailIntel,
+    EmailParseError,
+    analyze_email,
+    build_email_asset,
+    build_email_findings,
+    enrich_email,
+    export_email_intel,
+)
 from olympus.argus.enrichment import (
     EnrichmentError,
     HudsonRockBreachClient,
@@ -57,6 +73,16 @@ from olympus.argus.ip_scope import (
     IpScopeError,
     enforce_ip_scope,
 )
+from olympus.argus.mac import (
+    MacIntel,
+    MacParseError,
+    analyze_mac,
+    build_mac_asset,
+    build_mac_findings,
+    export_mac_intel,
+    lookup_vendor,
+)
+from olympus.argus.myip import MyIpError, discover, export_myip
 from olympus.argus.phone import (
     PhoneIntel,
     PhoneParseError,
@@ -73,6 +99,21 @@ from olympus.argus.phone_scope import (
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.argus.transforms import TransformContext, run_investigation
+from olympus.argus.web import (
+    WebIntel,
+    WebReconError,
+    build_web_asset,
+    build_web_findings,
+    export_web_intel,
+    fetch_web,
+    host_of,
+)
+from olympus.argus.whois import (
+    WhoisError,
+    build_whois_asset,
+    export_whois_report,
+    lookup_domain,
+)
 from olympus.core.http import UrllibHttpClient
 
 app = typer.Typer(
@@ -651,3 +692,242 @@ def investigate(
         f"{len(graph.relationships)} edge(s); {output}",
         err=True,
     )
+
+
+DEFAULT_EMAIL_OUTPUT = Path("examples/output/argus-email.json")
+DEFAULT_WEB_OUTPUT = Path("examples/output/argus-web.json")
+DEFAULT_DNS_OUTPUT = Path("examples/output/argus-dns.json")
+DEFAULT_WHOIS_OUTPUT = Path("examples/output/argus-whois.json")
+
+_EMAIL_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — --enrich runs passive live lookups (MX resolution and Gravatar "
+    "presence) about a real person's address. Run it only with documented authorization or "
+    "consent. Re-run with --i-am-authorized to confirm."
+)
+
+
+@app.command()
+def email(
+    address: str = typer.Option(..., "--email", help="Email address to analyze."),
+    enrich: bool = typer.Option(
+        False, "--enrich", help="Run passive live MX + Gravatar checks (network, opt-in)."
+    ),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH, "--scope", help="JSON scope file (domain must be in scope to enrich)."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH, "--log", help="Path to the out-of-scope audit log."
+    ),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm authorization for the live enrichment."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the email-intel bundle as JSON to this path."
+    ),
+) -> None:
+    """Analyze an email address offline; optionally run passive live enrichment."""
+    try:
+        report = analyze_email(address)
+    except EmailParseError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    enrichment: EmailEnrichment | None = None
+    if enrich:
+        if not i_am_authorized:
+            typer.echo(f"argus: {_EMAIL_DISCLAIMER}", err=True)
+            raise typer.Exit(code=4)
+        try:
+            enforce_scope(report.domain, scope, log)
+        except ScopeError as exc:
+            typer.echo(f"argus: scope error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        except OutOfScopeError as exc:
+            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+            raise typer.Exit(code=3) from exc
+        enrichment = enrich_email(report, DnspythonResolver(), UrllibHttpClient.from_config())
+
+    asset = build_email_asset(report, enrichment)
+    findings = build_email_findings(asset.asset_id, report, enrichment)
+    intel = EmailIntel(report=report, asset=asset, enrichment=enrichment, findings=findings)
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    if output is not None:
+        export_email_intel(intel, output)
+        typer.echo(f"argus: wrote email intel to {output}", err=True)
+
+
+@app.command()
+def mac(
+    address: str = typer.Option(..., "--mac", help="MAC address to classify."),
+    vendor: bool = typer.Option(
+        False, "--vendor", help="Resolve the OUI to a vendor via macvendors.com (network)."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the MAC-intel bundle as JSON to this path."
+    ),
+) -> None:
+    """Classify a MAC address offline; optionally resolve its vendor from the OUI registry."""
+    try:
+        report = analyze_mac(address)
+    except MacParseError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    vendor_name = lookup_vendor(report, UrllibHttpClient.from_config()) if vendor else None
+    asset = build_mac_asset(report, vendor_name)
+    findings = build_mac_findings(asset.asset_id, report)
+    intel = MacIntel(report=report, asset=asset, vendor=vendor_name, findings=findings)
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    if output is not None:
+        export_mac_intel(intel, output)
+        typer.echo(f"argus: wrote MAC intel to {output}", err=True)
+
+
+@app.command()
+def myip(
+    geo: bool = typer.Option(
+        False, "--geo", help="Classify and geolocate the discovered public IP (network)."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the result as JSON to this path."
+    ),
+) -> None:
+    """Discover this machine's own public IP address (and optionally geolocate it)."""
+    try:
+        result = discover(UrllibHttpClient.from_config(), geolocate=geo)
+    except MyIpError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+    typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    if output is not None:
+        export_myip(result, output)
+        typer.echo(f"argus: wrote myip result to {output}", err=True)
+
+
+@app.command()
+def web(
+    url: str = typer.Option(..., "--url", help="Target URL or host for passive HTTP recon."),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH, "--scope", help="JSON scope file listing authorized domains."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH, "--log", help="Path to the out-of-scope audit log."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the web-intel bundle as JSON to this path."
+    ),
+) -> None:
+    """Fetch an in-scope URL once and report its passive HTTP security posture."""
+    try:
+        host = host_of(url)
+    except WebReconError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    try:
+        enforce_scope(host, scope, log)
+    except ScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+
+    try:
+        report = fetch_web(url, UrllibHttpClient.from_config())
+    except WebReconError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+
+    asset = build_web_asset(report)
+    findings = build_web_findings(asset.asset_id, report)
+    intel = WebIntel(report=report, asset=asset, findings=findings)
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    if output is not None:
+        export_web_intel(intel, output)
+        typer.echo(f"argus: wrote web intel to {output}", err=True)
+    if findings:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def dns(
+    domain: str = typer.Option(..., "--domain", help="Domain to enumerate DNS records for."),
+    types: str | None = typer.Option(
+        None, "--types", help="Comma-separated record types (default: A,AAAA,MX,TXT,NS,CNAME,SOA)."
+    ),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH, "--scope", help="JSON scope file listing authorized domains."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH, "--log", help="Path to the out-of-scope audit log."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the DNS report as JSON to this path."
+    ),
+) -> None:
+    """Enumerate DNS records for an in-scope domain over DNS-over-HTTPS."""
+    try:
+        enforce_scope(domain, scope, log)
+    except ScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+
+    record_types = (
+        tuple(t.strip().upper() for t in types.split(",") if t.strip()) if types else None
+    )
+    try:
+        report = (
+            resolve_records(domain, UrllibHttpClient.from_config(), record_types)
+            if record_types
+            else resolve_records(domain, UrllibHttpClient.from_config())
+        )
+    except DnsRecordError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+
+    asset = build_dns_asset(report)
+    payload = {"report": report.to_dict(), "asset": json.loads(asset.model_dump_json())}
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    if output is not None:
+        export_dns_report(report, asset, output)
+        typer.echo(f"argus: wrote DNS report to {output}", err=True)
+
+
+@app.command()
+def whois(
+    domain: str = typer.Option(..., "--domain", help="Domain to query registration data for."),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH, "--scope", help="JSON scope file listing authorized domains."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH, "--log", help="Path to the out-of-scope audit log."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the WHOIS report as JSON to this path."
+    ),
+) -> None:
+    """Query registration data (registrar, dates, name servers) for an in-scope domain via RDAP."""
+    try:
+        enforce_scope(domain, scope, log)
+    except ScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+
+    try:
+        report = lookup_domain(domain, UrllibHttpClient.from_config())
+    except WhoisError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+
+    asset = build_whois_asset(report)
+    payload = {"report": report.to_dict(), "asset": json.loads(asset.model_dump_json())}
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    if output is not None:
+        export_whois_report(report, asset, output)
+        typer.echo(f"argus: wrote WHOIS report to {output}", err=True)

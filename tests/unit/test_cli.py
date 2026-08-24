@@ -56,3 +56,11 @@ def test_exit_codes_are_canonical() -> None:
     assert (ExitCode.OK, ExitCode.USAGE, ExitCode.OUT_OF_SCOPE, ExitCode.NOT_AUTHORIZED) == (
         0, 2, 3, 4
     )
+
+
+def test_export_schemas_writes_directory(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    out = tmp_path / "schemas-dir"
+    result = runner.invoke(app, ["core", "export-schemas", str(out)])
+    assert result.exit_code == 0
+    payload = json.loads((out / "schemas.json").read_text())
+    assert "olympus.asset" in payload

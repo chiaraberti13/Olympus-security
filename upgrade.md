@@ -45,20 +45,18 @@ tests, documentation, security review, and migration notes are complete.
 
 ### Known problems and risks
 
-- [!] Upstream source inventory is blocked in the current environment: direct GitHub clone returns
-  HTTP 403 and the browsing service returns HTTP 401. Feature parity cannot be asserted from names,
-  memory, or the current Olympus implementation; it must be measured from an accessible pinned
-  upstream revision.
-- [!] `README.md` is a very long bilingual document with duplicated navigation burden and no
-  contributor-facing architecture or migration section. Its claims of complete command coverage
-  must be generated or tested against the actual CLI during the documentation phase.
-- [!] The repository already contains an `olympus.argus` package, but its provenance and complete
-  parity with standalone ARGUS have not yet been demonstrated.
-- [!] No local package is explicitly identified as the complete Vulnerability Assessment Platform;
-  mapping it onto an existing module before the parity inventory would risk silently losing
-  upstream capabilities.
-- [!] `Makefile` documents `olympus core export-schemas ./examples/output`, while the current CLI
-  implementation prints schemas to stdout and accepts no destination argument.
+- [x] Upstream source inventory (previously blocked by HTTP 403/401) is now resolved: both upstream
+  repositories were cloned at pinned revisions and their capabilities measured directly. Provenance
+  is recorded in `docs/provenance.md` and the parity manifests.
+- [x] `README.md` was a very long bilingual document with no architecture or migration section.
+  Rewritten (Cycle 8) to the concise project standard; the exhaustive guide is preserved in
+  `docs/reference.md`, and command coverage is enforced by the parity contract tests.
+- [x] The `olympus.argus` package now demonstrates provenance and full command parity with standalone
+  ARGUS (the six previously missing capabilities were added and tested in Cycle 8).
+- [x] The Vulnerability Assessment Platform is now implemented as the `olympus.athena` module without
+  forcing orchestration into a scanner; remaining gaps are tracked honestly in its parity manifest.
+- [x] `Makefile` / `olympus core export-schemas ./examples/output` mismatch is fixed: the command now
+  accepts an optional output directory and writes `schemas.json` there (Cycle 8).
 - [x] CI strict-mypy regression: the ARGUS parity test imported transitive dependency `click`
   directly, whose implementation/stubs were unavailable in CI. Fixed by introspecting Typer's
   generated command through an `Any` boundary without adding an unnecessary direct dependency.
@@ -96,33 +94,48 @@ tests, documentation, security review, and migration notes are complete.
 
 ## Phase 3 — complete in-repository ARGUS integration
 
-- [ ] Close every gap in the approved ARGUS parity manifest without runtime dependence on the
+- [x] Close every gap in the approved ARGUS parity manifest without runtime dependence on the
   standalone repository.
-- [ ] Preserve or deliberately migrate all supported ARGUS inputs, commands, outputs, and workflows.
-- [ ] Add unit, contract, and offline integration tests for every imported capability.
+  - The six missing standalone-ARGUS capabilities are now first-class `olympus argus` commands:
+    `email`, `mac`, `myip`, `web`, `dns`, and `whois`, alongside the existing scope-first commands.
+- [x] Preserve or deliberately migrate all supported ARGUS inputs, commands, outputs, and workflows.
+- [x] Add unit, contract, and offline integration tests for every imported capability.
 - [ ] Add bounded live-network smoke tests that are opt-in and restricted to authorized fixtures.
-- [ ] Document ARGUS migration, examples, limitations, and provenance.
+- [x] Document ARGUS migration, examples, limitations, and provenance (`docs/provenance.md`, README).
 
 ## Phase 4 — complete in-repository Vulnerability Assessment Platform integration
 
-- [ ] Create or select the module boundary approved in the architecture decision.
-- [ ] Close every gap in the approved platform parity manifest without runtime dependence on the
+- [x] Create or select the module boundary approved in the architecture decision.
+  - The `olympus.athena` package implements ADR-002: `domain/`, `application/`, `ports.py`,
+    `adapters/` (sqlite, audit, report, tools), and a CLI-first surface.
+- [~] Close every gap in the approved platform parity manifest without runtime dependence on the
   standalone repository.
-- [ ] Implement real assessment orchestration end to end: validated input, execution, progress and
+  - Plans, orchestration, storage, audit, and reporting are implemented; the broad external-tool
+    scanner suite and the deferred web API/UI remain honest manifest gaps.
+- [x] Implement real assessment orchestration end to end: validated input, execution, progress and
   failure states, persisted results, deduplication, and export through shared contracts.
-- [ ] Apply SSRF protections, target/scope enforcement, subprocess isolation where applicable,
+- [~] Apply SSRF protections, target/scope enforcement, subprocess isolation where applicable,
   resource limits, cancellation, and secret redaction.
-- [ ] Add unit, contract, offline integration, and authorized opt-in end-to-end tests.
-- [ ] Document platform migration, operation, recovery, limitations, and provenance.
+  - SSRF guard, scope re-validation, bounded concurrency/timeout/deadline, cooperative cancellation,
+    and redacted audit are implemented; subprocess isolation applies only once external-tool adapters
+    are added.
+- [~] Add unit, contract, offline integration, and authorized opt-in end-to-end tests.
+  - Offline unit/contract/integration and CLI end-to-end tests are in place; authorized live-network
+    end-to-end tests remain opt-in future work.
+- [x] Document platform migration, operation, recovery, limitations, and provenance.
 
 ## Phase 5 — UX and documentation restructuring
 
-- [ ] Define task-based information architecture for installation, quick start, modules, recipes,
+- [~] Define task-based information architecture for installation, quick start, modules, recipes,
   architecture, security model, development, and migration.
-- [ ] Refactor `README.md` to the same concise, consistent standard selected for the project, with a
+  - The README now follows a task-based structure; a dedicated recipes page is still pending.
+- [x] Refactor `README.md` to the same concise, consistent standard selected for the project, with a
   short value proposition and verified quick start; move exhaustive reference material to `docs/`.
+  - The exhaustive bilingual guide moved to `docs/reference.md`; the new README mirrors the ARGUS
+    standard (quick navigation, modules table, verified quick start, security model, migration).
 - [ ] Generate or test CLI reference documentation so it cannot drift from Typer commands.
-- [ ] Make errors consistent and actionable across commands, including exit codes and remediation.
+- [~] Make errors consistent and actionable across commands, including exit codes and remediation.
+  - Argus and Athena share the canonical exit-code convention; older modules are not yet audited.
 - [ ] If a web interface is retained or introduced, implement accessible loading, empty, partial,
   success, and failure states backed by real application logic.
 
@@ -197,3 +210,30 @@ tests, documentation, security review, and migration notes are complete.
   runtime CLI introspection to an explicit `Any` boundary around Typer's generated command.
 - **Verification:** the focused contract test, strict mypy, Ruff, and the complete quality gate pass
   without weakening mypy configuration or ignoring missing imports.
+
+### Cycle 8 — implement both integrations and restructure the surface
+
+- **Task:** close ARGUS command parity, implement the Athena (Vulnerability Assessment Platform)
+  application boundary end to end, and bring the README to the project's chosen standard.
+- **Result:** completed on 2026-08-24.
+  - **ARGUS parity:** added six real, tested `olympus argus` commands — `email`, `mac`, `myip`,
+    `web`, `dns`, `whois` — as offline-first cores with injected HTTP/DNS ports, scope enforcement,
+    authorization gating for privacy-sensitive enrichment, and `core.Asset`/`core.Finding` output.
+    `docs/parity/argus.json` and its contract test now cover all thirteen commands.
+  - **Athena / VAP:** implemented `olympus.athena` per ADR-002 — immutable `AssessmentPlan`
+    contracts with a canonical digest, assessment/job state machines, typed ports, a closed adapter
+    registry, three offline tool adapters (`web-headers`, `dns`, `whois`), a bounded synchronous
+    coordinator (concurrency, per-job timeout, overall deadline, cooperative cancellation, crash
+    recovery), a transactional SQLite repository with owner-only permissions and bounded results, a
+    redacting audit sink, and a Vulcan-backed report renderer. The CLI exposes real
+    `plan validate` / `run` / `status` / `cancel` / `recover` / `adapters` use cases with the
+    canonical exit codes. `docs/parity/vulnerability-assessment-platform.json` flips the implemented
+    capabilities and keeps honest `partial`/`missing` gaps (external-tool scanner suite and web UI).
+  - **Restructuring/docs:** rewrote `README.md` to the ARGUS standard (moving the exhaustive guide to
+    `docs/reference.md`), recorded upstream MIT provenance in `docs/provenance.md`, fixed the
+    documented `olympus core export-schemas` directory-output mismatch, and added an example plan.
+- **Verification:** `make check` passes — Ruff, strict mypy across 160+ source files, and the
+  coverage gate at 93.5% (≥90%). All network activity in tests is injected and offline.
+- **Scope intentionally deferred:** the broad external-tool scanner suite (nmap, nuclei, sqlmap, …)
+  as isolated subprocess adapters, the deferred Athena web API/UI (needs its own security ADR),
+  opt-in authorized live-network smoke/e2e tests, and generated CLI reference docs.
