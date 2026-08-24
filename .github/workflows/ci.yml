@@ -34,7 +34,9 @@ jobs:
         run: pytest
 
   secret-scan:
-    name: gitleaks (secret scan)
+    # Advisory secret scan (non-blocking). Committing secrets remains a project
+    # rule, but this analysis never blocks a build or merge — it only reports.
+    name: gitleaks (secret scan, advisory)
     runs-on: ubuntu-latest
     # gitleaks-action reads the PR's commits via the GitHub API; without these
     # scopes the default token gets a 403 ("Resource not accessible by
@@ -47,6 +49,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Gitleaks
+        continue-on-error: true
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

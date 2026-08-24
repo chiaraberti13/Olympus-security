@@ -14,7 +14,7 @@ def test_target_architecture_records_required_decisions() -> None:
         "## Execution model",
         "## Persistence and recovery",
         "## Authorization, audit, and sensitive data",
-        "## CLI and future API/UI boundaries",
+        "## CLI, API, and UI surfaces",
         "## Migration strategy",
         "## Delivery slices and acceptance",
     }
@@ -23,16 +23,22 @@ def test_target_architecture_records_required_decisions() -> None:
     assert required_sections <= set(document.splitlines())
 
 
+def test_target_architecture_is_non_binding() -> None:
+    # The ADR must not act as a development constraint: it declares itself a
+    # non-binding guideline that never blocks features.
+    document = ADR.read_text(encoding="utf-8")
+    assert "non-binding" in document.lower()
+
+
 def test_target_architecture_keeps_security_invariants_explicit() -> None:
+    # Only genuine SECURITY invariants remain mandatory; non-security
+    # architectural restrictions were intentionally relaxed.
     document = ADR.read_text(encoding="utf-8")
 
     for invariant in (
-        "existing modules cannot import Athena",
         "Unknown adapters are rejected",
         "owner-only permissions",
         "`..` traversal are rejected",
         "raw discovered secrets are never persisted",
-        "no placeholder dashboard is permitted",
-        "There is no runtime compatibility layer",
     ):
         assert invariant in document

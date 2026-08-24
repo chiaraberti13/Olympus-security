@@ -1,0 +1,20 @@
+# Override: build the app/worker/migrate images WITH open-source scanner
+# binaries (docker/Dockerfile.scanners) instead of the python-only default.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.scanners.yml up --build
+#
+# The build context is the complete vendored VAP source; only the Dockerfile
+# changes, so the platform itself is unmodified.
+services:
+  migrate:
+    build:
+      context: ./vendor/vulnerability-assessment-platform
+      dockerfile: ../../docker/Dockerfile.scanners
+  app:
+    build:
+      context: ./vendor/vulnerability-assessment-platform
+      dockerfile: ../../docker/Dockerfile.scanners
+  worker:
+    build:
+      context: ./vendor/vulnerability-assessment-platform
+      dockerfile: ../../docker/Dockerfile.scanners

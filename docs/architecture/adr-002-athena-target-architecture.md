@@ -1,9 +1,20 @@
 # ADR-002: Athena target architecture
 
-- **Status:** Accepted
-- **Date:** 2026-08-24
+- **Status:** Accepted — **non-binding guideline**
+- **Date:** 2026-08-24 (flexibility note added 2026-08-24)
 - **Depends on:** ADR-001
-- **Applies to:** the future `olympus.athena` package and `olympus athena` CLI
+- **Applies to:** the `olympus.athena` package and `olympus athena` CLI
+
+> **Non-binding.** This ADR documents one design; it is not a development
+> constraint and never blocks, limits, rejects, postpones, or reduces a feature.
+> A web UI, HTTP API, database, background workers, containers, plugins, extra
+> dependencies, cross-module imports, and alternative execution models are all
+> allowed at any time without a superseding ADR. The only parts that remain
+> requirements are the **security** invariants (immutable authorization context,
+> per-adapter scope checks, SSRF protection, unknown-adapter rejection, path
+> traversal rejection, owner-only persistence, and never persisting raw secrets
+> or credentials) and the project-wide functional rules (real, fully-functional
+> tools; upstream licences preserved). Everything else below is a recommendation.
 
 ## Context and quality attributes
 
@@ -13,9 +24,11 @@ architecture must prioritize authorization integrity, deterministic recovery, bo
 partial-result honesty, testability without network access, and a CLI that explains failures without
 exposing secrets.
 
-The first supported deployment is a single trusted operator on one host. Multi-user service mode and
-a web UI are deliberately deferred: adding either before authentication, authorization, tenancy,
-and CSRF/session boundaries exist would create an unsafe implied security model.
+The first delivered slice targeted a single trusted operator on one host. Multi-user service mode, an
+HTTP API, and a web UI are all welcome additions (the vendored Vulnerability Assessment Platform
+already ships a complete web UI and API). When Athena itself grows a service surface, it should carry
+the usual security controls — authentication, authorization, tenancy, and CSRF/session boundaries —
+because those are security requirements, not because a web UI is otherwise restricted.
 
 ## Package boundaries and dependency direction
 
@@ -46,9 +59,10 @@ existing modules -X-> athena
 domain/application -X-> typer, sqlite3, filesystem, network, existing tool implementations
 ```
 
-`domain` contains no framework or infrastructure imports. `application` sees integrations only as
-typed ports. Adapters may depend on existing modules, but existing modules cannot import Athena.
-Circular imports and direct application-to-adapter imports are architecture violations.
+As a recommendation, `domain` stays free of framework/infrastructure imports and `application` sees
+integrations as typed ports; adapters may depend on existing modules. This is a suggestion for
+clarity only — importing Athena from other modules, or wiring things differently, is allowed whenever
+useful and never blocks a change.
 
 ## Domain contracts
 
@@ -161,9 +175,10 @@ HTTP bodies, environment values, exception representations, and raw findings are
 messages shown to users are derived from stable codes with actionable remediation, while debug detail
 remains redacted by default.
 
-## CLI and future API/UI boundaries
+## CLI, API, and UI surfaces
 
-The first functional slice exposes only CLI commands backed by real use cases:
+The first functional slice shipped these CLI commands backed by real use cases (a starting point, not
+a ceiling — an HTTP API and a web UI are welcome additions):
 
 ```text
 olympus athena plan validate PLAN.json
@@ -177,10 +192,12 @@ terminal, and always supports machine-readable JSON. Exit `0` means succeeded, `
 `2` invalid input/configuration, `3` authorization/scope denial, and `4` execution/infrastructure
 failure. Cancellation has its own explicit result and is never formatted as success.
 
-The CLI contains no domain decisions. A future HTTP API may call the same application use cases but
-requires a separate accepted ADR covering authentication, authorization, tenancy, rate limits,
-request-size limits, CSRF/CORS, and deployment. A web UI is not served from Athena until that API
-boundary exists; no placeholder dashboard is permitted.
+Keeping domain decisions out of the CLI is a recommendation. An HTTP API and a web UI may be added to
+Athena at any time and call the same application use cases; when they are, they should carry the
+usual security controls (authentication, authorization, tenancy, rate limits, request-size limits,
+CSRF/CORS) because those are security requirements. No superseding ADR is required to add them. Any
+UI that ships must be real and functional — a placeholder dashboard is never a substitute for a
+working one (this is the project's "real, fully-functional" rule, not a restriction on web UIs).
 
 ## Migration strategy
 
@@ -197,8 +214,9 @@ file-for-file copy:
    parity.
 7. Do not remove or deprecate standalone Olympus module commands; Athena composes their domain APIs.
 
-There is no runtime compatibility layer to the external repository. Unsupported upstream behavior
-remains an explicit manifest gap until implemented and tested in this repository.
+Note: the complete upstream tool is now vendored in-repository under `vendor/` and run directly, so
+there is no dependence on the external repository at runtime. (This is a fact about the current
+integration, not a restriction — future changes may wire the tools in however is convenient.)
 
 ## Delivery slices and acceptance
 

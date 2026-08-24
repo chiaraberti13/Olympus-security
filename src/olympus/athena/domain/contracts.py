@@ -19,7 +19,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-#: Hard safety ceilings the domain refuses to exceed regardless of input.
+# Resource-safety defaults (a safeguard against runtime resource exhaustion, not
+# a development constraint). These are intentionally generous and can be raised
+# freely — they exist only to keep a single plan from exhausting the host by
+# accident, and are not a limit on how many features/scanners/modules the
+# project may have.
 MAX_CONCURRENCY = 16
 MAX_PER_JOB_TIMEOUT_SECONDS = 900
 MAX_OVERALL_DEADLINE_SECONDS = 7200

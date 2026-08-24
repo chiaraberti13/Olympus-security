@@ -60,7 +60,7 @@ olympus = "olympus.cli:main"
 packages = ["src/olympus"]
 
 # ---------------------------------------------------------------------------
-# Quality gates
+# Optional quality tooling (non-blocking — never a gate)
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100

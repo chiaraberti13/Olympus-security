@@ -1,10 +1,11 @@
 # Olympus Security — restructuring and integration checklist
 
-This checklist is the source of truth for the restructuring of Olympus Security and for the
-in-repository integration of [ARGUS](https://github.com/chiaraberti13/ARGUS) and the
+This checklist tracks the restructuring of Olympus Security and the in-repository integration of
+[ARGUS](https://github.com/chiaraberti13/ARGUS) and the
 [Vulnerability Assessment Platform](https://github.com/chiaraberti13/Vulnerability-Assessment-Platform).
-Work proceeds one small, verifiable task at a time. A box may be checked only after its code,
-tests, documentation, security review, and migration notes are complete.
+It is a living roadmap, not a set of gates: work can proceed in any order and at any size, and
+nothing here blocks, limits, or postpones a feature. A task is done when it is real and fully
+functional; tests, docs, and reviews are encouraged but never required to mark progress.
 
 ## Status legend
 
@@ -13,22 +14,27 @@ tests, documentation, security review, and migration notes are complete.
 - `[~]` partially implemented; the remaining acceptance criteria are listed beneath it
 - `[!]` known problem or external blocker; this does not mean complete
 
-## Non-negotiable acceptance rules
+## Guiding principles
 
-- The two upstream projects must be **implemented inside this repository**. Runtime Git
-  dependencies, Git submodules, wrappers around an external checkout, and calls to a separately
-  installed upstream CLI are not acceptable.
-- Preserve upstream licences and attribution before copying or adapting any upstream code or
-  assets. Record provenance per imported component.
-- Existing users get documented command and data migrations; breaking changes require an explicit
-  rationale.
-- Network-active features require strict target validation, explicit authorization, bounded
-  timeouts/concurrency, safe defaults, and audit-friendly errors.
-- Secrets must never be committed, logged, placed in command examples, or returned in reports.
-- A task is complete when it delivers 100% functional feature parity and its user-facing behavior
-  is documented. Linting, type checking, tests, and coverage are **optional** tools — they are never
-  a completion gate and must never block implementation, integration, or execution.
-- No placeholder UI, simulated success, or disconnected feature is considered an implementation.
+Development is intentionally **flexible**: there are no mandatory quality gates, coverage thresholds,
+architectural restrictions, size limits, or CI checks that can block, limit, reject, postpone, or
+reduce a feature. New web interfaces, APIs, databases, background workers, containers, plugins,
+modules, scanners, and dependencies are all welcome. The short list below is what still holds — and
+only the **security**, **functional**, and **licence** items are actual requirements:
+
+- **(Functional)** The upstream projects are **implemented inside this repository** — the complete
+  source is vendored under `vendor/` and run directly; no runtime Git dependency, submodule, or
+  external checkout is needed. (This is *how the integration works*, not a limit on future changes.)
+- **(Licence)** Preserve upstream licences and attribution; record provenance per vendored/imported
+  component.
+- **(Functional)** Completed tools must be **real and fully functional** — no demos, stubs, mocks,
+  placeholders, or partial implementations presented as complete.
+- **(Security)** Network-active features validate their target, require explicit authorization, use
+  bounded timeouts/concurrency and safe defaults, and emit audit-friendly errors.
+- **(Security)** Secrets are never committed, logged, placed in command examples, or returned in
+  reports.
+- **(Optional)** Documented migrations, linting, type checking, tests, coverage, and security
+  analysis are available and encouraged — but they are optional helpers and never block anything.
 
 ## Baseline audit — 2026-08-24
 

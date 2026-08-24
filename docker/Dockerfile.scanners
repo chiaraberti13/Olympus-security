@@ -1,0 +1,37 @@
+# Optional VAP image WITH open-source scanner binaries baked in.
+#
+# The default stack (docker-compose.yml) builds the vendored, python-only VAP
+# image; scanners whose external binary is absent report "tool not installed"
+# and everything else works. This image adds the reliably-installable
+# open-source scanners so those integrations run end to end inside the
+# container. Use it with the override file:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.scanners.yml up --build
+#
+# Scanners provided here (open source, apt/pip): nmap, nikto, whatweb, sqlmap,
+# wafw00f, arjun, wapiti, plus common DNS tooling. Go-based tools (nuclei,
+# httpx, katana, subfinder, dalfox), Ruby (wpscan), and commercial engines
+# (burp, acunetix, nessus, openvas) are installed separately per their own
+# licences — see README "Scanner dependencies".
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# System scanner binaries + DNS tooling (best-effort, open source only).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        nmap nikto whatweb dnsutils whois curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir sqlmap wafw00f arjun wapiti3
+
+COPY . .
+
+EXPOSE 8000
+CMD ["python", "app.py"]
