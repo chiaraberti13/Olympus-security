@@ -81,5 +81,7 @@ class Source(StrEnum):
     APOLLO = "apollo"
     MINERVA = "minerva"
     VULCAN = "vulcan"
+    ATHENA = "athena"
+    AEGIS = "aegis"
     MARS = "mars"
     MANUAL = "manual"

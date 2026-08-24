@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
 
 echo "==> Installing Olympus (editable) with vendored-tool extras"
-"$PYTHON" -m pip install -e "$ROOT[argus,vap,dev]"
+"$PYTHON" -m pip install -e "$ROOT[argus,aegis,dev]"
 
 echo "==> Installing the complete VAP pinned requirements"
 "$PYTHON" -m pip install -r "$ROOT/vendor/vulnerability-assessment-platform/requirements.txt"
@@ -19,9 +19,9 @@ echo "==> Installing the complete VAP pinned requirements"
 echo
 echo "Done. Run the tools through Olympus:"
 echo "  olympus argus-native --help          # complete ARGUS CLI"
-echo "  olympus vap scanners                 # list all 24 scanners"
-echo "  olympus vap migrate                  # apply VAP DB migrations"
-echo "  olympus vap serve --host 127.0.0.1 --port 8000   # serve the VAP web app"
+echo "  olympus aegis scanners                 # list all 24 scanners"
+echo "  olympus aegis migrate                  # apply AEGIS DB migrations"
+echo "  olympus aegis serve --host 127.0.0.1 --port 8000   # serve the AEGIS web app"
 echo
 echo "External scanner binaries (nmap, nuclei, sqlmap, wpscan, ...) and the full"
 echo "stack (Redis/Celery for queued scans) are provisioned reproducibly by:"

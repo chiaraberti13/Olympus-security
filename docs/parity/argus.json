@@ -28,6 +28,11 @@
       "capabilities": ["doh-record-enumeration", "scope-enforced"],
       "mapping": ["dns_records.py", "scope.py"]
     },
+    "doctor": {
+      "options": [],
+      "capabilities": ["dependency-diagnostics", "optional-api-key-presence"],
+      "mapping": ["cli.py"]
+    },
     "email": {
       "options": ["--email", "--enrich", "--scope", "--log", "--i-am-authorized", "--output"],
       "capabilities": ["offline-email-analysis", "optional-mx-check", "optional-gravatar-presence"],

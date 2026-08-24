@@ -283,3 +283,33 @@ only the **security**, **functional**, and **licence** items are actual requirem
   vendored ARGUS CLI and the vendored VAP web app were both exercised end to end in this environment.
 - **Definition of complete:** 100% functional feature parity, not a passing gate. Vendored code is
   preserved verbatim and held to its own tooling.
+
+### Cycle 10 — ecosystem audit, AEGIS rename, diagnostics & full scanner coverage
+
+- **Task:** audit every tool; rename the Olympus-facing VAP component to AEGIS;
+  add diagnostics; document and cover all 24 scanners; analyse additional tools.
+- **Result:** completed on 2026-08-24.
+  - **Ecosystem audit:** `docs/ecosystem-audit.md` inventories all 12 tools with
+    an honest per-tool matrix and verification status. Key honest finding: the 24
+    vendored scanners default to **simulated** output unless `VAP_ENABLE_LIVE_SCANS=true`
+    + the binary/API is present + authorization; this is surfaced, never hidden.
+  - **AEGIS rename** (collision audit passed — `aegis` was unused): `olympus vap`
+    → `olympus aegis` with subcommands serve / migrate / workers / scanners
+    (`--check`) / deps / scan / info / doctor. `olympus vap` kept as a deprecated
+    forwarding alias; `[vap]` extra aliases `[aegis]`; compose services renamed
+    `aegis-*`; `Source.AEGIS` added. Vendored source and `VAP_*` contract left
+    intact. Map: `docs/vap-to-aegis-rename.md`.
+  - **Diagnostics:** `olympus doctor`, `olympus aegis doctor`, `olympus argus
+    doctor`, and a secret-safe diagnostics helper; a 24-entry scanner registry
+    (`olympus.integrations.scanners`) drives `aegis scanners --check` / `deps`.
+  - **Scanner coverage:** `docker/Dockerfile.scanners` now installs 19/24
+    open-source scanners (apt/pip/go/git/gem, best-effort); the 5 API/commercial
+    engines are documented for manual install and surfaced by diagnostics.
+    Matrix: `docs/scanner-matrix.md`. Unified install/ops: `docs/install.md`.
+  - **Additional-tool analysis:** `docs/tooling-analysis.md` proposes an optional
+    SCA/SBOM/container/IaC profile (OSV-Scanner, Syft, Grype, Trivy, Checkov) —
+    presented for review, not implemented.
+- **Verification (optional tooling):** full suite passes; ruff/mypy clean on new
+  code; AEGIS web app boots + migrates + serves; compose config validated. No
+  live scan / container `up` was run (no scanner binaries, no Docker daemon in
+  this environment) — stated explicitly, not simulated.

@@ -34,23 +34,31 @@ argus = [
     "rich>=13.0",
     "dnspython>=2.6",
 ]
-# Vendored Vulnerability Assessment Platform (complete upstream app under
-# vendor/vulnerability-assessment-platform). See that directory's
-# requirements.txt for the full pinned set; this extra pulls the core web/DB
-# stack so `olympus vap serve` runs. External scanner *binaries* (nmap, nuclei,
-# sqlmap, ...) are installed separately — see vendor/.../installer.sh.
-vap = [
+# AEGIS — the vendored Vulnerability Assessment Platform (complete upstream app
+# under vendor/vulnerability-assessment-platform). See that directory's
+# requirements.txt for the full pinned set; this extra pulls the core web/DB/
+# worker stack so `olympus aegis serve|workers` run. External scanner *binaries*
+# (nmap, nuclei, sqlmap, ...) are installed separately — see
+# vendor/.../installer.sh, docker/Dockerfile.scanners, or `olympus aegis deps`.
+aegis = [
     "fastapi>=0.109",
     "uvicorn[standard]>=0.27",
     "jinja2>=3.1",
     "python-multipart>=0.0.6",
     "sqlalchemy>=2.0",
     "alembic>=1.14",
+    "celery>=5.3",
+    "redis>=5.0",
+    "prometheus-client>=0.19",
     "structlog>=24.1",
     "slowapi>=0.1.9",
     "requests>=2.32",
     "validators>=0.22",
     "itsdangerous>=2.1",
+]
+# Deprecated alias for the AEGIS extra (kept for backward compatibility).
+vap = [
+    "olympus-security[aegis]",
 ]
 
 [project.scripts]

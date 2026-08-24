@@ -90,7 +90,7 @@ $ olympus athena run plan.json --storage ./.athena
 | **Vulcan** | `olympus vulcan` | Aggregation, deduplication, ranking and report rendering. |
 | **core** | `olympus core` | Shared data-contract utilities (e.g. `export-schemas`). |
 | **ARGUS (complete)** | `olympus argus-native` | The full standalone ARGUS OSINT CLI, vendored verbatim under `vendor/` — every original subcommand plus the interactive menu. |
-| **VAP (complete)** | `olympus vap` | The full Vulnerability Assessment Platform, vendored verbatim — FastAPI web app, all **24 scanners**, database + migrations, reports. |
+| **AEGIS (complete)** | `olympus aegis` | The full Vulnerability Assessment Platform, vendored verbatim — FastAPI web app, all **24 scanners**, database + migrations, reports. |
 
 > [!TIP]
 > Run any module with `--help` to see its commands, or
@@ -210,9 +210,9 @@ bash scripts/setup-vendored-tools.sh      # install both tools' dependencies
 olympus argus-native --help               # the complete ARGUS CLI (verbatim)
 olympus argus-native ip 8.8.8.8
 
-olympus vap scanners                      # all 24 scanner integrations
-olympus vap migrate                       # apply the VAP database migrations
-olympus vap serve --host 127.0.0.1 --port 8000   # serve the full VAP web app
+olympus aegis scanners                      # all 24 scanner integrations
+olympus aegis migrate                       # apply the VAP database migrations
+olympus aegis serve --host 127.0.0.1 --port 8000   # serve the full VAP web app
 ```
 
 ### Running the complete VAP platform: native or Docker
@@ -220,9 +220,9 @@ olympus vap serve --host 127.0.0.1 --port 8000   # serve the full VAP web app
 **Native (single process, via Olympus):**
 
 ```bash
-pip install -e ".[vap]"            # or: bash scripts/setup-vendored-tools.sh
-olympus vap migrate               # apply the database migrations
-olympus vap serve --host 127.0.0.1 --port 8000
+pip install -e ".[aegis]"            # or: bash scripts/setup-vendored-tools.sh
+olympus aegis migrate               # apply the database migrations
+olympus aegis serve --host 127.0.0.1 --port 8000
 ```
 
 Redis is optional on the native path: synchronous features work without it, and

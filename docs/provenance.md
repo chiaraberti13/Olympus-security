@@ -35,9 +35,12 @@ acceptance rules.
   `requirements.txt`, `Dockerfile`, `docker-compose.yml`, `installer.sh`, and
   `LICENSE`, preserved verbatim.
 - Licence: **MIT** (`vendor/vulnerability-assessment-platform/LICENSE`).
-- Entry points: `olympus vap serve` (run the web app), `olympus vap migrate`
-  (apply DB migrations), `olympus vap scanners` (list the catalogue),
-  `olympus vap info`.
+- Olympus-facing name: **AEGIS** (see `docs/vap-to-aegis-rename.md`). Entry
+  points: `olympus aegis serve` (web app), `olympus aegis migrate` (DB
+  migrations), `olympus aegis workers` (Celery worker), `olympus aegis scanners
+  [--check]`, `olympus aegis deps`, `olympus aegis scan`, `olympus aegis info`,
+  `olympus aegis doctor`. `olympus vap` remains as a deprecated alias. The
+  vendored source and its `VAP_*` configuration contract are unchanged.
 
 ## Running the vendored tools
 
