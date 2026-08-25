@@ -29,6 +29,9 @@ from olympus.argus.application import (
     DomainScanService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
+    InvalidWebTargetError,
+    WebReconRequest,
+    WebReconService,
     WhoisLookupRequest,
     WhoisLookupService,
 )
@@ -108,13 +111,8 @@ from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.argus.web import (
-    WebIntel,
     WebReconError,
-    build_web_asset,
-    build_web_findings,
     export_web_intel,
-    fetch_web,
-    host_of,
 )
 from olympus.argus.whois import (
     WhoisError,
@@ -826,12 +824,12 @@ def web(
 ) -> None:
     """Fetch an in-scope URL once and report its passive HTTP security posture."""
     try:
-        host = host_of(url)
-    except WebReconError as exc:
+        intel = WebReconService(UrllibHttpClient.from_config()).run(
+            WebReconRequest(url=url, scope_path=scope, audit_log_path=log)
+        )
+    except InvalidWebTargetError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    try:
-        enforce_scope(host, scope, log)
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -839,20 +837,15 @@ def web(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    try:
-        report = fetch_web(url, UrllibHttpClient.from_config())
     except WebReconError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
 
-    asset = build_web_asset(report)
-    findings = build_web_findings(asset.asset_id, report)
-    intel = WebIntel(report=report, asset=asset, findings=findings)
     typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
     if output is not None:
         export_web_intel(intel, output)
         typer.echo(f"argus: wrote web intel to {output}", err=True)
-    if findings:
+    if intel.findings:
         raise typer.Exit(code=1)
 
 

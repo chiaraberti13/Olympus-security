@@ -14,6 +14,9 @@ from olympus.argus.application import (
     DomainScanService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
+    InvalidWebTargetError,
+    WebReconRequest,
+    WebReconService,
     WhoisLookupRequest,
     WhoisLookupService,
 )
@@ -70,6 +73,17 @@ class RecordingRdapClient:
             status_code=200,
             body=json.dumps({"ldhName": DOMAIN.upper(), "status": ["active"]}),
         )
+
+
+class RecordingWebClient:
+    """Offline HTTP port returning a response with one disclosed banner."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
+        return HttpResponse(status_code=200, headers={"Server": "test-server"})
 
 
 def _scope(path: Path) -> Path:
@@ -239,3 +253,44 @@ def test_whois_lookup_service_blocks_before_http(tmp_path: Path) -> None:
 
     assert http.calls == []
     assert "outside.example" in audit_log.read_text(encoding="utf-8")
+
+
+def test_web_recon_service_returns_shared_contracts(tmp_path: Path) -> None:
+    http = RecordingWebClient()
+
+    intel = WebReconService(http).run(
+        WebReconRequest(DOMAIN, _scope(tmp_path / "scope.json"), tmp_path / "audit.log")
+    )
+
+    assert intel.report.url == f"https://{DOMAIN}"
+    assert intel.asset.hostname == DOMAIN
+    assert len(intel.findings) == 2
+    assert http.calls == [f"https://{DOMAIN}"]
+
+
+def test_web_recon_service_blocks_before_http(tmp_path: Path) -> None:
+    http = RecordingWebClient()
+    audit_log = tmp_path / "audit.log"
+
+    with pytest.raises(OutOfScopeError):
+        WebReconService(http).run(
+            WebReconRequest("outside.example", _scope(tmp_path / "scope.json"), audit_log)
+        )
+
+    assert http.calls == []
+    assert "outside.example" in audit_log.read_text(encoding="utf-8")
+
+
+def test_web_recon_service_rejects_invalid_url_before_http(tmp_path: Path) -> None:
+    http = RecordingWebClient()
+
+    with pytest.raises(InvalidWebTargetError):
+        WebReconService(http).run(
+            WebReconRequest(
+                "https:///missing-host",
+                tmp_path / "scope.json",
+                tmp_path / "audit.log",
+            )
+        )
+
+    assert http.calls == []

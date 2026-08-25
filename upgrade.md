@@ -92,6 +92,7 @@ only the **security**, **functional**, and **licence** items are actual requirem
   - [x] Argus `fronting`: scoped application service with injected DNS and CT ports.
   - [x] Argus `dns`: scoped application service with an injected HTTP port.
   - [x] Argus `whois`: scoped RDAP application service with an injected HTTP port.
+  - [x] Argus `web`: scoped passive-HTTP application service with an injected HTTP port.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -387,3 +388,17 @@ only the **security**, **functional**, and **licence** items are actual requirem
   and prove that an out-of-scope target is audited before the HTTP dependency can be invoked.
 - **Scope intentionally deferred:** the remaining Argus application-service extractions stay open;
   no broader completeness claim is made by this cycle.
+
+### Cycle 15 — separate Argus web reconnaissance from Typer
+
+- **Task:** extract the next checklist-sized application slice: Argus `web`.
+- **Result:** completed on 2026-08-25. `WebReconService` now owns URL/host validation, scope
+  authorization, passive HTTP orchestration, and mapping to shared asset/finding contracts through
+  an injected HTTP port. The Typer handler retains error-to-exit-code translation and presentation.
+- **Verification:** offline application tests prove successful contract mapping, invalid-target
+  rejection, and out-of-scope audit before HTTP. Existing CLI semantics distinguish invalid input
+  (exit 2), scope denial (exit 3), network failure (exit 4), and findings (exit 1).
+- **Known limitation:** redirect destinations are followed by the shared urllib transport and are
+  not re-authorized after each hop because its response contract does not expose redirect history.
+  Redirect-aware transport hardening is tracked under the shared execution-policy task.
+- **Scope intentionally deferred:** remaining Argus extractions and redirect hardening stay open.

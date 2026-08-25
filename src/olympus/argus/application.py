@@ -15,6 +15,14 @@ from olympus.argus.fronting import FrontingReport, assess_fronting
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
 from olympus.argus.scope import enforce_scope
+from olympus.argus.web import (
+    WebIntel,
+    WebReconError,
+    build_web_asset,
+    build_web_findings,
+    fetch_web,
+    host_of,
+)
 from olympus.argus.whois import WhoisReport, lookup_domain
 from olympus.core.http import HttpClient
 
@@ -117,3 +125,38 @@ class WhoisLookupService:
         """Enforce scope before invoking the injected network transport."""
         enforce_scope(request.domain, request.scope_path, request.audit_log_path)
         return lookup_domain(request.domain, self.http)
+
+
+class InvalidWebTargetError(ValueError):
+    """Raised when a web target cannot be normalized to a scoped hostname."""
+
+
+@dataclass(frozen=True)
+class WebReconRequest:
+    """Command-independent input for one scoped passive HTTP assessment."""
+
+    url: str
+    scope_path: Path
+    audit_log_path: Path
+
+
+@dataclass(frozen=True)
+class WebReconService:
+    """Authorize, fetch, and map passive HTTP posture to shared contracts."""
+
+    http: HttpClient
+
+    def run(self, request: WebReconRequest) -> WebIntel:
+        """Validate and authorize the host before invoking HTTP."""
+        try:
+            host = host_of(request.url)
+        except WebReconError as exc:
+            raise InvalidWebTargetError(str(exc)) from exc
+        enforce_scope(host, request.scope_path, request.audit_log_path)
+        report = fetch_web(request.url, self.http)
+        asset = build_web_asset(report)
+        return WebIntel(
+            report=report,
+            asset=asset,
+            findings=build_web_findings(asset.asset_id, report),
+        )
