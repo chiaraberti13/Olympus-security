@@ -54,9 +54,9 @@
       "mapping": ["fronting.py", "ct.py", "resolver.py", "scope.py"]
     },
     "investigate": {
-      "options": ["--seed-type", "--seed-value", "--name", "--depth", "--sites", "--geo", "--log", "--i-am-authorized", "--output", "--mermaid", "--dot", "--graphml"],
-      "capabilities": ["entity-pivots", "bounded-graph-expansion", "graph-export"],
-      "mapping": ["graph.py", "transforms.py"]
+      "options": ["--seed-type", "--seed-value", "--name", "--depth", "--sites", "--domain-scope", "--ip-scope", "--account-scope", "--geo", "--log", "--i-am-authorized", "--output", "--mermaid", "--dot", "--graphml"],
+      "capabilities": ["entity-pivots", "per-pivot-scope-enforcement", "bounded-graph-expansion", "graph-export"],
+      "mapping": ["application.py", "graph.py", "transforms.py", "scope.py", "ip_scope.py", "accounts_scope.py"]
     },
     "ip": {
       "options": ["--ip", "--input", "--scope", "--log", "--geo", "--i-am-authorized", "--output"],

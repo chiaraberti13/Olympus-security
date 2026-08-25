@@ -112,6 +112,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
     an injected HTTPS provider port.
   - [x] Argus `accounts`: scoped single/batch enumeration with authorized metadata extraction,
     validated public HTTPS registries, bounded concurrency, and an injected HTTP port.
+  - [x] Argus `investigate`: authorized bounded graph expansion with per-pivot domain, IP, and
+    account scope gates, audit records, explicit warnings, and injected network ports.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -647,3 +649,43 @@ only the **security**, **functional**, and **licence** items are actual requirem
   retain outbound network controls. These limits are not represented as live-provider verification.
 - **Next activity:** extract `argus investigate` graph orchestration from Typer, verify each networked
   transform is authorization/scope gated, and remove simulated or silently invented pivot results.
+
+### Cycle 23 — scope and separate Argus investigation graphs
+
+- **Status:** `VERIFIED` (live third-party fan-out is intentionally unexecuted; the parent
+  repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move graph investigation orchestration out of Typer and guarantee that every direct
+  or transitively discovered network pivot is authorized, checked with the correct scope dialect,
+  audited, and based only on adapter results.
+- **Component:** ARGUS investigation application service, transform engine, CLI, domain/IP/account
+  scopes, audit log, graph exports, parity/reference docs, and tests.
+- **Dependencies:** injected DNS, Certificate Transparency, bounded HTTP and site-registry ports;
+  domain-suffix, IP-CIDR, and exact-handle scope policies; the graph/entity contracts; encrypted
+  `ipwho.is` geolocation; and the hardened account registry/redirect policy.
+- **Completion criteria:** no fan-out without explicit authorization; a direct out-of-scope network
+  seed exits before an adapter call; discovered out-of-scope pivots are audited, warned, and skipped
+  without discarding valid graph branches; depth remains bounded; adapter failures are explicit
+  warnings rather than fabricated nodes; CLI/JSON/Mermaid/DOT/GraphML use one real graph result.
+- **Implementation:** added `InvestigationService`, request/outcome contracts, a cached per-entity
+  scope gate, application-owned start audit, strict seed/name/depth validation, and explicit warning
+  propagation. Domain/host DNS and CT transforms use domain scope, optional IP geolocation uses CIDR
+  scope, and username enumeration uses account scope immediately before traffic. Direct network seeds
+  fail closed; later rejected pivots preserve independent graph branches. DNS, CT, invalid-IP, and geo
+  failures now produce warnings without inventing entities. Typer constructs ports, maps exit codes,
+  renders, and exports; its shared HTTP adapter also validates every HTTPS redirect.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/transforms.py`,
+  `src/olympus/argus/cli.py`, `docs/parity/argus.json`, `docs/reference.md`,
+  `tests/unit/test_argus_application.py`, `tests/unit/test_argus_cli_investigate.py`, and `upgrade.md`.
+- **Tests executed:** focused application/investigate/transforms/graph/parity suite: `64 passed`;
+  complete offline suite: `563 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed CLI produced and exported a depth-zero authorized graph
+  with exactly the real seed and no invented relationships (exit 0); the same command without
+  confirmation exited 4; an authorized domain outside the configured perimeter exited 3 before DNS,
+  CT, or HTTP and appended a timestamped `blocked_out_of_scope` audit record. Injected application
+  tests prove scoped successful pivots and that a discovered unauthorized username is audited/skipped
+  while the independently authorized domain branch continues.
+- **Residual limitations:** no live DNS, crt.sh, public-account, or IP-geolocation fan-out was sent
+  because no authorized live target was provided; provider availability is therefore not represented
+  as verified. Network egress controls remain recommended in addition to application scope checks.
+- **Next activity:** inspect and separate the remaining Argus `diff` and diagnostic/asset entry points,
+  then close the parent Argus application-boundary item only after CLI/API/report parity is proven.

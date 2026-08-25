@@ -6,7 +6,9 @@ depending on Typer, console output, or concrete network clients.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from olympus.argus.accounts import (
@@ -34,6 +36,7 @@ from olympus.argus.enrichment import (
     PhoneEnrichmentClient,
 )
 from olympus.argus.fronting import FrontingReport, assess_fronting
+from olympus.argus.graph import Entity, EntityType, Investigation
 from olympus.argus.ip_osint import (
     IpGeo,
     IpGeoClient,
@@ -64,7 +67,8 @@ from olympus.argus.phone import (
 from olympus.argus.phone_scope import PhoneOutOfScopeError, enforce_phone_scope
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
-from olympus.argus.scope import enforce_scope
+from olympus.argus.scope import OutOfScopeError, enforce_scope
+from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.argus.web import (
     WebIntel,
     WebReconError,
@@ -79,6 +83,146 @@ from olympus.core.http import HttpClient
 
 class AuthorizationRequiredError(PermissionError):
     """Raised when a privacy-sensitive use case lacks explicit authorization."""
+
+
+@dataclass(frozen=True)
+class InvestigationRequest:
+    """Command-independent input and engagement perimeter for one graph expansion."""
+
+    name: str
+    seed_type: EntityType
+    seed_value: str
+    depth: int
+    domain_scope_path: Path
+    ip_scope_path: Path
+    account_scope_path: Path
+    audit_log_path: Path
+    geolocate: bool = False
+    authorized: bool = False
+
+
+@dataclass(frozen=True)
+class InvestigationOutcome:
+    """Investigation graph plus explicit non-fatal pivot warnings."""
+
+    graph: Investigation
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass
+class _InvestigationScopeGate:
+    """Apply the correct scope dialect to every entity before a network pivot."""
+
+    domain_scope_path: Path
+    ip_scope_path: Path
+    account_scope_path: Path
+    audit_log_path: Path
+    warnings: list[str] = field(default_factory=list)
+    _allowed: set[str] = field(default_factory=set)
+    _blocked: set[str] = field(default_factory=set)
+
+    @staticmethod
+    def _key(entity: Entity) -> str:
+        return entity.id
+
+    def require(self, entity: Entity) -> None:
+        """Raise for an out-of-scope direct seed and cache successful decisions."""
+        key = self._key(entity)
+        if key in self._allowed:
+            return
+        if entity.entity_type in (EntityType.DOMAIN, EntityType.HOST):
+            enforce_scope(entity.value, self.domain_scope_path, self.audit_log_path)
+        elif entity.entity_type is EntityType.IP:
+            enforce_ip_scope(entity.value, self.ip_scope_path, self.audit_log_path)
+        elif entity.entity_type is EntityType.USERNAME:
+            enforce_account_scope(entity.value, self.account_scope_path, self.audit_log_path)
+        self._allowed.add(key)
+
+    def allows(self, entity: Entity) -> bool:
+        """Skip and audit out-of-scope discovered pivots without aborting the graph."""
+        key = self._key(entity)
+        if key in self._blocked:
+            return False
+        try:
+            self.require(entity)
+        except (OutOfScopeError, IpOutOfScopeError, AccountOutOfScopeError):
+            self._blocked.add(key)
+            self.warnings.append(
+                f"skipping out-of-scope {entity.entity_type.value} pivot {entity.value!r} (logged)"
+            )
+            return False
+        return True
+
+
+@dataclass(frozen=True)
+class InvestigationService:
+    """Authorize, scope, audit, and execute bounded OSINT graph transforms."""
+
+    resolver: DnsResolver
+    ct_client: CertificateTransparencyClient
+    http: HttpClient
+    site_specs: tuple[SiteSpec, ...]
+
+    @staticmethod
+    def _seed_uses_network(request: InvestigationRequest) -> bool:
+        if request.depth == 0:
+            return False
+        if request.seed_type in (EntityType.DOMAIN, EntityType.HOST, EntityType.USERNAME):
+            return True
+        return request.seed_type is EntityType.IP and request.geolocate
+
+    @staticmethod
+    def _log_start(request: InvestigationRequest) -> None:
+        entry = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "investigation": request.name,
+            "seed_type": request.seed_type.value,
+            "seed_value": request.seed_value,
+            "action": "investigation_started",
+        }
+        request.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with request.audit_log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+    def run(self, request: InvestigationRequest) -> InvestigationOutcome:
+        """Refuse unauthorized fan-out and gate every direct or discovered network pivot."""
+        if not request.authorized:
+            raise AuthorizationRequiredError(
+                "OSINT investigation fan-out requires explicit documented authorization"
+            )
+        if not request.name.strip():
+            raise ValueError("investigation name must not be empty")
+        if not request.seed_value.strip():
+            raise ValueError("investigation seed value must not be empty")
+        if not 0 <= request.depth <= 3:
+            raise ValueError("investigation depth must be between 0 and 3")
+
+        gate = _InvestigationScopeGate(
+            request.domain_scope_path,
+            request.ip_scope_path,
+            request.account_scope_path,
+            request.audit_log_path,
+        )
+        if self._seed_uses_network(request):
+            gate.require(Entity(request.seed_type, request.seed_value))
+        self._log_start(request)
+        context = TransformContext(
+            resolver=self.resolver,
+            ct_client=self.ct_client,
+            http=self.http,
+            site_specs=list(self.site_specs),
+            geolocate=request.geolocate,
+            scope_guard=gate.allows,
+            warnings=gate.warnings,
+        )
+        graph = run_investigation(
+            request.name,
+            request.seed_type,
+            request.seed_value,
+            context,
+            depth=request.depth,
+        )
+        return InvestigationOutcome(graph=graph, warnings=tuple(context.warnings))
 
 
 @dataclass(frozen=True)

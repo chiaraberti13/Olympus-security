@@ -14,11 +14,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from olympus.argus.accounts import SiteSpec, enumerate_accounts
-from olympus.argus.ct import CertificateTransparencyClient
+from olympus.argus.ct import CertificateTransparencyClient, CertificateTransparencyError
 from olympus.argus.graph import Entity, EntityType, Investigation
-from olympus.argus.ip_osint import IpGeoError, IpWhoisClient, analyze_ip
+from olympus.argus.ip_osint import IpGeoError, IpParseError, IpWhoisClient, analyze_ip
 from olympus.argus.phone import PhoneParseError, analyze_phone
-from olympus.argus.resolver import DnsResolver
+from olympus.argus.resolver import DnsResolutionError, DnsResolver
 from olympus.core.http import HttpClient
 
 
@@ -31,10 +31,17 @@ class TransformContext:
     http: HttpClient | None = None
     site_specs: list[SiteSpec] = field(default_factory=list)
     geolocate: bool = False
+    scope_guard: Callable[[Entity], bool] | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 # A transform takes an entity + the graph + context and returns new entities.
 Transform = Callable[[Entity, Investigation, TransformContext], list[Entity]]
+
+
+def _network_allowed(entity: Entity, ctx: TransformContext) -> bool:
+    """Apply the injected engagement gate immediately before a network transform."""
+    return ctx.scope_guard is None or ctx.scope_guard(entity)
 
 
 def phone_transform(entity: Entity, graph: Investigation, ctx: TransformContext) -> list[Entity]:
@@ -75,11 +82,16 @@ def domain_dns_transform(
     entity: Entity, graph: Investigation, ctx: TransformContext
 ) -> list[Entity]:
     """Resolve a domain to its A/AAAA addresses, adding IP entities."""
-    if ctx.resolver is None:
+    if ctx.resolver is None or not _network_allowed(entity, ctx):
         return []
     new: list[Entity] = []
     for record_type in ("A", "AAAA"):
-        for address in ctx.resolver.resolve(entity.value, record_type):
+        try:
+            addresses = ctx.resolver.resolve(entity.value, record_type)
+        except DnsResolutionError:
+            ctx.warnings.append(f"DNS {record_type} lookup failed for {entity.value!r}")
+            continue
+        for address in addresses:
             ip_entity = graph.add_entity(Entity(EntityType.IP, address, discovered_by="dns"))
             graph.add_relationship(entity, ip_entity, "resolves_to")
             new.append(ip_entity)
@@ -90,10 +102,15 @@ def domain_ct_transform(
     entity: Entity, graph: Investigation, ctx: TransformContext
 ) -> list[Entity]:
     """Discover subdomains of a domain via Certificate Transparency."""
-    if ctx.ct_client is None:
+    if ctx.ct_client is None or not _network_allowed(entity, ctx):
         return []
     new: list[Entity] = []
-    for subdomain in ctx.ct_client.discover(entity.value):
+    try:
+        subdomains = ctx.ct_client.discover(entity.value)
+    except CertificateTransparencyError:
+        ctx.warnings.append(f"Certificate Transparency lookup failed for {entity.value!r}")
+        return []
+    for subdomain in subdomains:
         if subdomain == entity.value:
             continue
         host = graph.add_entity(Entity(EntityType.HOST, subdomain, discovered_by="ct"))
@@ -104,13 +121,18 @@ def domain_ct_transform(
 
 def ip_geo_transform(entity: Entity, graph: Investigation, ctx: TransformContext) -> list[Entity]:
     """Enrich an IP with offline classification, and (opt-in) geolocation/ASN."""
-    report = analyze_ip(entity.value)
+    try:
+        report = analyze_ip(entity.value)
+    except IpParseError:
+        ctx.warnings.append(f"invalid IP pivot skipped: {entity.value!r}")
+        return []
     entity.attributes["kind"] = report.kind
-    if not (ctx.geolocate and ctx.http is not None):
+    if not (ctx.geolocate and ctx.http is not None) or not _network_allowed(entity, ctx):
         return []
     try:
         geo = IpWhoisClient(ctx.http).geolocate(entity.value)
     except IpGeoError:
+        ctx.warnings.append(f"IP geolocation failed for {entity.value!r}")
         return []
     for key, value in (("country", geo.country), ("city", geo.city), ("isp", geo.isp)):
         if value:
@@ -126,7 +148,7 @@ def username_accounts_transform(
     entity: Entity, graph: Investigation, ctx: TransformContext
 ) -> list[Entity]:
     """Find public accounts for a username across the curated site registry."""
-    if ctx.http is None or not ctx.site_specs:
+    if ctx.http is None or not ctx.site_specs or not _network_allowed(entity, ctx):
         return []
     result = enumerate_accounts(entity.value, ctx.site_specs, ctx.http)
     new: list[Entity] = []

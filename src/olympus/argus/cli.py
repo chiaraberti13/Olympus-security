@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -31,6 +30,8 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    InvestigationRequest,
+    InvestigationService,
     IpProfileRequest,
     IpProfileService,
     MacAnalysisRequest,
@@ -94,7 +95,6 @@ from olympus.argus.phone_scope import (
 )
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError
-from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.argus.web import (
     WebReconError,
     export_web_intel,
@@ -533,19 +533,6 @@ _INVESTIGATE_DISCLAIMER = (
 DEFAULT_INVESTIGATION_LOG = Path("examples/output/argus-investigate.log")
 
 
-def _log_investigation(name: str, seed_type: str, seed_value: str, log: Path) -> None:
-    entry = {
-        "timestamp": datetime.now(UTC).isoformat(),
-        "investigation": name,
-        "seed_type": seed_type,
-        "seed_value": seed_value,
-        "action": "investigation_started",
-    }
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True) + "\n")
-
-
 @app.command()
 def investigate(
     seed_type: EntityType = typer.Option(
@@ -556,6 +543,21 @@ def investigate(
     depth: int = typer.Option(1, "--depth", min=0, max=3, help="How many pivot hops to expand."),
     sites: Path = typer.Option(
         DEFAULT_SITES_PATH, "--sites", help="Site registry for username transforms."
+    ),
+    domain_scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH,
+        "--domain-scope",
+        help="JSON scope for domain/host DNS and Certificate Transparency pivots.",
+    ),
+    ip_scope: Path = typer.Option(
+        DEFAULT_IP_SCOPE_PATH,
+        "--ip-scope",
+        help="JSON CIDR scope for optional IP geolocation pivots.",
+    ),
+    account_scope: Path = typer.Option(
+        DEFAULT_ACCOUNT_SCOPE_PATH,
+        "--account-scope",
+        help="JSON handle scope for public-account pivots.",
     ),
     geo: bool = typer.Option(False, "--geo", help="Enable IP geolocation/ASN (third-party)."),
     log: Path = typer.Option(DEFAULT_INVESTIGATION_LOG, "--log", help="Investigation audit log."),
@@ -574,25 +576,44 @@ def investigate(
     ),
 ) -> None:
     """Build an OSINT investigation graph by pivoting from a seed entity (flowsint-style)."""
-    if not i_am_authorized:
-        typer.echo(f"argus: {_INVESTIGATE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
-
     try:
         site_specs = load_site_registry(sites)
-    except SiteRegistryError as exc:
-        typer.echo(f"argus: {exc}", err=True)
+        service = InvestigationService(
+            resolver=DnspythonResolver(),
+            ct_client=CrtShClient(),
+            http=UrllibHttpClient.from_config(redirect_validator=validate_public_site_url),
+            site_specs=tuple(site_specs),
+        )
+        outcome = service.run(
+            InvestigationRequest(
+                name=name,
+                seed_type=seed_type,
+                seed_value=seed_value,
+                depth=depth,
+                domain_scope_path=domain_scope,
+                ip_scope_path=ip_scope,
+                account_scope_path=account_scope,
+                audit_log_path=log,
+                geolocate=geo,
+                authorized=i_am_authorized,
+            )
+        )
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_INVESTIGATE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    except (SiteRegistryError, ScopeError, IpScopeError, AccountScopeError, ValueError) as exc:
+        typer.echo(f"argus: investigation configuration error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except (OutOfScopeError, IpOutOfScopeError, AccountOutOfScopeError) as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: investigation I/O failed: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    _log_investigation(name, seed_type.value, seed_value, log)
-    ctx = TransformContext(
-        resolver=DnspythonResolver(),
-        ct_client=CrtShClient(),
-        http=UrllibHttpClient.from_config(),
-        site_specs=site_specs,
-        geolocate=geo,
-    )
-    graph = run_investigation(name, seed_type, seed_value, ctx, depth=depth)
+    graph = outcome.graph
+    for warning in outcome.warnings:
+        typer.echo(f"argus: {warning}", err=True)
 
     typer.echo(json.dumps(graph.to_dict(), indent=2, sort_keys=True))
     export_investigation(graph, output)

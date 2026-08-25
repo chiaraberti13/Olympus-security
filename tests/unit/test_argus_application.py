@@ -22,6 +22,8 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    InvestigationRequest,
+    InvestigationService,
     IpProfileRequest,
     IpProfileService,
     MacAnalysisRequest,
@@ -36,6 +38,7 @@ from olympus.argus.application import (
     WhoisLookupService,
 )
 from olympus.argus.enrichment import MessagingPresence, PhoneEnrichment
+from olympus.argus.graph import EntityType
 from olympus.argus.ip_osint import IpGeo
 from olympus.argus.ip_scope import IpOutOfScopeError
 from olympus.argus.mac_scope import MacOutOfScopeError
@@ -230,6 +233,110 @@ def _account_specs() -> tuple[SiteSpec, ...]:
         ),
         SiteSpec(name="Unavailable", url_template="https://example.com/u/{username}"),
     )
+
+
+def _investigation_request(
+    tmp_path: Path,
+    *,
+    seed_type: EntityType = EntityType.DOMAIN,
+    seed_value: str = DOMAIN,
+    depth: int = 1,
+    geolocate: bool = False,
+    authorized: bool = True,
+    account_handle: str = "olympus_demo",
+) -> InvestigationRequest:
+    return InvestigationRequest(
+        name="case",
+        seed_type=seed_type,
+        seed_value=seed_value,
+        depth=depth,
+        domain_scope_path=_scope(tmp_path / "domain-scope.json"),
+        ip_scope_path=_ip_scope(tmp_path / "ip-scope.json"),
+        account_scope_path=_account_scope(tmp_path / "account-scope.json", handle=account_handle),
+        audit_log_path=tmp_path / "investigation.log",
+        geolocate=geolocate,
+        authorized=authorized,
+    )
+
+
+def _investigation_service(
+    resolver: RecordingResolver,
+    ct_client: RecordingCtClient,
+    http: RecordingHttpClient | RecordingAccountClient,
+) -> InvestigationService:
+    return InvestigationService(resolver, ct_client, http, _account_specs())
+
+
+def test_investigation_requires_authorization_before_network(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+    http = RecordingHttpClient()
+
+    with pytest.raises(AuthorizationRequiredError):
+        _investigation_service(resolver, ct_client, http).run(
+            _investigation_request(tmp_path, authorized=False)
+        )
+
+    assert resolver.calls == []
+    assert ct_client.calls == []
+    assert http.calls == []
+
+
+def test_investigation_blocks_out_of_scope_seed_before_network(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+    http = RecordingHttpClient()
+
+    with pytest.raises(OutOfScopeError):
+        _investigation_service(resolver, ct_client, http).run(
+            _investigation_request(tmp_path, seed_value="outside.example")
+        )
+
+    assert resolver.calls == []
+    assert ct_client.calls == []
+    assert http.calls == []
+    assert "blocked_out_of_scope" in (tmp_path / "investigation.log").read_text(encoding="utf-8")
+
+
+def test_investigation_runs_scoped_domain_pivots_and_audits_start(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+    http = RecordingHttpClient()
+
+    outcome = _investigation_service(resolver, ct_client, http).run(
+        _investigation_request(tmp_path)
+    )
+
+    values = {entity.value for entity in outcome.graph.entities}
+    assert {DOMAIN, "203.0.113.10", f"portal.{DOMAIN}"} <= values
+    assert outcome.warnings == ()
+    assert resolver.calls
+    assert ct_client.calls == [DOMAIN]
+    assert '"action": "investigation_started"' in (tmp_path / "investigation.log").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_investigation_skips_out_of_scope_discovered_username(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+    http = RecordingAccountClient()
+
+    outcome = _investigation_service(resolver, ct_client, http).run(
+        _investigation_request(
+            tmp_path,
+            seed_type=EntityType.EMAIL,
+            seed_value=f"alice@{DOMAIN}",
+            depth=2,
+            account_handle="another-user",
+        )
+    )
+
+    assert any("out-of-scope username pivot 'alice'" in item for item in outcome.warnings)
+    assert http.calls == []
+    assert resolver.calls
+    assert ct_client.calls == [DOMAIN]
+    assert "alice" in (tmp_path / "investigation.log").read_text(encoding="utf-8")
 
 
 def test_domain_scan_service_returns_recon_without_cli_dependency(tmp_path: Path) -> None:
