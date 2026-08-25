@@ -68,6 +68,10 @@ uses the same URL redactor before SQLite persistence.
   domain boundaries. Engagement, sender, recipient domains and the HTTPS training origin
   are scope-checked before token generation; cancellation is cooperative, and structured
   audit records contain recipient hashes/domains rather than complete email addresses.
-- Hermes, Apollo, Minerva, Vulcan, and AEGIS adoption is tracked in
+- Hermes: local scans do not invent an authorization requirement, but use shared strict
+  timeout/deadline validation and cooperative cancellation. Working-tree enumeration,
+  file bytes/counts, Git commits/output, process lifetime and generated artifacts are
+  independently bounded; symlinks and non-regular explicit inputs fail closed.
+- Apollo, Minerva, Vulcan, and AEGIS adoption is tracked in
   `upgrade.md`; offline-only work uses the same validation/redaction pieces where
   applicable but does not invent network authorization requirements.

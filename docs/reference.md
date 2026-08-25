@@ -255,7 +255,7 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus proteus email --campaign <f> --token <t>` | renders the simulated lure email for one token |
 | `olympus proteus report --campaign <f>` | summarizes campaign click-through (a training metric, never secrets) |
 | **Hermes** — 🔵 secret & config scanner | |
-| `olympus hermes scan <path>` | scans a path (and optionally its Git history), emits masked SARIF |
+| `olympus hermes scan <path>` | bounded regular-text/Git-history scan with stable baselines and masked SARIF; missing, symlink and partial inputs never report clean |
 | **Apollo** — 🔵 detection engineering | |
 | `olympus apollo test <rule> <event>` | evaluates one rule against one event |
 | `olympus apollo run --rules <dir> --events <f>` | evaluates a whole rule set against an event stream (NDJSON) |
@@ -599,7 +599,7 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus proteus email --campaign <f> --token <t>` | genera l'email-esca simulata per un token |
 | `olympus proteus report --campaign <f>` | riassume il click-through della campagna (metrica di training, mai segreti) |
 | **Hermes** — 🔵 secret & config scanner | |
-| `olympus hermes scan <path>` | scansiona un percorso (e opzionalmente la cronologia Git), emette SARIF mascherato |
+| `olympus hermes scan <path>` | scansione limitata di testo regolare/history Git con baseline stabili e SARIF mascherato; input mancanti, symlink o parziali non risultano puliti |
 | **Apollo** — 🔵 detection engineering | |
 | `olympus apollo test <rule> <event>` | valuta una regola contro un singolo evento |
 | `olympus apollo run --rules <dir> --events <f>` | valuta un intero rule-set contro uno stream di eventi (NDJSON) |

@@ -131,7 +131,9 @@ only the **security**, **functional**, and **licence** items are actual requirem
     structured scope audit adoption (Cycle 27).
   - [x] PROTEUS campaign authorization, recipient/sender/landing scope, cancellation, redacted audit,
     and protected versioned token artifact adoption (Cycle 28).
-  - [ ] Adopt the shared policy across Hermes, Apollo, Minerva, Vulcan, AEGIS, native integrations,
+  - [x] HERMES deadline/cancellation, file/traversal/Git process bounds, strict partial coverage,
+    masked SARIF and versioned private baseline adoption (Cycle 29).
+  - [ ] Adopt the shared policy across Apollo, Minerva, Vulcan, AEGIS, native integrations,
     and any API/worker paths that execute equivalent work.
 - [ ] Add adapters for network, persistence, and third-party services so domain tests remain offline
   and deterministic.
@@ -934,3 +936,53 @@ only the **security**, **functional**, and **licence** items are actual requirem
 - **Next activity:** migrate HERMES behind a bounded application service, reject missing/symlink/device
   paths instead of returning false-clean, cap file/history work, make Git subprocess execution
   cancellation/timeout-aware, and keep every emitted value masked.
+
+### Cycle 29 — bound Hermes file/history scans and eliminate false-clean coverage
+
+- **Status:** `DONE` for HERMES application/policy adoption; the repository-wide policy parent remains
+  `IN PROGRESS` for APOLLO, MINERVA, VULCAN, AEGIS and native integrations.
+- **Objective:** ensure unsupported, missing, changed, oversized or only partially readable inputs can
+  never be reported as clean; bound both filesystem and Git work; move orchestration out of Typer; and
+  preserve only masked, stable evidence in SARIF/baselines.
+- **Component:** HERMES scanner, application service, CLI, SARIF/baseline persistence, shared-policy
+  documentation, command reference, ecosystem inventory, and offline/real-process tests.
+- **Dependencies:** shared `ExecutionPolicy`/cancellation, standard-library no-follow file descriptors,
+  argument-array subprocesses, Git patch format, SemVer compatibility, SARIF 2.1.0, and atomic files.
+- **Completion criteria:** entropy/resource inputs validate below CLI; nonexistent/symlink/device paths
+  fail; directory symlinks and Git metadata are not traversed; count/byte/deadline limits apply during
+  enumeration and reads; output/baseline feedback is excluded; partial coverage exits non-clean; history
+  requires one repository and has commit/output/stderr/process limits, no shell/pager/ext-diff/textconv,
+  cancellation/timeout termination, and actionable locations; duplicate values do not inflate findings;
+  SARIF contains no raw secret; baseline is strict/versioned/private with explicit legacy migration.
+- **Implementation:** added `SecretScanService`, request/outcome contracts and an injected history port;
+  Typer now supplies options, writes application results, presents coverage and maps stable exit codes.
+  `scan_paths_bounded` validates 0–8 entropy, regular inputs, traversal/file byte/count bounds, shared
+  deadline/cancellation, deduplicates overlapping roots, excludes requested artifacts, prunes `.git` and
+  symlinks, uses `O_NOFOLLOW` where available, and distinguishes intentional binary ignores from partial
+  read/size failures. The Git adapter runs a resolved executable without shell/stdin/pager/external diff
+  or textconv, sanitizes interactive settings, caps commits/stdout/stderr, drains both pipes concurrently,
+  and terminates on cancellation, deadline, overflow or timeout. Patch parsing emits introducing
+  `git-history/<commit>/<path>` evidence. Fingerprints are stable across line moves and duplicate patch
+  appearances. SARIF/baseline writes use unique fsynced atomic files; baselines are strict `1.0.0` with
+  a bare-array migration and POSIX mode `0600`.
+- **Files modified:** `src/olympus/hermes/scanner.py`, `src/olympus/hermes/application.py`,
+  `src/olympus/hermes/cli.py`, `src/olympus/hermes/sarif.py`, `docs/hermes.md`,
+  `docs/execution-policy.md`, `docs/reference.md`, `docs/ecosystem-audit.md`,
+  `tests/unit/test_hermes.py`, and `upgrade.md`.
+- **Tests executed:** focused HERMES engine/application/CLI/Git/SARIF/baseline suite: `13 passed`;
+  complete offline suite: `614 passed`; Ruff: clean; strict mypy: clean across 119 source files with a
+  fresh generated cache directory.
+- **Real execution evidence:** a temporary real Git repository committed the synthetic documentation
+  key, removed it in a second commit, and retained no secret in its working tree. The installed
+  `olympus hermes scan --history` command scanned one working-tree file plus two bounded commits, found
+  exactly one deduplicated history result, exited 1, and wrote SARIF 2.1.0 with commit/file location and
+  no complete key. A second installed command against a nonexistent path exited 2 and wrote no false
+  clean result. Unit execution separately forces the one-byte history cap and observes explicit failure.
+- **Residual limitations:** text scanning intentionally ignores binary/non-UTF-8 content and reports the
+  ignored count; specialized binary/archive secret extraction would require separate bounded adapters.
+  Cooperative cancellation cannot interrupt an individual local file read, which is instead byte-capped;
+  Git is terminated between short polling intervals. POSIX no-follow/mode flags require equivalent ACL
+  controls on platforms that do not expose them.
+- **Next activity:** inspect APOLLO rule/event parsing and Typer orchestration for version drift,
+  unbounded streams, unsafe regex/evaluator behavior, false alerts, and missing application/policy
+  boundaries; then connect its versioned alerts cleanly to MINERVA and VULCAN.

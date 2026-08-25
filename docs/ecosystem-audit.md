@@ -54,7 +54,7 @@ commands.
 | helios | scan | pydantic | none | none | scope JSON | findings JSON | n/a |
 | artemis | check-scope, content, fetch, fingerprint, metabase, xss | pydantic | none | none | scope JSON, wordlists | findings JSON | n/a |
 | proteus | campaign, email, page, report | core policy/contracts | none | none | recipient/sender/landing scope JSON | protected versioned campaign JSON, report JSON, training HTML | n/a |
-| hermes | scan | pydantic | none | none | targets | SARIF | n/a |
+| hermes | scan | core policy/contracts | Git (optional history) | none | paths, versioned baseline, resource limits | masked SARIF, private baseline | n/a |
 | apollo | rules, run, test | pydantic | none | none | rules YAML, events | alerts JSON | n/a |
 | minerva | record, timeline, triage, verify | pydantic | none | none | evidence JSON | incident/custody JSON | n/a |
 | vulcan | rank, report | pydantic | none | none | asset/finding/alert JSON | JSON/Markdown/HTML report | n/a |

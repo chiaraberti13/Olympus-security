@@ -7,12 +7,16 @@ from pathlib import Path
 
 import typer
 
+from olympus.core.contracts import ContractCompatibilityError
+from olympus.core.execution import CancellationRequested, ExecutionPolicyError
+from olympus.hermes.application import SecretScanRequest, SecretScanService
 from olympus.hermes.sarif import write_sarif
 from olympus.hermes.scanner import (
-    apply_baseline,
-    load_baseline,
-    scan_git_history,
-    scan_path,
+    DEFAULT_MAX_COMMITS,
+    DEFAULT_MAX_FILE_BYTES,
+    DEFAULT_MAX_FILES,
+    DEFAULT_MAX_HISTORY_BYTES,
+    ScanLimitError,
     write_baseline,
 )
 
@@ -32,29 +36,60 @@ def scan(
     write_baseline_path: Path | None = typer.Option(
         None, "--write-baseline", help="Write current findings' fingerprints as a baseline."
     ),
+    timeout: float = typer.Option(30.0, "--timeout", help="Per-Git-process timeout in seconds."),
+    deadline: float = typer.Option(600.0, "--deadline", help="Overall scan deadline in seconds."),
+    max_file_bytes: int = typer.Option(DEFAULT_MAX_FILE_BYTES, "--max-file-bytes"),
+    max_files: int = typer.Option(DEFAULT_MAX_FILES, "--max-files"),
+    max_history_bytes: int = typer.Option(DEFAULT_MAX_HISTORY_BYTES, "--max-history-bytes"),
+    max_commits: int = typer.Option(DEFAULT_MAX_COMMITS, "--max-commits"),
 ) -> None:
     """Scan a path and optionally its Git history, emitting masked SARIF."""
     try:
-        findings = [
-            finding
-            for path in paths
-            for finding in scan_path(path, entropy_threshold)
-        ]
-        if history:
-            findings.extend(scan_git_history(paths[0], entropy_threshold))
-        if baseline is not None:
-            findings = apply_baseline(findings, load_baseline(baseline))
-    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        outcome = SecretScanService().run(
+            SecretScanRequest(
+                paths=tuple(paths),
+                entropy_threshold=entropy_threshold,
+                history=history,
+                baseline_path=baseline,
+                timeout_seconds=timeout,
+                deadline_seconds=deadline,
+                max_file_bytes=max_file_bytes,
+                max_files=max_files,
+                max_history_bytes=max_history_bytes,
+                max_commits=max_commits,
+                excluded_paths=tuple(
+                    path for path in (output, baseline, write_baseline_path) if path is not None
+                ),
+            )
+        )
+        findings = list(outcome.findings)
+        if write_baseline_path is not None:
+            write_baseline(findings, write_baseline_path)
+        write_sarif(findings, output)
+    except (
+        CancellationRequested,
+        ContractCompatibilityError,
+        ExecutionPolicyError,
+        OSError,
+        ScanLimitError,
+        subprocess.SubprocessError,
+        TimeoutError,
+        ValueError,
+    ) as exc:
         typer.echo(f"hermes: scan error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
     if write_baseline_path is not None:
-        write_baseline(findings, write_baseline_path)
         typer.echo(
             f"hermes: wrote baseline ({len(findings)} fingerprint(s)) to {write_baseline_path}"
         )
-
-    write_sarif(findings, output)
-    typer.echo(f"hermes: {len(findings)} potential secret(s); SARIF: {output}")
+    typer.echo(
+        f"hermes: {len(findings)} potential secret(s) in {outcome.scanned_files} text file(s); "
+        f"ignored {len(outcome.ignored_files)}; SARIF: {output}"
+    )
+    if outcome.partial_errors:
+        for error in outcome.partial_errors:
+            typer.echo(f"hermes: partial scan: {error.path}: {error.reason}", err=True)
+        raise typer.Exit(code=2)
     if findings:
         raise typer.Exit(code=1)
