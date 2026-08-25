@@ -56,6 +56,11 @@ acceptance rules.
 
 ## Notes
 
+- The vendored web app keeps its upstream *simulated* scanner mode. The
+  Olympus-native execution layer (`olympus.aegis`, `olympus aegis run`) is
+  separate Olympus-owned code that runs the real external scanners with explicit
+  execution states and never fabricates findings; it does not modify vendored
+  source. See `docs/scanner-matrix.md` and `docs/aegis-execution-evidence.md`.
 - No upstream secrets, credentials, or API keys were copied.
 - Vendored code is preserved verbatim and held to its own quality tooling, not
   Olympus's optional helpers.

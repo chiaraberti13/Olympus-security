@@ -97,11 +97,15 @@ commands.
 
 ## 4. Incomplete, unverified, or simulated components (honest findings)
 
-- **AEGIS scanners default to *simulated* output.** Every one of the 24 vendored
-  scanners returns hard-coded educational findings (`"status": "simulated"`)
-  unless `VAP_ENABLE_LIVE_SCANS=true` **and** the scanner's binary/API is present
-  **and** authorization/scope is satisfied. This is upstream behaviour, preserved
-  verbatim; it is **not** counted as a working live scan. `olympus aegis doctor`
+- **The vendored web app still simulates by default** (upstream behaviour,
+  preserved verbatim). **Resolved for the Olympus-native path:** `olympus aegis
+  run` is a new native execution layer with explicit states
+  (`live`/`unavailable`/`failed`/`disabled`/`simulation`) that **never** emits a
+  simulated finding unless `--simulate` (or `AEGIS_SIMULATION_MODE=true`) is
+  explicitly given. Six scanners have real native adapters (nmap, nikto, wafw00f,
+  sqlmap, whatweb, testssl); four were verified live end-to-end here against a
+  local lab (see `docs/aegis-execution-evidence.md`). The remaining 18 native
+  adapters are pending. `olympus aegis doctor`
   reports the live-scan flag and binary availability so the operator knows which
   scanners can run for real.
 - **No scanner binaries are installed in this sandbox** and there is **no Docker

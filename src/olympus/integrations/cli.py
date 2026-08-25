@@ -366,3 +366,101 @@ def register_doctor(parent: typer.Typer) -> None:
 
         report.add(check_writable_dir(tempfile.gettempdir(), optional=True))
         _emit_report(report)
+
+
+# --------------------------------------------------------------------------- #
+# AEGIS native scan execution (`olympus aegis run`) — no implicit simulation
+# --------------------------------------------------------------------------- #
+def _load_scope(path: object) -> tuple[str, ...]:
+    import json as _json
+    from pathlib import Path as _Path
+
+    data = _json.loads(_Path(str(path)).read_text(encoding="utf-8"))
+    allowed: list[str] = []
+    for key in ("allowed", "allowed_hosts", "allowed_domains"):
+        values = data.get(key) if isinstance(data, dict) else None
+        if isinstance(values, list):
+            allowed.extend(str(v) for v in values)
+    return tuple(dict.fromkeys(allowed))
+
+
+@aegis_app.command("run")
+def aegis_run(
+    scanner: str = typer.Argument(..., help="Scanner name (see 'olympus aegis run --list')."),
+    target: str = typer.Option("", "--target", help="Authorized target (host/url/domain)."),
+    kind: str = typer.Option("host", "--kind", help="Target kind: host, url, or domain."),
+    scope: str = typer.Option("", "--scope", help="JSON scope file: {'allowed': [hosts/domains]}."),
+    timeout: int = typer.Option(300, "--timeout", help="Per-scan timeout in seconds."),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm documented authorization for a real scan."
+    ),
+    simulate: bool = typer.Option(
+        False, "--simulate", help="Explicitly produce ILLUSTRATIVE output (never a real scan)."
+    ),
+    list_scanners: bool = typer.Option(
+        False, "--list", help="List scanners with a native execution adapter and exit."
+    ),
+) -> None:
+    """Run a real scanner with explicit execution states (never implicit simulation).
+
+    States: live / unavailable / failed / disabled / simulation. Simulation is
+    only ever produced with --simulate (or AEGIS_SIMULATION_MODE=true); a missing
+    binary yields 'unavailable', and live-disabled yields 'disabled' — never
+    fabricated findings.
+    """
+    from olympus.aegis import config as aegis_config
+    from olympus.aegis.base import NotAuthorizedError
+    from olympus.aegis.model import ScanRequest
+    from olympus.aegis.registry import UnknownScannerError, get_adapter, implemented
+    from olympus.aegis.scope import OutOfScopeError, SsrfBlockedError, TargetValidationError
+
+    if list_scanners:
+        typer.echo(json.dumps({"implemented": implemented()}, indent=2, sort_keys=True))
+        return
+    if not target:
+        typer.echo("olympus: --target is required (or use --list)", err=True)
+        raise typer.Exit(code=2)
+    try:
+        adapter = get_adapter(scanner)
+    except UnknownScannerError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    allowed = _load_scope(scope) if scope else ()
+    simulate_on = simulate or aegis_config.simulation_mode()
+    request = ScanRequest(
+        scanner=scanner,
+        target=target,
+        target_kind=kind,
+        allowed=allowed,
+        timeout_seconds=timeout,
+        authorized=i_am_authorized,
+        live_enabled=aegis_config.live_enabled(),
+        simulate=simulate_on,
+    )
+    try:
+        result = adapter.run(request)
+    except (OutOfScopeError, SsrfBlockedError) as exc:
+        typer.echo(f"olympus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except TargetValidationError as exc:
+        typer.echo(f"olympus: invalid target: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except NotAuthorizedError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+
+    typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    raise typer.Exit(code=_scan_exit_code(result))
+
+
+def _scan_exit_code(result: object) -> int:
+    from olympus.aegis.states import ExecutionState
+
+    state = getattr(result, "state", None)
+    findings = getattr(result, "findings", [])
+    if state is ExecutionState.FAILED:
+        return 4
+    if state is ExecutionState.LIVE and findings:
+        return 1
+    return 0
