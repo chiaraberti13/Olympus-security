@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from olympus.argus.accounts import SiteSpec, enumerate_accounts
 from olympus.argus.ct import CertificateTransparencyClient
 from olympus.argus.graph import Entity, EntityType, Investigation
-from olympus.argus.ip_osint import IpApiClient, IpGeoError, analyze_ip
+from olympus.argus.ip_osint import IpGeoError, IpWhoisClient, analyze_ip
 from olympus.argus.phone import PhoneParseError, analyze_phone
 from olympus.argus.resolver import DnsResolver
 from olympus.core.http import HttpClient
@@ -109,7 +109,7 @@ def ip_geo_transform(entity: Entity, graph: Investigation, ctx: TransformContext
     if not (ctx.geolocate and ctx.http is not None):
         return []
     try:
-        geo = IpApiClient(ctx.http).geolocate(entity.value)
+        geo = IpWhoisClient(ctx.http).geolocate(entity.value)
     except IpGeoError:
         return []
     for key, value in (("country", geo.country), ("city", geo.city), ("isp", geo.isp)):

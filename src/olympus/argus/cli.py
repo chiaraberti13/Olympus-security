@@ -33,6 +33,8 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    IpProfileRequest,
+    IpProfileService,
     MacAnalysisRequest,
     MacAnalysisService,
     MyIpDiscoveryRequest,
@@ -70,20 +72,13 @@ from olympus.argus.fronting import (
 )
 from olympus.argus.graph import EntityType, export_investigation
 from olympus.argus.ip_osint import (
-    IpApiClient,
-    IpGeo,
-    IpGeoError,
-    IpIntel,
     IpParseError,
-    analyze_ip,
-    build_ip_asset,
-    build_ip_findings,
+    IpWhoisClient,
     export_ip_intel,
 )
 from olympus.argus.ip_scope import (
     IpOutOfScopeError,
     IpScopeError,
-    enforce_ip_scope,
 )
 from olympus.argus.mac import (
     MacParseError,
@@ -441,21 +436,6 @@ def accounts(
         typer.echo(f"argus: wrote account intel to {output}", err=True)
 
 
-def _profile_ip(ip: str, scope: Path, log: Path, *, geo: bool) -> IpIntel:
-    """Profile one IP: classify offline, enforce scope, and optionally geolocate."""
-    report = analyze_ip(ip)
-    enforce_ip_scope(report.ip, scope, log)
-    geo_result: IpGeo | None = None
-    if geo:
-        try:
-            geo_result = IpApiClient(UrllibHttpClient()).geolocate(report.ip)
-        except IpGeoError as exc:
-            typer.echo(f"argus: warning: geolocation failed for {report.ip}: {exc}", err=True)
-    asset = build_ip_asset(report, geo_result)
-    findings = build_ip_findings(asset.asset_id, report, geo_result)
-    return IpIntel(report=report, asset=asset, findings=findings)
-
-
 @app.command()
 def ip(
     ip_address: str | None = typer.Option(None, "--ip", help="IPv4/IPv6 address to profile."),
@@ -467,7 +447,7 @@ def ip(
     ),
     log: Path = typer.Option(DEFAULT_IP_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."),
     geo: bool = typer.Option(
-        False, "--geo", help="Geolocation/ASN via ip-api.com (third-party, keyless)."
+        False, "--geo", help="Geolocation/ASN via encrypted ipwho.is (third-party, keyless)."
     ),
     i_am_authorized: bool = typer.Option(
         False, "--i-am-authorized", help="Confirm authorization for the third-party geo lookup."
@@ -483,47 +463,55 @@ def ip(
     if (ip_address is None) == (input_file is None):
         typer.echo("argus: provide exactly one of --ip or --input", err=True)
         raise typer.Exit(code=2)
-    if geo and not i_am_authorized:
+    http = UrllibHttpClient.from_config()
+    service = IpProfileService(IpWhoisClient(http) if geo else None)
+
+    def request_for(target: str) -> IpProfileRequest:
+        return IpProfileRequest(
+            ip_address=target,
+            scope_path=scope,
+            audit_log_path=log,
+            geolocate=geo,
+            authorized=i_am_authorized,
+        )
+
+    try:
+        if ip_address is not None:
+            outcome = service.run(request_for(ip_address))
+            for warning in outcome.warnings:
+                typer.echo(f"argus: warning: {warning}", err=True)
+            typer.echo(json.dumps(outcome.intel.to_dict(), indent=2, sort_keys=True))
+            if output is not None:
+                export_ip_intel(outcome.intel, output)
+                typer.echo(f"argus: wrote IP intel to {output}", err=True)
+            return
+
+        assert input_file is not None  # noqa: S101 (guaranteed by exactly-one check)
+        batch = service.run_many(tuple(request_for(target) for target in _read_targets(input_file)))
+    except AuthorizationRequiredError as exc:
         typer.echo(f"argus: {_IP_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
+        raise typer.Exit(code=4) from exc
+    except IpParseError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except IpScopeError as exc:
+        typer.echo(f"argus: IP scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except IpOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: could not read IP input: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
-    if ip_address is not None:
-        try:
-            intel = _profile_ip(ip_address, scope, log, geo=geo)
-        except IpParseError as exc:
-            typer.echo(f"argus: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except IpScopeError as exc:
-            typer.echo(f"argus: IP scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except IpOutOfScopeError as exc:
-            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-            raise typer.Exit(code=3) from exc
-        typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
-        if output is not None:
-            export_ip_intel(intel, output)
-            typer.echo(f"argus: wrote IP intel to {output}", err=True)
-        return
-
-    assert input_file is not None  # noqa: S101 (guaranteed by the exactly-one check above)
-    intels: list[IpIntel] = []
-    for target in _read_targets(input_file):
-        try:
-            intels.append(_profile_ip(target, scope, log, geo=geo))
-        except IpParseError:
-            typer.echo(f"argus: skipping invalid IP {target!r}", err=True)
-        except IpScopeError as exc:
-            typer.echo(f"argus: IP scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except IpOutOfScopeError:
-            typer.echo(f"argus: skipping out-of-scope IP {target!r} (logged)", err=True)
-
-    payload = [intel.to_dict() for intel in intels]
+    for warning in batch.warnings:
+        typer.echo(f"argus: {warning}", err=True)
+    payload = [intel.to_dict() for intel in batch.intels]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    typer.echo(f"argus: profiled {len(intels)} IP(s)", err=True)
+    typer.echo(f"argus: profiled {len(batch.intels)} IP(s)", err=True)
 
 
 _INVESTIGATE_DISCLAIMER = (

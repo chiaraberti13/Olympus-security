@@ -15,10 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from olympus.argus.ip_osint import (
-    IpApiClient,
     IpGeo,
     IpGeoError,
     IpIntel,
+    IpWhoisClient,
     analyze_ip,
     build_ip_asset,
     build_ip_findings,
@@ -78,12 +78,12 @@ def build_result(public_ip: str, geo_http: HttpClient | None = None) -> MyIpResu
     report = analyze_ip(public_ip)
     geo: IpGeo | None = None
     try:
-        geo = IpApiClient(geo_http).geolocate(report.ip)
+        geo = IpWhoisClient(geo_http).geolocate(report.ip)
     except IpGeoError:
         geo = None
     asset = build_ip_asset(report, geo)
     findings = build_ip_findings(asset.asset_id, report, geo)
-    intel = IpIntel(report=report, asset=asset, findings=findings)
+    intel = IpIntel(report=report, asset=asset, geo=geo, findings=findings)
     return MyIpResult(public_ip=public_ip, intel=intel)
 
 

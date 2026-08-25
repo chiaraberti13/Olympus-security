@@ -108,6 +108,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
     injected HTTP ports.
   - [x] Argus `phone`: offline/batch profiling and authorized, phone-scoped enrichment service with
     injected carrier, breach, and messaging ports.
+  - [x] Argus `ip`: offline/batch classification and authorized, CIDR-scoped geolocation service with
+    an injected HTTPS provider port.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -565,3 +567,40 @@ only the **security**, **functional**, and **licence** items are actual requirem
   not represented as verified, while the adapters and security boundary are tested offline.
 - **Next activity:** extract `argus ip` analysis/geolocation from Typer, preserving CIDR scope,
   authorization, offline classification, and explicit geolocation failures.
+
+### Cycle 21 — separate Argus IP profiling and replace plaintext geolocation
+
+- **Status:** `VERIFIED` (live third-party geolocation evidence remains `BLOCKED` by the environment
+  approval boundary; the parent repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move single/batch IP profiling out of Typer, preserve geolocation as explicit output,
+  and replace the plaintext third-party endpoint with a documented HTTPS provider.
+- **Component:** ARGUS Olympus-native application/CLI boundary, IP contracts, geolocation adapter,
+  investigation and `myip` consumers, CIDR scope/audit policy, parity/reference docs, and tests.
+- **Dependencies:** `IpGeoClient`, shared bounded HTTP configuration, IP CIDR scope, shared
+  asset/finding contracts, and the documented ipwho.is free HTTPS response contract.
+- **Completion criteria:** offline classification makes no geolocation call; `--geo` requires
+  authorization and CIDR scope; batch skips are explicit/audited; normalized geolocation is retained
+  in `geo`, assets, and findings; transport is encrypted; HTTP/application failures are explicit;
+  existing importers retain a compatibility path.
+- **Implementation:** added `IpProfileService` with single/batch request/outcome contracts and an
+  injected geo port; removed profiling/scope/geo orchestration from Typer. Added explicit `geo` data
+  to `IpIntel`. Replaced `http://ip-api.com` with `https://ipwho.is`, normalized its documented
+  `connection`/optional `security` payload, rejected non-2xx and `success:false`, updated `myip` and
+  investigation transforms, and retained `IpApiClient` as a no-network compatibility alias.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/cli.py`,
+  `src/olympus/argus/ip_osint.py`, `src/olympus/argus/myip.py`,
+  `src/olympus/argus/transforms.py`, `docs/parity/argus.json`, `docs/reference.md`,
+  `tests/unit/test_argus_application.py`, `tests/unit/test_argus_cli_ip.py`,
+  `tests/unit/test_argus_ip.py`, `tests/unit/test_argus_myip.py`,
+  `tests/unit/test_argus_transforms.py`, and `upgrade.md`.
+- **Tests executed:** focused application/IP/CLI/myip/transforms/parity suite: `74 passed`; complete
+  offline suite: `541 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed CLI classified the authorized documentation-range IP
+  offline with exit 0 and explicit `geo: null`; an unconfirmed geo request exited 4 before network;
+  an out-of-scope public IP exited 3 and wrote an audit record. Direct tests prove zero geo calls
+  offline/unauthorized/out-of-scope and prove normalized ASN/geolocation reaches the output contract.
+- **Residual limitations:** no live target IP was sent to ipwho.is because the environment requires
+  separate approval for that privacy-sensitive disclosure. The provider adapter is verified against
+  its real documented schema offline; this external proof remains `BLOCKED`, not verified.
+- **Next activity:** extract `argus accounts` single/batch enumeration from Typer, retaining handle
+  scope, metadata authorization, bounded concurrency/rate, partial results, and actionable failures.

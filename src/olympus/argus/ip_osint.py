@@ -72,39 +72,58 @@ class IpGeoClient(Protocol):
         ...
 
 
-class IpApiClient:
-    """Real, keyless geolocation via the ip-api.com free endpoint."""
+class IpWhoisClient:
+    """Real, keyless geolocation via the encrypted ipwho.is endpoint."""
 
-    _ENDPOINT = "http://ip-api.com/json"
-    _FIELDS = "status,message,country,regionName,city,isp,org,as,proxy,hosting"
+    _ENDPOINT = "https://ipwho.is"
 
     def __init__(self, client: HttpClient) -> None:
         self._client = client
 
     def geolocate(self, ip: str) -> IpGeo:
-        """Geolocate ``ip`` (best-effort parsing of the ip-api.com response)."""
+        """Geolocate ``ip`` and normalize the documented nested response."""
         try:
-            response = self._client.get(f"{self._ENDPOINT}/{quote(ip)}?fields={self._FIELDS}")
+            response = self._client.get(f"{self._ENDPOINT}/{quote(ip)}")
         except HttpRequestError as exc:
             raise IpGeoError(f"geolocation request failed: {exc}") from exc
+        if response.status_code != 200:
+            raise IpGeoError(f"geolocation returned HTTP {response.status_code}")
         try:
             data = json.loads(response.body)
         except json.JSONDecodeError as exc:
             raise IpGeoError(f"geolocation returned non-JSON: {exc}") from exc
         if not isinstance(data, dict):
             raise IpGeoError("geolocation returned an unexpected payload")
-        if data.get("status") != "success":
+        if data.get("success") is not True:
             raise IpGeoError(f"geolocation failed: {data.get('message', 'unknown error')}")
+        connection = data.get("connection")
+        if not isinstance(connection, dict):
+            connection = {}
+        security = data.get("security")
+        if not isinstance(security, dict):
+            security = {}
+        asn_value = str(connection.get("asn", ""))
+        if asn_value and not asn_value.upper().startswith("AS"):
+            asn_value = f"AS{asn_value}"
         return IpGeo(
             country=str(data.get("country", "")),
-            region=str(data.get("regionName", "")),
+            region=str(data.get("region", "")),
             city=str(data.get("city", "")),
-            isp=str(data.get("isp", "")),
-            org=str(data.get("org", "")),
-            asn=str(data.get("as", "")),
-            is_proxy=bool(data.get("proxy", False)),
-            is_hosting=bool(data.get("hosting", False)),
+            isp=str(connection.get("isp", "")),
+            org=str(connection.get("org", "")),
+            asn=asn_value,
+            is_proxy=bool(
+                security.get("proxy", False)
+                or security.get("vpn", False)
+                or security.get("tor", False)
+            ),
+            is_hosting=bool(security.get("hosting", False)),
         )
+
+
+# Compatibility for callers importing the historical class name. The runtime
+# provider is ipwho.is; no request is sent to the former plaintext endpoint.
+IpApiClient = IpWhoisClient
 
 
 def analyze_ip(raw_ip: str) -> IpReport:
@@ -200,6 +219,7 @@ class IpIntel:
 
     report: IpReport
     asset: Asset
+    geo: IpGeo | None = None
     findings: list[Finding] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -207,6 +227,20 @@ class IpIntel:
         return {
             "report": self.report.to_dict(),
             "asset": json.loads(self.asset.model_dump_json()),
+            "geo": (
+                {
+                    "country": self.geo.country,
+                    "region": self.geo.region,
+                    "city": self.geo.city,
+                    "isp": self.geo.isp,
+                    "org": self.geo.org,
+                    "asn": self.geo.asn,
+                    "is_proxy": self.geo.is_proxy,
+                    "is_hosting": self.geo.is_hosting,
+                }
+                if self.geo is not None
+                else None
+            ),
             "findings": [json.loads(f.model_dump_json()) for f in self.findings],
         }
 

@@ -238,7 +238,7 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus argus diff <a> <b>` | compares two Argus asset snapshots, no network |
 | `olympus argus phone --number <n>` | profiles an in-scope number offline; opt-in authorized enrichment is returned explicitly in `enrichment` / `messaging` and never runs without `--i-am-authorized` |
 | `olympus argus accounts --username <u>` | checks the handle's presence across a curated list of public sites |
-| `olympus argus ip --ip <ip>` | profiles an IP address (offline classification + optional geolocation) |
+| `olympus argus ip --ip <ip>` | profiles an in-scope IP offline; authorized optional geolocation uses the encrypted `ipwho.is` endpoint and is returned explicitly in `geo` |
 | `olympus argus investigate --name <n>` | builds an OSINT investigation graph by pivoting from a seed entity (flowsint-style) |
 | **Helios** — 🔴 network attack-surface mapping | |
 | `olympus helios scan <target>` | bounded, non-destructive TCP discovery, only after scope authorization |
@@ -582,7 +582,7 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus argus diff <a> <b>` | confronta due snapshot di asset Argus, senza rete |
 | `olympus argus phone --number <n>` | profila offline un numero in scope; gli arricchimenti autorizzati opzionali sono restituiti esplicitamente in `enrichment` / `messaging` e non partono senza `--i-am-authorized` |
 | `olympus argus accounts --username <u>` | verifica la presenza dell'handle su una lista curata di siti pubblici |
-| `olympus argus ip --ip <ip>` | profila un indirizzo IP (classificazione offline + geolocalizzazione opzionale) |
+| `olympus argus ip --ip <ip>` | profila offline un IP in scope; la geolocalizzazione opzionale autorizzata usa l'endpoint cifrato `ipwho.is` ed è restituita esplicitamente in `geo` |
 | `olympus argus investigate --name <n>` | costruisce un grafo d'indagine OSINT pivotando da un'entità seed (stile flowsint) |
 | **Helios** — 🔴 mappatura della superficie di rete | |
 | `olympus helios scan <target>` | discovery TCP non distruttiva e limitata, solo dopo autorizzazione di scope |

@@ -26,6 +26,17 @@ from olympus.argus.enrichment import (
     PhoneEnrichmentClient,
 )
 from olympus.argus.fronting import FrontingReport, assess_fronting
+from olympus.argus.ip_osint import (
+    IpGeo,
+    IpGeoClient,
+    IpGeoError,
+    IpIntel,
+    IpParseError,
+    analyze_ip,
+    build_ip_asset,
+    build_ip_findings,
+)
+from olympus.argus.ip_scope import IpOutOfScopeError, enforce_ip_scope
 from olympus.argus.mac import (
     MacIntel,
     analyze_mac,
@@ -308,6 +319,84 @@ class PhoneProfileService:
             breach_count=breach.breach_count if breach is not None else 0,
             breach_sources=breach.breach_sources if breach is not None else (),
         )
+
+
+@dataclass(frozen=True)
+class IpProfileRequest:
+    """Command-independent input for one scoped IP profile."""
+
+    ip_address: str
+    scope_path: Path
+    audit_log_path: Path
+    geolocate: bool = False
+    authorized: bool = False
+
+
+@dataclass(frozen=True)
+class IpProfileOutcome:
+    """One IP profile plus explicit non-fatal adapter warnings."""
+
+    intel: IpIntel
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IpBatchProfileResult:
+    """Batch IP result with successful profiles and skipped-target warnings."""
+
+    intels: tuple[IpIntel, ...]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IpProfileService:
+    """Classify, authorize, scope, and optionally geolocate IP addresses."""
+
+    geo_client: IpGeoClient | None = None
+
+    def run(self, request: IpProfileRequest) -> IpProfileOutcome:
+        """Refuse unauthorized/out-of-scope geo traffic before the adapter call."""
+        if request.geolocate and not request.authorized:
+            raise AuthorizationRequiredError(
+                "IP geolocation requires explicit documented authorization"
+            )
+        report = analyze_ip(request.ip_address)
+        enforce_ip_scope(report.ip, request.scope_path, request.audit_log_path)
+
+        warnings: list[str] = []
+        geo: IpGeo | None = None
+        if request.geolocate:
+            if self.geo_client is None:
+                warnings.append("geolocation skipped (adapter unavailable)")
+            else:
+                try:
+                    geo = self.geo_client.geolocate(report.ip)
+                except IpGeoError:
+                    warnings.append("geolocation failed (third-party service error)")
+        asset = build_ip_asset(report, geo)
+        intel = IpIntel(
+            report=report,
+            asset=asset,
+            geo=geo,
+            findings=build_ip_findings(asset.asset_id, report, geo),
+        )
+        return IpProfileOutcome(intel=intel, warnings=tuple(warnings))
+
+    def run_many(self, requests: tuple[IpProfileRequest, ...]) -> IpBatchProfileResult:
+        """Profile a batch while recording invalid and out-of-scope skips."""
+        intels: list[IpIntel] = []
+        warnings: list[str] = []
+        for request in requests:
+            try:
+                outcome = self.run(request)
+            except IpParseError:
+                warnings.append(f"skipping invalid IP {request.ip_address!r}")
+            except IpOutOfScopeError:
+                warnings.append(f"skipping out-of-scope IP {request.ip_address!r} (logged)")
+            else:
+                intels.append(outcome.intel)
+                warnings.extend(outcome.warnings)
+        return IpBatchProfileResult(intels=tuple(intels), warnings=tuple(warnings))
 
 
 @dataclass(frozen=True)

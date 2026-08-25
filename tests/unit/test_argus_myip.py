@@ -26,10 +26,10 @@ class _Http:
         return cls()
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
-        if "ip-api" in url:
+        if "ipwho.is" in url:
             if not self._geo_ok:
                 raise HttpRequestError("geo down")
-            body = json.dumps({"status": "success", "country": "Nowhere"})
+            body = json.dumps({"success": True, "country": "Nowhere"})
             return HttpResponse(status_code=200, headers={}, body=body)
         if self._ip is None:
             return HttpResponse(status_code=500, headers={}, body="")

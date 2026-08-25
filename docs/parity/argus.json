@@ -61,7 +61,7 @@
     "ip": {
       "options": ["--ip", "--input", "--scope", "--log", "--geo", "--i-am-authorized", "--output"],
       "capabilities": ["offline-ip-classification", "optional-geo-asn", "batch"],
-      "mapping": ["ip_osint.py", "ip_scope.py"]
+      "mapping": ["ip_osint.py", "ip_scope.py", "application.py"]
     },
     "phone": {
       "options": ["--number", "--input", "--region", "--scope", "--log", "--enrich", "--breach", "--messaging", "--i-am-authorized", "--output"],
@@ -95,7 +95,7 @@
     {"name": "Numverify", "purpose": "optional phone carrier enrichment", "mandatory": false},
     {"name": "Hudson Rock", "purpose": "optional breach exposure", "mandatory": false},
     {"name": "RapidAPI", "purpose": "optional messaging presence", "mandatory": false},
-    {"name": "ip-api.com", "purpose": "optional IP geolocation and ASN", "mandatory": false},
+    {"name": "ipwho.is", "purpose": "optional HTTPS IP geolocation and ASN", "mandatory": false},
     {"name": "curated public sites", "purpose": "account presence and optional metadata", "mandatory": false},
     {"name": "Cloudflare/Google DoH", "purpose": "DNS record enumeration over HTTPS", "mandatory": false},
     {"name": "rdap.org", "purpose": "domain registration data (WHOIS successor)", "mandatory": false},

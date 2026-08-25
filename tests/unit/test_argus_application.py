@@ -18,6 +18,8 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    IpProfileRequest,
+    IpProfileService,
     MacAnalysisRequest,
     MacAnalysisService,
     MyIpDiscoveryRequest,
@@ -30,6 +32,8 @@ from olympus.argus.application import (
     WhoisLookupService,
 )
 from olympus.argus.enrichment import MessagingPresence, PhoneEnrichment
+from olympus.argus.ip_osint import IpGeo
+from olympus.argus.ip_scope import IpOutOfScopeError
 from olympus.argus.mac_scope import MacOutOfScopeError
 from olympus.argus.myip import PROVIDERS, MyIpError
 from olympus.argus.phone_scope import PhoneOutOfScopeError
@@ -150,6 +154,17 @@ class RecordingMessagingClient:
         return MessagingPresence("test-messaging", registered=True, has_public_photo=True)
 
 
+class RecordingIpGeoClient:
+    """Offline IP geolocation port with exact call evidence."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def geolocate(self, ip: str) -> IpGeo:
+        self.calls.append(ip)
+        return IpGeo(country="Example", org="Example Network", asn="AS64500")
+
+
 def _scope(path: Path) -> Path:
     path.write_text(
         json.dumps({"engagement": "test", "allowed_domains": [DOMAIN]}),
@@ -169,6 +184,14 @@ def _mac_scope(path: Path, oui: str = "00:1A:2B") -> Path:
 def _phone_scope(path: Path, prefix: str = "+1650555") -> Path:
     path.write_text(
         json.dumps({"engagement": "test", "allowed_prefixes": [prefix]}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _ip_scope(path: Path, network: str = "203.0.113.0/24") -> Path:
+    path.write_text(
+        json.dumps({"engagement": "test", "allowed_networks": [network]}),
         encoding="utf-8",
     )
     return path
@@ -325,7 +348,7 @@ def test_myip_service_uses_independent_geo_port() -> None:
     assert result.intel.report.ip == "203.0.113.7"
     assert discovery.calls == [PROVIDERS[0]]
     assert len(geo.calls) == 1
-    assert "ip-api" in geo.calls[0]
+    assert "ipwho.is" in geo.calls[0]
 
 
 def test_myip_service_reports_provider_failure_without_geo_call() -> None:
@@ -444,6 +467,93 @@ def test_phone_batch_records_skips_without_calling_network(tmp_path: Path) -> No
     assert any("unparseable" in warning for warning in result.warnings)
     assert any("out-of-scope" in warning for warning in result.warnings)
     assert breach.calls == []
+
+
+def test_ip_service_offline_does_not_call_geo_port(tmp_path: Path) -> None:
+    geo = RecordingIpGeoClient()
+
+    outcome = IpProfileService(geo).run(
+        IpProfileRequest(
+            "203.0.113.10",
+            _ip_scope(tmp_path / "scope.json"),
+            tmp_path / "audit.log",
+        )
+    )
+
+    assert outcome.intel.report.ip == "203.0.113.10"
+    assert outcome.intel.geo is None
+    assert geo.calls == []
+
+
+def test_ip_service_requires_authorization_before_geo(tmp_path: Path) -> None:
+    geo = RecordingIpGeoClient()
+
+    with pytest.raises(AuthorizationRequiredError):
+        IpProfileService(geo).run(
+            IpProfileRequest(
+                "203.0.113.10",
+                _ip_scope(tmp_path / "scope.json"),
+                tmp_path / "audit.log",
+                geolocate=True,
+            )
+        )
+
+    assert geo.calls == []
+
+
+def test_ip_service_blocks_out_of_scope_before_geo(tmp_path: Path) -> None:
+    geo = RecordingIpGeoClient()
+    audit = tmp_path / "audit.log"
+
+    with pytest.raises(IpOutOfScopeError):
+        IpProfileService(geo).run(
+            IpProfileRequest(
+                "8.8.8.8",
+                _ip_scope(tmp_path / "scope.json"),
+                audit,
+                geolocate=True,
+                authorized=True,
+            )
+        )
+
+    assert geo.calls == []
+    assert "8.8.8.8" in audit.read_text(encoding="utf-8")
+
+
+def test_ip_service_preserves_geo_in_contract(tmp_path: Path) -> None:
+    geo = RecordingIpGeoClient()
+
+    outcome = IpProfileService(geo).run(
+        IpProfileRequest(
+            "203.0.113.10",
+            _ip_scope(tmp_path / "scope.json"),
+            tmp_path / "audit.log",
+            geolocate=True,
+            authorized=True,
+        )
+    )
+
+    payload = outcome.intel.to_dict()
+    assert geo.calls == ["203.0.113.10"]
+    geo_payload = payload["geo"]
+    assert isinstance(geo_payload, dict)
+    assert geo_payload["asn"] == "AS64500"
+    assert outcome.intel.asset.metadata["country"] == "Example"
+
+
+def test_ip_batch_records_invalid_and_scope_skips(tmp_path: Path) -> None:
+    scope = _ip_scope(tmp_path / "scope.json")
+    audit = tmp_path / "audit.log"
+    requests = tuple(
+        IpProfileRequest(ip, scope, audit)
+        for ip in ("203.0.113.10", "not-an-ip", "8.8.8.8")
+    )
+
+    result = IpProfileService().run_many(requests)
+
+    assert len(result.intels) == 1
+    assert any("invalid IP" in warning for warning in result.warnings)
+    assert any("out-of-scope" in warning for warning in result.warnings)
 
 
 def test_domain_scan_service_blocks_before_network_dependencies(tmp_path: Path) -> None:
