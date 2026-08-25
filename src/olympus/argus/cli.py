@@ -22,7 +22,12 @@ from olympus.argus.accounts_scope import (
     AccountScopeError,
     enforce_account_scope,
 )
-from olympus.argus.application import DomainScanRequest, DomainScanService
+from olympus.argus.application import (
+    DomainScanRequest,
+    DomainScanService,
+    FrontingAssessmentRequest,
+    FrontingAssessmentService,
+)
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.diff import diff_snapshots
@@ -51,7 +56,6 @@ from olympus.argus.enrichment import (
     RapidApiMessagingClient,
 )
 from olympus.argus.fronting import (
-    assess_fronting,
     export_fronting,
     report_to_asset,
     report_to_findings,
@@ -211,7 +215,9 @@ def fronting(
 ) -> None:
     """Passively check whether an in-scope domain is CDN/WAF-fronted and leaks its origin IP."""
     try:
-        enforce_scope(domain, scope, log)
+        report = FrontingAssessmentService(DnspythonResolver(), CrtShClient()).run(
+            FrontingAssessmentRequest(domain=domain, scope_path=scope, audit_log_path=log)
+        )
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -219,8 +225,6 @@ def fronting(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    try:
-        report = assess_fronting(domain, DnspythonResolver(), CrtShClient())
     except CertificateTransparencyError as exc:
         typer.echo(f"argus: Certificate Transparency error: {exc}", err=True)
         raise typer.Exit(code=4) from exc
