@@ -12,6 +12,7 @@ from olympus.argus.accounts_scope import AccountOutOfScopeError
 from olympus.argus.application import (
     AccountEnumerationRequest,
     AccountEnumerationService,
+    ArgusDiagnosticsService,
     AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
@@ -32,6 +33,7 @@ from olympus.argus.application import (
     MyIpDiscoveryService,
     PhoneProfileRequest,
     PhoneProfileService,
+    SnapshotDiffService,
     WebReconRequest,
     WebReconService,
     WhoisLookupRequest,
@@ -265,6 +267,34 @@ def _investigation_service(
     http: RecordingHttpClient | RecordingAccountClient,
 ) -> InvestigationService:
     return InvestigationService(resolver, ct_client, http, _account_specs())
+
+
+def test_snapshot_diff_service_uses_versioned_contracts(tmp_path: Path) -> None:
+    before = tmp_path / "before.json"
+    after = tmp_path / "after.json"
+    payload = {"schema_name": "olympus.argus-assets", "schema_version": "1.0.0", "assets": []}
+    before.write_text(json.dumps(payload), encoding="utf-8")
+    after.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = SnapshotDiffService().run(before, after)
+
+    assert result.added == []
+    assert result.removed == []
+    assert result.unchanged == []
+
+
+def test_argus_diagnostics_never_exposes_secret_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_NUMVERIFY_KEY", "do-not-print-this")
+
+    payload = ArgusDiagnosticsService().run().to_dict()
+
+    assert "do-not-print-this" not in json.dumps(payload)
+    checks = payload["checks"]
+    assert isinstance(checks, list)
+    numverify = next(check for check in checks if check["name"] == "env:OLYMPUS_NUMVERIFY_KEY")
+    assert numverify["detail"] == "set"
 
 
 def test_investigation_requires_authorization_before_network(tmp_path: Path) -> None:

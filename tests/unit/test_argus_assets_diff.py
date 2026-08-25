@@ -3,8 +3,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from olympus.argus.assets import export_assets, recon_to_assets
-from olympus.argus.diff import diff_snapshots
+from olympus.argus.diff import SnapshotValidationError, diff_snapshots
 from olympus.argus.recon import DomainRecon
 from olympus.core.models import Asset
 
@@ -42,3 +44,28 @@ def test_diff_reports_added_removed_and_unchanged(tmp_path: Path) -> None:
     assert result.added == ["new.olympusdemocorp.example"]
     assert result.removed == ["old.olympusdemocorp.example"]
     assert result.unchanged == ["olympusdemocorp.example"]
+
+
+def test_diff_rejects_unversioned_or_wrong_schema(tmp_path: Path) -> None:
+    before = tmp_path / "before.json"
+    after = tmp_path / "after.json"
+    before.write_text(json.dumps({"assets": []}), encoding="utf-8")
+    _export(after, [])
+
+    with pytest.raises(SnapshotValidationError, match="schema"):
+        diff_snapshots(before, after)
+
+
+def test_diff_rejects_malformed_assets_instead_of_silently_skipping(tmp_path: Path) -> None:
+    before = tmp_path / "before.json"
+    after = tmp_path / "after.json"
+    payload = {
+        "schema_name": "olympus.argus-assets",
+        "schema_version": "1.0.0",
+        "assets": [{"hostname": "missing-required-asset-type.example"}],
+    }
+    before.write_text(json.dumps(payload), encoding="utf-8")
+    _export(after, [])
+
+    with pytest.raises(SnapshotValidationError, match="invalid asset at index 0"):
+        diff_snapshots(before, after)

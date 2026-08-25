@@ -20,6 +20,7 @@ from olympus.argus.accounts_scope import (
 from olympus.argus.application import (
     AccountEnumerationRequest,
     AccountEnumerationService,
+    ArgusDiagnosticsService,
     AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
@@ -40,6 +41,7 @@ from olympus.argus.application import (
     MyIpDiscoveryService,
     PhoneProfileRequest,
     PhoneProfileService,
+    SnapshotDiffService,
     WebReconRequest,
     WebReconService,
     WhoisLookupRequest,
@@ -48,7 +50,6 @@ from olympus.argus.application import (
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
-from olympus.argus.diff import diff_snapshots
 from olympus.argus.dns_records import (
     RECORD_TYPES,
     DnsRecordError,
@@ -234,7 +235,7 @@ def fronting(
 def diff_command(before: Path, after: Path) -> None:
     """Compare two Argus asset snapshots without performing network activity."""
     try:
-        result = diff_snapshots(before, after)
+        result = SnapshotDiffService().run(before, after)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         typer.echo(f"argus: diff error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -903,12 +904,5 @@ def whois(
 @app.command()
 def doctor() -> None:
     """Diagnose Argus: required libraries and optional enrichment API keys."""
-    from olympus.integrations.diagnostics import Report, check_env_set, check_python_module
-
-    report = Report("argus doctor")
-    for module in ("dns", "phonenumbers"):
-        report.add(check_python_module(module, optional=False))
-    # Optional third-party enrichment keys (presence only, never the value).
-    for key in ("OLYMPUS_NUMVERIFY_KEY", "OLYMPUS_RAPIDAPI_KEY"):
-        report.add(check_env_set(key, optional=True, secret=True))
+    report = ArgusDiagnosticsService().run()
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))

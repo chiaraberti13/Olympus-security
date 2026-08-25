@@ -114,7 +114,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
     validated public HTTPS registries, bounded concurrency, and an injected HTTP port.
   - [x] Argus `investigate`: authorized bounded graph expansion with per-pivot domain, IP, and
     account scope gates, audit records, explicit warnings, and injected network ports.
-  - [ ] Remaining Argus commands and affected modules.
+  - [x] Remaining Argus commands: `diff` validates versioned shared assets through an application
+    service; `doctor` uses a secret-safe read-only diagnostic service.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
 - [ ] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
@@ -689,3 +690,37 @@ only the **security**, **functional**, and **licence** items are actual requirem
   as verified. Network egress controls remain recommended in addition to application scope checks.
 - **Next activity:** inspect and separate the remaining Argus `diff` and diagnostic/asset entry points,
   then close the parent Argus application-boundary item only after CLI/API/report parity is proven.
+
+### Cycle 24 — finish Argus snapshot and diagnostic boundaries
+
+- **Status:** `DONE` for the remaining ARGUS `diff`/`doctor` subtask; the repository-wide separation
+  parent remains `IN PROGRESS` until the non-ARGUS modules are audited.
+- **Objective:** remove the last ARGUS domain/diagnostic orchestration from Typer and ensure snapshot
+  comparisons cannot silently accept incompatible or malformed shared contracts.
+- **Component:** ARGUS application service, snapshot diff domain logic, diagnostic service, CLI,
+  parity manifest, and tests.
+- **Dependencies:** versioned `olympus.argus-assets` documents, the strict shared `Asset` model, and
+  secret-safe shared diagnostic checks for Python modules and environment-key presence.
+- **Completion criteria:** both commands are thin presentation adapters; diff remains offline and
+  deterministic; both inputs have the supported collection schema and each asset validates against
+  the compatible shared contract; invalid data exits actionably; doctor is read-only and never emits
+  secret values; parity and tests cover both entry points.
+- **Implementation:** added `SnapshotDiffService` and `ArgusDiagnosticsService`; Typer now only maps
+  their results/errors to JSON and exit codes. Snapshot loading validates collection name, supported
+  major version, every strict `Asset`, and each asset contract name/major version before comparing
+  normalized hostnames. Malformed entries are rejected instead of silently disappearing from a diff.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/diff.py`,
+  `src/olympus/argus/cli.py`, `docs/parity/argus.json`,
+  `tests/unit/test_argus_application.py`, `tests/unit/test_argus_assets_diff.py`,
+  `tests/unit/test_argus_cli_diff_doctor.py`, and `upgrade.md`.
+- **Tests executed:** focused application/assets/diff/doctor/parity/vendored suite: `66 passed`;
+  complete offline suite: `570 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed CLI compared the checked-in versioned ARGUS asset
+  snapshot with itself and returned two real unchanged hostnames with no additions/removals. The
+  installed doctor found both required Python modules importable, reported optional keys only as
+  `not set`, and returned overall `ok: true`; no network or mutation occurred.
+- **Residual limitations:** diff intentionally remains hostname-level and does not yet describe field
+  changes within the same asset; optional provider credentials and live availability are outside a
+  read-only diagnostic. Neither limitation is presented as a missing existing command behavior.
+- **Next activity:** define and enforce the pending versioned assessment-plan, scan-job, observation,
+  finding, asset, evidence, and report contracts, then document compatibility rules for every consumer.

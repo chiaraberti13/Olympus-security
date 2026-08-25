@@ -20,6 +20,7 @@ from olympus.argus.accounts import (
 )
 from olympus.argus.accounts_scope import AccountOutOfScopeError, enforce_account_scope
 from olympus.argus.ct import CertificateTransparencyClient
+from olympus.argus.diff import AssetDiff, diff_snapshots
 from olympus.argus.dns_records import RECORD_TYPES, DnsRecordReport, resolve_records
 from olympus.argus.email_osint import (
     EmailIntel,
@@ -79,10 +80,34 @@ from olympus.argus.web import (
 )
 from olympus.argus.whois import WhoisReport, lookup_domain
 from olympus.core.http import HttpClient
+from olympus.integrations.diagnostics import Report, check_env_set, check_python_module
 
 
 class AuthorizationRequiredError(PermissionError):
     """Raised when a privacy-sensitive use case lacks explicit authorization."""
+
+
+@dataclass(frozen=True)
+class SnapshotDiffService:
+    """Compare two versioned Argus snapshots without CLI or network dependencies."""
+
+    def run(self, before: Path, after: Path) -> AssetDiff:
+        """Validate both shared contracts before returning hostname-level changes."""
+        return diff_snapshots(before, after)
+
+
+@dataclass(frozen=True)
+class ArgusDiagnosticsService:
+    """Build a secret-safe, read-only report of the Argus runtime dependencies."""
+
+    def run(self) -> Report:
+        """Check required modules and optional credentials without reading secret values."""
+        report = Report("argus doctor")
+        for module in ("dns", "phonenumbers"):
+            report.add(check_python_module(module, optional=False))
+        for key in ("OLYMPUS_NUMVERIFY_KEY", "OLYMPUS_RAPIDAPI_KEY"):
+            report.add(check_env_set(key, optional=True, secret=True))
+        return report
 
 
 @dataclass(frozen=True)

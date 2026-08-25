@@ -20,8 +20,8 @@
     },
     "diff": {
       "options": ["before", "after"],
-      "capabilities": ["offline-snapshot-diff"],
-      "mapping": ["diff.py"]
+      "capabilities": ["versioned-contract-validation", "offline-snapshot-diff"],
+      "mapping": ["application.py", "diff.py"]
     },
     "dns": {
       "options": ["--domain", "--types", "--scope", "--log", "--output"],
@@ -31,7 +31,7 @@
     "doctor": {
       "options": [],
       "capabilities": ["dependency-diagnostics", "optional-api-key-presence"],
-      "mapping": ["cli.py"]
+      "mapping": ["application.py"]
     },
     "email": {
       "options": ["--email", "--enrich", "--scope", "--log", "--i-am-authorized", "--output"],
