@@ -41,6 +41,31 @@ class ScannerSpec:
         """Return True if the scanner's binary is on PATH (API engines: unknown → False)."""
         return bool(self.binary and shutil.which(self.binary))
 
+    @property
+    def kind(self) -> str:
+        """Deployment/licensing class (see ``KIND``)."""
+        return KIND[self.name]
+
+
+# Deployment/licensing class per scanner. ZAP and OpenVAS/GVM are open source
+# and must not be grouped with the commercial engines.
+KIND: dict[str, str] = {
+    # local OSS CLI binaries
+    "nmap": "local-oss-binary", "nikto": "local-oss-binary", "whatweb": "local-oss-binary",
+    "wafw00f": "local-oss-binary", "sqlmap": "local-oss-binary", "arjun": "local-oss-binary",
+    "wapiti": "local-oss-binary", "commix": "local-oss-binary", "xsstrike": "local-oss-binary",
+    "dirsearch": "local-oss-binary", "nosqlmap": "local-oss-binary", "nuclei": "local-oss-binary",
+    "httpx": "local-oss-binary", "katana": "local-oss-binary", "subfinder": "local-oss-binary",
+    "dalfox": "local-oss-binary", "testssl": "local-oss-binary", "theharvester": "local-oss-binary",
+    # source-available (non-OSI) local binary; free with a token for the vuln DB
+    "wpscan": "local-oss-binary",
+    # OSS engines that run as a long-lived service / daemon with an API
+    "zap": "containerised-oss-service", "openvas": "containerised-oss-service",
+    # proprietary, licensed engines exposed via API/app
+    "nessus": "proprietary-remote-api", "acunetix": "proprietary-remote-api",
+    "burp": "proprietary-local",
+}
+
 
 # The complete catalogue — all 24 integrations. Binary names match the vendored
 # scanners' shutil.which(...) / settings.*_path defaults.

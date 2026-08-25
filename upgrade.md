@@ -313,3 +313,39 @@ only the **security**, **functional**, and **licence** items are actual requirem
   code; AEGIS web app boots + migrates + serves; compose config validated. No
   live scan / container `up` was run (no scanner binaries, no Docker daemon in
   this environment) — stated explicitly, not simulated.
+
+### Cycle 11 — AEGIS native execution layer (no implicit simulation)
+
+- **Task:** make AEGIS genuinely operational — eliminate implicit simulation,
+  add real execution adapters with explicit states, correct the scanner
+  classification, add Compose profiles, and prove real execution in a local lab.
+- **Result:** completed on 2026-08-25.
+  - **Explicit states (no fabrication):** new `olympus.aegis` package —
+    `states` (live/unavailable/failed/disabled/simulation), `model`, `runner`
+    (shell-free, timeout + process-group kill), `scope` (SSRF-aware; loopback
+    lab targets allowed only when explicitly authorized), `base` orchestrator,
+    and `olympus aegis run`. Simulation is produced **only** with `--simulate` /
+    `AEGIS_SIMULATION_MODE=true`; a missing binary is `unavailable` (with install
+    instructions), live-off is `disabled` — never a fake finding. Authorization
+    and scope are mandatory (exit 3/4).
+  - **Real adapters:** nmap (XML), nikto (text), wafw00f (JSON), sqlmap (text),
+    whatweb (text), testssl (JSON) — real command construction + real parsers.
+    Verified live end-to-end here against a local authorized lab: nmap, nikto,
+    wafw00f, sqlmap (evidence in `docs/aegis-execution-evidence.md`). whatweb's
+    apt binary has a broken Ruby env → honest `failed`. 18 native adapters remain
+    pending (registry rejects them with a clear error, never a fabricated result).
+  - **Classification fix:** added a `kind` taxonomy; ZAP and OpenVAS reclassified
+    as `containerised-oss-service` (OSS), not commercial. Recalculated totals:
+    **21/24 OSS**, 3 proprietary (nessus/acunetix/burp). Updated
+    `docs/scanner-matrix.md`.
+  - **Compose profiles:** `zap` (OWASP ZAP daemon), `gvm` (Greenbone GVM),
+    `commercial-connectors` (Nessus, operator-provided image), `scanners-cli`;
+    default lightweight stack unchanged. Validated with `docker compose config`.
+  - **AEGIS_* config:** `olympus.aegis.config` reads `AEGIS_*` with legacy
+    `VAP_*` fallback (`docs/aegis-config.md`); vendored `VAP_*` contract untouched.
+- **Verification (optional tooling):** full suite passes (ruff + mypy clean over
+  183 files); 4 scanners verified live end-to-end; all five states + scope/auth
+  refusals demonstrated. Live execution of the other scanners and the container
+  stack remains environment-dependent (documented, never simulated).
+- **Held:** the optional SCA profile (OSV/Syft/Grype/Trivy/Checkov) is NOT
+  implemented — deferred until AEGIS execution coverage is broader.

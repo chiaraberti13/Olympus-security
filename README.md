@@ -252,6 +252,8 @@ docker compose -f docker-compose.yml -f docker-compose.scanners.yml up --build
 For a hardened/HTTPS deployment or PostgreSQL instead of SQLite, set the
 corresponding `VAP_*` variables (see `vendor/vulnerability-assessment-platform/.env.example`).
 
+**Real scans, never fabricated:** `olympus aegis run <scanner> --target <t> --scope s.json --i-am-authorized` runs a real scanner with explicit states — `live` / `unavailable` / `failed` / `disabled` / `simulation`. Simulation is produced **only** with `--simulate` (or `AEGIS_SIMULATION_MODE=true`); a missing binary yields `unavailable`, never a fake finding. See [`docs/scanner-matrix.md`](docs/scanner-matrix.md) and [`docs/aegis-execution-evidence.md`](docs/aegis-execution-evidence.md).
+
 External scanner **binaries** and the full runtime (Redis/Celery) are also
 provisioned by the vendored `installer.sh` for a non-container setup; a scanner
 with no binary present always reports "tool not installed" rather than failing

@@ -1,43 +1,61 @@
-# AEGIS 24-scanner dependency & execution matrix
+# AEGIS 24-scanner classification, dependency & execution matrix
 
-_Generated from `olympus.integrations.scanners` (the Olympus-native registry that drives `olympus aegis scanners --check` / `deps` / `doctor`)._
+_Generated from `olympus.integrations.scanners` (registry) and `olympus.aegis.registry` (native execution adapters). See `docs/aegis-execution-evidence.md` for the real captured evidence._
 
-> **Default mode is simulated.** Each scanner returns hard-coded educational findings unless `VAP_ENABLE_LIVE_SCANS=true`, the binary/API below is present, and the target is authorized/in-scope. 'Executed here' therefore refers to *live* execution in this sandbox, which had no scanner binaries and no Docker daemon — so live execution is **not executable here** for every scanner and must be reproduced with `docker-compose.scanners.yml` or the vendored `installer.sh`.
+> **Correction:** OWASP **ZAP** and **OpenVAS/GVM** are open-source (Apache-2.0 / GPL-2.0) and are classified as `containerised-oss-service`, NOT commercial. Only Nessus, Burp, and Acunetix are proprietary.
 
-| Scanner | Category | Purpose | Binary / API | Licence | Redistributable | Install method | In scanner image | Executed live here | Fallback when unavailable |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| subfinder | dns | Passive subdomain enumeration | `subfinder` | MIT | yes | go install github.com/projectdiscovery/subfinder | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| theharvester | dns | OSINT email/subdomain harvesting | `theHarvester` | GPL-2.0 | yes | pip install theHarvester | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| nmap | network | Network port & service enumeration | `nmap` | GPL-2.0 | yes | apt-get install nmap | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| testssl | tls | TLS/SSL configuration analysis | `testssl.sh` | GPL-2.0 | yes | git clone testssl.sh | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| nessus | vuln | Tenable Nessus vulnerability scan | `API/daemon` | Commercial (Tenable) | no (manual/commercial) | Manual install + licence (API-driven) | no (API/commercial) | not executable here | simulated findings + graceful 'tool not installed' |
-| openvas | vuln | OpenVAS/GVM network vulnerability scan | `API/daemon` | GPL-2.0 | yes | Greenbone GVM stack (heavy; docker/manual, API-driven) | no (API/commercial) | not executable here | simulated findings + graceful 'tool not installed' |
-| acunetix | web | Invicti/Acunetix DAST | `API/daemon` | Commercial (Invicti) | no (manual/commercial) | Manual install + licence (API-driven) | no (API/commercial) | not executable here | simulated findings + graceful 'tool not installed' |
-| arjun | web | HTTP parameter discovery | `arjun` | AGPL-3.0 | yes | pip install arjun | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| burp | web | PortSwigger Burp Suite (Pro API) | `API/daemon` | Commercial (PortSwigger) | no (manual/commercial) | Manual install + licence (API-driven) | no (API/commercial) | not executable here | simulated findings + graceful 'tool not installed' |
-| commix | web | Command-injection detection | `commix` | GPL-3.0 | yes | pip install commix (VAP_COMMIX_PATH) | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| dalfox | web | XSS scanning/parameter analysis | `dalfox` | MIT | yes | go install github.com/hahwul/dalfox | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| dirsearch | web | Content/path discovery | `dirsearch` | GPL-2.0 | yes | pip install dirsearch (VAP_DIRSEARCH_PATH) | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| httpx | web | Fast HTTP probing/toolkit | `httpx` | MIT | yes | go install github.com/projectdiscovery/httpx | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| katana | web | Crawling / endpoint discovery | `katana` | MIT | yes | go install github.com/projectdiscovery/katana | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| nikto | web | Web server misconfiguration scan | `nikto` | GPL-2.0 | yes | apt-get install nikto | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| nosqlmap | web | NoSQL injection detection | `nosqlmap` | GPL-3.0 | yes | git clone NoSQLMap | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| nuclei | web | Template-based vulnerability scan | `nuclei` | MIT | yes | go install github.com/projectdiscovery/nuclei | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| sqlmap | web | SQL injection detection/exploitation | `sqlmap` | GPL-2.0 | yes | pip install sqlmap (VAP_SQLMAP_PATH) | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| wafw00f | web | WAF detection | `wafw00f` | BSD-3-Clause | yes | pip install wafw00f | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| wapiti | web | Web application vulnerability scan | `wapiti` | GPL-2.0 | yes | pip install wapiti3 (VAP_WAPITI_PATH) | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| whatweb | web | Web technology fingerprinting | `whatweb` | GPL-3.0 | yes | apt-get install whatweb | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| wpscan | web | WordPress vulnerability scan | `wpscan` | WPScan Public Source (non-OSI) | no (manual/commercial) | gem install wpscan (free token required for the vuln DB) | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| xsstrike | web | XSS detection | `xsstrike` | GPL-3.0 | yes | git clone XSStrike (VAP_XSSTRIKE_PATH) | yes | not executable here | simulated findings + graceful 'tool not installed' |
-| zap | web | OWASP ZAP DAST (API/daemon) | `API/daemon` | Apache-2.0 | yes | OWASP ZAP daemon / docker image (API-driven) | no (API/commercial) | not executable here | simulated findings + graceful 'tool not installed' |
+> **Simulation is opt-in.** `olympus aegis run` never fabricates findings: a missing binary → `unavailable`, live-off → `disabled`, explicit `--simulate` → `simulation`.
 
-**Totals:** 24 scanners — 20 redistributable (OSS), 4 commercial/non-OSI; 19 bundled by `docker/Dockerfile.scanners`, 5 API/commercial requiring manual install.
+| Scanner | Category | Kind | Binary / API | Licence | Auto-install | In image | Native adapter | Live-verified here |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| openvas | vuln | containerised-oss-service | `API/daemon` | GPL-2.0 | yes | no | — pending | n/a |
+| zap | web | containerised-oss-service | `API/daemon` | Apache-2.0 | yes | no | — pending | n/a |
+| arjun | web | local-oss-binary | `arjun` | AGPL-3.0 | yes | yes | — pending | n/a |
+| commix | web | local-oss-binary | `commix` | GPL-3.0 | yes | yes | — pending | n/a |
+| dalfox | web | local-oss-binary | `dalfox` | MIT | yes | yes | — pending | n/a |
+| dirsearch | web | local-oss-binary | `dirsearch` | GPL-2.0 | yes | yes | — pending | n/a |
+| httpx | web | local-oss-binary | `httpx` | MIT | yes | yes | — pending | n/a |
+| katana | web | local-oss-binary | `katana` | MIT | yes | yes | — pending | n/a |
+| nikto | web | local-oss-binary | `nikto` | GPL-2.0 | yes | yes | ✅ implemented | ✅ yes |
+| nmap | network | local-oss-binary | `nmap` | GPL-2.0 | yes | yes | ✅ implemented | ✅ yes |
+| nosqlmap | web | local-oss-binary | `nosqlmap` | GPL-3.0 | yes | yes | — pending | n/a |
+| nuclei | web | local-oss-binary | `nuclei` | MIT | yes | yes | — pending | n/a |
+| sqlmap | web | local-oss-binary | `sqlmap` | GPL-2.0 | yes | yes | ✅ implemented | ✅ yes |
+| subfinder | dns | local-oss-binary | `subfinder` | MIT | yes | yes | — pending | n/a |
+| testssl | tls | local-oss-binary | `testssl.sh` | GPL-2.0 | yes | yes | ✅ implemented | parser only |
+| theharvester | dns | local-oss-binary | `theHarvester` | GPL-2.0 | yes | yes | — pending | n/a |
+| wafw00f | web | local-oss-binary | `wafw00f` | BSD-3-Clause | yes | yes | ✅ implemented | ✅ yes |
+| wapiti | web | local-oss-binary | `wapiti` | GPL-2.0 | yes | yes | — pending | n/a |
+| whatweb | web | local-oss-binary | `whatweb` | GPL-3.0 | yes | yes | ✅ implemented | parser only |
+| wpscan | web | local-oss-binary | `wpscan` | WPScan Public Source (non-OSI) | no | yes | — pending | n/a |
+| xsstrike | web | local-oss-binary | `xsstrike` | GPL-3.0 | yes | yes | — pending | n/a |
+| burp | web | proprietary-local | `API/daemon` | Commercial (PortSwigger) | no | no | — pending | n/a |
+| acunetix | web | proprietary-remote-api | `API/daemon` | Commercial (Invicti) | no | no | — pending | n/a |
+| nessus | vuln | proprietary-remote-api | `API/daemon` | Commercial (Tenable) | no | no | — pending | n/a |
 
-## Component using each scanner
+## Recalculated totals
 
-All 24 are used by the **AEGIS** component (`olympus aegis`, vendored VAP `scanner_engine.py` + `scanners/*_scanner.py`).
+- **Open source** (local-oss-binary + containerised-oss-service): **21/24**
+  - `containerised-oss-service`: 2
+  - `local-oss-binary`: 19
+  - `proprietary-local`: 1
+  - `proprietary-remote-api`: 2
+- **Auto-installable / redistributable**: 20/24
+- **Bundled in `docker/Dockerfile.scanners`**: 19/24
+- **Proprietary (commercial licence)**: 3/24 (nessus, acunetix, burp)
+- **Native AEGIS execution adapters implemented**: 6/24 (nikto, nmap, sqlmap, testssl, wafw00f, whatweb)
+- **Live end-to-end verified in this environment**: 4/24 (nikto, nmap, sqlmap, wafw00f) — see evidence doc
+
+## Per-scanner service/licence notes
+
+- **OWASP ZAP** (Apache-2.0, OSS): run as a daemon/container (`zaproxy/zaproxy`), driven via its API — see the `zap` Compose profile.
+- **OpenVAS/GVM** (GPL-2.0, OSS): the Greenbone GVM service stack (feed + scanner + gvmd), heavy; run via the `gvm` Compose profile or an external service.
+- **Burp Suite** — Community (free, limited, no automation API) vs **Professional** (licensed, REST API for automation). Proprietary; manual install + licence.
+- **Nessus** (Tenable) — proprietary; external service + API + licence/activation code.
+- **Acunetix** (Invicti) — proprietary; external service + API + commercial licence.
+- **wpscan** — source-available (WPScan Public Source, non-OSI); free, but the vulnerability database needs a free API token.
 
 ## Unavailable-tool policy
 
-For any scanner whose binary/API is missing, AEGIS: (1) keeps the complete integration; (2) the vendored scanner checks `shutil.which(...)`/API reachability and returns a clear unavailable state; (3) `olympus aegis deps` and `olympus aegis doctor` surface availability and versions; (4) never reports simulated output as a real live scan. Commercial engines (nessus, burp, acunetix) and heavy/daemon engines (openvas, zap) require manual install + licence/API configuration via their `VAP_*` settings.
+`olympus aegis run <scanner>` returns an explicit state and never fabricates findings: `unavailable` (missing binary/API, with install instructions + `olympus aegis deps` diagnostic), `disabled` (live off), `failed` (real error), or `live`. Commercial/service engines return `unavailable` until configured. Nothing is silently skipped.
 
