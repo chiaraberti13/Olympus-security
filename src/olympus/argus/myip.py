@@ -70,22 +70,27 @@ class MyIpResult:
         }
 
 
-def discover(http: HttpClient, *, geolocate: bool = False) -> MyIpResult:
-    """Discover the public IP and, when requested, classify/geolocate it."""
-    public_ip = discover_public_ip(http)
-    if not geolocate:
+def build_result(public_ip: str, geo_http: HttpClient | None = None) -> MyIpResult:
+    """Build the result for a discovered address, optionally enriching it."""
+    if geo_http is None:
         return MyIpResult(public_ip=public_ip)
 
     report = analyze_ip(public_ip)
     geo: IpGeo | None = None
     try:
-        geo = IpApiClient(http).geolocate(report.ip)
+        geo = IpApiClient(geo_http).geolocate(report.ip)
     except IpGeoError:
         geo = None
     asset = build_ip_asset(report, geo)
     findings = build_ip_findings(asset.asset_id, report, geo)
     intel = IpIntel(report=report, asset=asset, findings=findings)
     return MyIpResult(public_ip=public_ip, intel=intel)
+
+
+def discover(http: HttpClient, *, geolocate: bool = False) -> MyIpResult:
+    """Backward-compatible discovery using one HTTP adapter for both stages."""
+    public_ip = discover_public_ip(http)
+    return build_result(public_ip, http if geolocate else None)
 
 
 def export_myip(result: MyIpResult, path: Path) -> None:

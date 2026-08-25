@@ -19,6 +19,15 @@ from olympus.argus.email_osint import (
     enrich_email,
 )
 from olympus.argus.fronting import FrontingReport, assess_fronting
+from olympus.argus.mac import (
+    MacIntel,
+    analyze_mac,
+    build_mac_asset,
+    build_mac_findings,
+    lookup_vendor,
+)
+from olympus.argus.mac_scope import enforce_mac_scope
+from olympus.argus.myip import MyIpResult, build_result, discover_public_ip
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
 from olympus.argus.scope import enforce_scope
@@ -98,6 +107,65 @@ class EmailAnalysisService:
             enrichment=enrichment,
             findings=build_email_findings(asset.asset_id, report, enrichment),
         )
+
+
+@dataclass(frozen=True)
+class MacAnalysisRequest:
+    """Command-independent input for offline MAC analysis and OUI enrichment."""
+
+    address: str
+    vendor: bool = False
+    authorized: bool = False
+    scope_path: Path | None = None
+    audit_log_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class MacAnalysisService:
+    """Analyze a MAC locally and safely coordinate opt-in vendor lookup."""
+
+    http: HttpClient
+
+    def run(self, request: MacAnalysisRequest) -> MacIntel:
+        """Authorize OUI scope before sending it to the third-party registry."""
+        report = analyze_mac(request.address)
+        vendor_name = None
+        if request.vendor:
+            if not request.authorized:
+                raise AuthorizationRequiredError(
+                    "MAC vendor lookup requires explicit documented authorization"
+                )
+            if request.scope_path is None or request.audit_log_path is None:
+                raise ValueError("scope_path and audit_log_path are required for vendor lookup")
+            enforce_mac_scope(report.mac, request.scope_path, request.audit_log_path)
+            vendor_name = lookup_vendor(report, self.http)
+        asset = build_mac_asset(report, vendor_name)
+        return MacIntel(
+            report=report,
+            asset=asset,
+            vendor=vendor_name,
+            findings=build_mac_findings(asset.asset_id, report),
+        )
+
+
+@dataclass(frozen=True)
+class MyIpDiscoveryRequest:
+    """Command-independent options for public-IP discovery."""
+
+    geolocate: bool = False
+
+
+@dataclass(frozen=True)
+class MyIpDiscoveryService:
+    """Discover self egress and optionally enrich it through a separate port."""
+
+    discovery_http: HttpClient
+    geo_http: HttpClient
+
+    def run(self, request: MyIpDiscoveryRequest) -> MyIpResult:
+        """Keep provider and optional geolocation traffic independently injectable."""
+        public_ip = discover_public_ip(self.discovery_http)
+        return build_result(public_ip, self.geo_http if request.geolocate else None)
 
 
 @dataclass(frozen=True)

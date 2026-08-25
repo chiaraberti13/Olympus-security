@@ -39,14 +39,14 @@
       "mapping": ["email_osint.py", "resolver.py", "scope.py"]
     },
     "mac": {
-      "options": ["--mac", "--vendor", "--output"],
+      "options": ["--mac", "--vendor", "--scope", "--log", "--i-am-authorized", "--output"],
       "capabilities": ["offline-mac-classification", "optional-oui-vendor"],
-      "mapping": ["mac.py"]
+      "mapping": ["mac.py", "mac_scope.py", "application.py"]
     },
     "myip": {
       "options": ["--geo", "--output"],
       "capabilities": ["public-ip-discovery", "optional-self-geo"],
-      "mapping": ["myip.py", "ip_osint.py"]
+      "mapping": ["myip.py", "ip_osint.py", "application.py"]
     },
     "fronting": {
       "options": ["--domain", "--scope", "--log", "--asset-id", "--output"],

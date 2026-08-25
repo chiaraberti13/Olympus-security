@@ -18,11 +18,17 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    MacAnalysisRequest,
+    MacAnalysisService,
+    MyIpDiscoveryRequest,
+    MyIpDiscoveryService,
     WebReconRequest,
     WebReconService,
     WhoisLookupRequest,
     WhoisLookupService,
 )
+from olympus.argus.mac_scope import MacOutOfScopeError
+from olympus.argus.myip import PROVIDERS, MyIpError
 from olympus.argus.scope import OutOfScopeError
 from olympus.core.http import HttpResponse
 
@@ -89,9 +95,45 @@ class RecordingWebClient:
         return HttpResponse(status_code=200, headers={"Server": "test-server"})
 
 
+class RecordingMyIpClient:
+    """Offline public-IP provider port with explicit call evidence."""
+
+    def __init__(self, available: bool = True) -> None:
+        self.available = available
+        self.calls: list[str] = []
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
+        if not self.available:
+            return HttpResponse(status_code=503, body="")
+        return HttpResponse(status_code=200, body='{"ip":"203.0.113.7"}')
+
+
+class RecordingGeoClient:
+    """Offline geolocation port kept separate from discovery traffic."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
+        return HttpResponse(
+            status_code=200,
+            body='{"status":"success","country":"Example","countryCode":"EX"}',
+        )
+
+
 def _scope(path: Path) -> Path:
     path.write_text(
         json.dumps({"engagement": "test", "allowed_domains": [DOMAIN]}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _mac_scope(path: Path, oui: str = "00:1A:2B") -> Path:
+    path.write_text(
+        json.dumps({"engagement": "test", "allowed_ouis": [oui]}),
         encoding="utf-8",
     )
     return path
@@ -164,6 +206,104 @@ def test_email_service_blocks_out_of_scope_before_network(tmp_path: Path) -> Non
     assert resolver.calls == []
     assert http.calls == []
     assert "outside.example" in audit_log.read_text(encoding="utf-8")
+
+
+def test_mac_service_offline_does_not_call_network() -> None:
+    http = RecordingHttpClient()
+
+    intel = MacAnalysisService(http).run(MacAnalysisRequest("00:1A:2B:3C:4D:5E"))
+
+    assert intel.report.oui == "00:1A:2B"
+    assert intel.vendor is None
+    assert http.calls == []
+
+
+def test_mac_service_requires_authorization_before_network(tmp_path: Path) -> None:
+    http = RecordingHttpClient()
+
+    with pytest.raises(AuthorizationRequiredError):
+        MacAnalysisService(http).run(
+            MacAnalysisRequest(
+                "00:1A:2B:3C:4D:5E",
+                vendor=True,
+                scope_path=_mac_scope(tmp_path / "scope.json"),
+                audit_log_path=tmp_path / "audit.log",
+            )
+        )
+
+    assert http.calls == []
+
+
+def test_mac_service_blocks_out_of_scope_before_network(tmp_path: Path) -> None:
+    http = RecordingHttpClient()
+    audit_log = tmp_path / "audit.log"
+
+    with pytest.raises(MacOutOfScopeError):
+        MacAnalysisService(http).run(
+            MacAnalysisRequest(
+                "00:11:22:33:44:55",
+                vendor=True,
+                authorized=True,
+                scope_path=_mac_scope(tmp_path / "scope.json"),
+                audit_log_path=audit_log,
+            )
+        )
+
+    assert http.calls == []
+    assert "00:11:22:33:44:55" in audit_log.read_text(encoding="utf-8")
+
+
+def test_mac_service_authorized_lookup_uses_injected_http(tmp_path: Path) -> None:
+    http = RecordingHttpClient()
+
+    intel = MacAnalysisService(http).run(
+        MacAnalysisRequest(
+            "00:1A:2B:3C:4D:5E",
+            vendor=True,
+            authorized=True,
+            scope_path=_mac_scope(tmp_path / "scope.json"),
+            audit_log_path=tmp_path / "audit.log",
+        )
+    )
+
+    assert intel.vendor
+    assert http.calls == ["https://api.macvendors.com/001A2B"]
+
+
+def test_myip_service_skips_geo_port_when_not_requested() -> None:
+    discovery = RecordingMyIpClient()
+    geo = RecordingGeoClient()
+
+    result = MyIpDiscoveryService(discovery, geo).run(MyIpDiscoveryRequest())
+
+    assert result.public_ip == "203.0.113.7"
+    assert result.intel is None
+    assert discovery.calls == [PROVIDERS[0]]
+    assert geo.calls == []
+
+
+def test_myip_service_uses_independent_geo_port() -> None:
+    discovery = RecordingMyIpClient()
+    geo = RecordingGeoClient()
+
+    result = MyIpDiscoveryService(discovery, geo).run(MyIpDiscoveryRequest(geolocate=True))
+
+    assert result.intel is not None
+    assert result.intel.report.ip == "203.0.113.7"
+    assert discovery.calls == [PROVIDERS[0]]
+    assert len(geo.calls) == 1
+    assert "ip-api" in geo.calls[0]
+
+
+def test_myip_service_reports_provider_failure_without_geo_call() -> None:
+    discovery = RecordingMyIpClient(available=False)
+    geo = RecordingGeoClient()
+
+    with pytest.raises(MyIpError, match="could not determine public IP"):
+        MyIpDiscoveryService(discovery, geo).run(MyIpDiscoveryRequest(geolocate=True))
+
+    assert discovery.calls == list(PROVIDERS)
+    assert geo.calls == []
 
 
 def test_domain_scan_service_blocks_before_network_dependencies(tmp_path: Path) -> None:

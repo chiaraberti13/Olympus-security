@@ -112,8 +112,67 @@ def test_cli_invalid() -> None:
 def test_cli_vendor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(argus_cli, "UrllibHttpClient", _Http)
     out = tmp_path / "mac.json"
+    scope = tmp_path / "scope.json"
+    scope.write_text(
+        json.dumps({"engagement": "test", "allowed_ouis": ["00:1A:2B"]}),
+        encoding="utf-8",
+    )
     result = runner.invoke(
-        app, ["argus", "mac", "--mac", "00:1a:2b:3c:4d:5e", "--vendor", "--output", str(out)]
+        app,
+        [
+            "argus",
+            "mac",
+            "--mac",
+            "00:1a:2b:3c:4d:5e",
+            "--vendor",
+            "--i-am-authorized",
+            "--scope",
+            str(scope),
+            "--output",
+            str(out),
+        ],
     )
     assert result.exit_code == 0, result.output
     assert json.loads(out.read_text())["vendor"] == "Cisco Systems"
+
+
+def test_cli_vendor_requires_authorization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(argus_cli, "UrllibHttpClient", _Http)
+
+    result = runner.invoke(
+        app, ["argus", "mac", "--mac", "00:1a:2b:3c:4d:5e", "--vendor"]
+    )
+
+    assert result.exit_code == 4
+    assert "AUTHORIZED USE ONLY" in result.output
+
+
+def test_cli_vendor_blocks_out_of_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(argus_cli, "UrllibHttpClient", _Http)
+    scope = tmp_path / "scope.json"
+    scope.write_text(
+        json.dumps({"engagement": "test", "allowed_ouis": ["00:1A:2B"]}),
+        encoding="utf-8",
+    )
+    audit = tmp_path / "blocked.log"
+
+    result = runner.invoke(
+        app,
+        [
+            "argus",
+            "mac",
+            "--mac",
+            "00:11:22:33:44:55",
+            "--vendor",
+            "--i-am-authorized",
+            "--scope",
+            str(scope),
+            "--log",
+            str(audit),
+        ],
+    )
+
+    assert result.exit_code == 3
+    assert "00:11:22:33:44:55" in audit.read_text(encoding="utf-8")

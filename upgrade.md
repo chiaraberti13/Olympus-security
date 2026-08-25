@@ -9,10 +9,17 @@ functional; tests, docs, and reviews are encouraged but never required to mark p
 
 ## Status legend
 
-- `[x]` complete and verified
-- `[ ]` not started
-- `[~]` partially implemented; the remaining acceptance criteria are listed beneath it
-- `[!]` known problem or external blocker; this does not mean complete
+- `[ ] PENDING` — not started.
+- `[~] IN PROGRESS` — partially implemented; residual criteria are listed beneath it.
+- `IMPLEMENTED` — code is present but the required verification is not yet complete.
+- `VERIFIED` — the recorded checks passed, but a parent activity or environment-dependent proof
+  remains open.
+- `[!] BLOCKED` — a precise external blocker is recorded; this does not mean complete.
+- `[x] DONE` — every functional criterion for that specific entry is satisfied and verified.
+
+Historical checkboxes use the same mapping. From Cycle 17 onward, every cycle also records an
+explicit status, objective, dependencies, completion criteria, implementation, changed files,
+tests, real execution evidence, residual limitations, and the next activity.
 
 ## Guiding principles
 
@@ -95,6 +102,10 @@ only the **security**, **functional**, and **licence** items are actual requirem
   - [x] Argus `web`: scoped passive-HTTP application service with an injected HTTP port.
   - [x] Argus `email`: offline analysis and authorized, scoped enrichment service with injected DNS
     and HTTP ports.
+  - [x] Argus `mac`: offline analysis and authorized, OUI-scoped vendor service with injected HTTP
+    port.
+  - [x] Argus `myip`: public-IP discovery and optional geolocation service with independently
+    injected HTTP ports.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -449,3 +460,68 @@ only the **security**, **functional**, and **licence** items are actual requirem
   execution.
 - **Next activity:** extract the Argus `mac` analysis/vendor lookup use case, adding an explicit
   authorization and scope policy before its optional third-party network request.
+
+### Cycle 18 — separate and authorize Argus MAC vendor lookup
+
+- **Status:** `VERIFIED` (the parent repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move `argus mac` behind a command-independent application service and prevent its
+  optional third-party OUI lookup from running without explicit authorization and engagement scope.
+- **Component:** ARGUS Olympus-native integration, CLI, shared HTTP port, scope/audit policy, parity
+  contract, and examples.
+- **Dependencies:** `HttpClient`, offline MAC normalization/classification, shared asset/finding
+  contracts, and a new dedicated OUI scope rather than an incorrect domain/IP scope reuse.
+- **Completion criteria:** offline analysis makes no network call; `--vendor` requires explicit
+  authorization; only allowed 24-bit OUIs reach the registry; invalid scope is actionable; blocked
+  targets are audited; CLI output/export and parity remain consistent.
+- **Implementation:** added `MacAnalysisService`/`MacAnalysisRequest`; the service owns parsing,
+  authorization, OUI scope enforcement, vendor orchestration, and contract mapping. Added a strict
+  `allowed_ouis`/`excluded_ouis` scope with normalized matching and audit records. Typer now only
+  constructs the HTTP adapter, translates failures to canonical exit codes, presents, and exports.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/cli.py`,
+  `src/olympus/argus/mac_scope.py`, `examples/input/argus-mac-scope.json`,
+  `docs/parity/argus.json`, `tests/unit/test_argus_application.py`,
+  `tests/unit/test_argus_mac.py`, `tests/unit/test_argus_mac_scope.py`, and `upgrade.md`.
+- **Tests executed:** focused MAC/application/parity suite: `40 passed`; complete offline suite:
+  `524 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed `olympus` CLI classified the example MAC offline with
+  exit 0; an unconfirmed vendor lookup exited 4 before network; an authorized but out-of-scope OUI
+  exited 3 and wrote a timestamped `blocked_out_of_scope` audit record. Direct application tests
+  prove empty HTTP call logs for offline, unauthorized, and rejected requests; the authorized
+  adapter test proves the exact registry URL is reached through the injected port.
+- **Residual limitations:** a real macvendors.com response was not claimed in this restricted
+  environment; live availability remains dependent on that third-party registry. This does not
+  weaken the verified authorization/scope boundary or offline functionality.
+- **Next activity:** extract `argus myip` discovery/geolocation from Typer, keeping public-IP
+  discovery failures explicit and ensuring optional geolocation is independently testable.
+
+### Cycle 19 — separate Argus self public-IP discovery from Typer
+
+- **Status:** `VERIFIED` (live optional geolocation evidence is `BLOCKED` by an environment approval;
+  the parent repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move `argus myip` orchestration behind an application service while keeping public-IP
+  provider failure explicit and optional geolocation isolated from discovery.
+- **Component:** ARGUS Olympus-native integration, application/CLI boundary, shared HTTP ports,
+  parity contract, and tests.
+- **Dependencies:** bounded `HttpClient`, the existing multi-provider discovery primitive, IP
+  classification/geolocation primitives, and shared asset/finding contracts.
+- **Completion criteria:** the CLI contains no discovery/enrichment orchestration; discovery and
+  geolocation can use independent adapters; no geolocation call occurs without `--geo`; all provider
+  failures return the established network exit code; output/export compatibility is preserved.
+- **Implementation:** added `MyIpDiscoveryService`/`MyIpDiscoveryRequest`, split result building from
+  provider discovery through `build_result`, and kept `discover` as a backward-compatible wrapper.
+  The service injects separate discovery and geolocation ports; Typer only constructs adapters,
+  translates `MyIpError`, presents, and exports.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/myip.py`,
+  `src/olympus/argus/cli.py`, `docs/parity/argus.json`,
+  `tests/unit/test_argus_application.py`, `tests/unit/test_argus_myip.py`, and `upgrade.md`.
+- **Tests executed:** focused application/myip/parity suite: `37 passed`; complete offline suite:
+  `528 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed `olympus argus myip` command queried the bounded provider
+  chain and returned a real public IP with exit 0; the value is intentionally not recorded in this
+  register. Direct service tests prove the geolocation port remains untouched by default, uses its
+  own adapter only when requested, and is never called when all discovery providers fail.
+- **Residual limitations:** live `--geo` verification was not run because the environment correctly
+  required separate approval before sending the discovered public IP to ip-api.com. The adapter is
+  covered offline and this external-evidence gap is recorded as `BLOCKED`, not as verified.
+- **Next activity:** extract the privacy-sensitive `argus phone` analysis/enrichment workflow from
+  Typer while retaining authorization, phone-specific scope, audit, and stable exit behavior.

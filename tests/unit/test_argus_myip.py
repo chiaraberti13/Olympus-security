@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from olympus.argus import cli as argus_cli
-from olympus.argus.myip import MyIpError, discover, discover_public_ip, export_myip
+from olympus.argus.myip import MyIpError, build_result, discover, discover_public_ip, export_myip
 from olympus.cli import app
 from olympus.core.http import HttpRequestError, HttpResponse
 
@@ -68,6 +68,13 @@ def test_discover_without_geo() -> None:
     assert result.public_ip == "203.0.113.7"
     assert result.intel is None
     assert result.to_dict()["intel"] is None
+
+
+def test_build_result_without_geo_is_network_independent() -> None:
+    result = build_result("203.0.113.7")
+
+    assert result.public_ip == "203.0.113.7"
+    assert result.intel is None
 
 
 def test_discover_with_geo() -> None:

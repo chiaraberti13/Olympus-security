@@ -33,6 +33,10 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    MacAnalysisRequest,
+    MacAnalysisService,
+    MyIpDiscoveryRequest,
+    MyIpDiscoveryService,
     WebReconRequest,
     WebReconService,
     WhoisLookupRequest,
@@ -83,15 +87,11 @@ from olympus.argus.ip_scope import (
     enforce_ip_scope,
 )
 from olympus.argus.mac import (
-    MacIntel,
     MacParseError,
-    analyze_mac,
-    build_mac_asset,
-    build_mac_findings,
     export_mac_intel,
-    lookup_vendor,
 )
-from olympus.argus.myip import MyIpError, discover, export_myip
+from olympus.argus.mac_scope import MacOutOfScopeError, MacScopeError
+from olympus.argus.myip import MyIpError, export_myip
 from olympus.argus.phone import (
     PhoneIntel,
     PhoneParseError,
@@ -137,6 +137,9 @@ DEFAULT_ACCOUNT_BLOCK_LOG_PATH = Path("examples/output/argus-accounts-blocked.lo
 
 DEFAULT_IP_SCOPE_PATH = Path("examples/input/argus-ip-scope.json")
 DEFAULT_IP_BLOCK_LOG_PATH = Path("examples/output/argus-ip-blocked.log")
+
+DEFAULT_MAC_SCOPE_PATH = Path("examples/input/argus-mac-scope.json")
+DEFAULT_MAC_BLOCK_LOG_PATH = Path("examples/output/argus-mac-blocked.log")
 
 _IP_DISCLAIMER = (
     "AUTHORIZED USE ONLY — --geo queries a third-party geolocation service about the target "
@@ -708,6 +711,12 @@ _EMAIL_DISCLAIMER = (
     "consent. Re-run with --i-am-authorized to confirm."
 )
 
+_MAC_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — --vendor sends the target's OUI to macvendors.com. "
+    "Run it only within a documented engagement. Re-run with --i-am-authorized "
+    "and an OUI scope file to confirm."
+)
+
 
 @app.command()
 def email(
@@ -765,21 +774,48 @@ def mac(
     vendor: bool = typer.Option(
         False, "--vendor", help="Resolve the OUI to a vendor via macvendors.com (network)."
     ),
+    scope: Path = typer.Option(
+        DEFAULT_MAC_SCOPE_PATH,
+        "--scope",
+        help="JSON scope file whose OUI allowlist authorizes the vendor lookup.",
+    ),
+    log: Path = typer.Option(
+        DEFAULT_MAC_BLOCK_LOG_PATH,
+        "--log",
+        help="Path to the out-of-scope MAC audit log.",
+    ),
+    i_am_authorized: bool = typer.Option(
+        False,
+        "--i-am-authorized",
+        help="Confirm documented authorization for the live vendor lookup.",
+    ),
     output: Path | None = typer.Option(
         None, "--output", help="If set, export the MAC-intel bundle as JSON to this path."
     ),
 ) -> None:
     """Classify a MAC address offline; optionally resolve its vendor from the OUI registry."""
     try:
-        report = analyze_mac(address)
+        intel = MacAnalysisService(UrllibHttpClient.from_config()).run(
+            MacAnalysisRequest(
+                address=address,
+                vendor=vendor,
+                authorized=i_am_authorized,
+                scope_path=scope,
+                audit_log_path=log,
+            )
+        )
     except MacParseError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-
-    vendor_name = lookup_vendor(report, UrllibHttpClient.from_config()) if vendor else None
-    asset = build_mac_asset(report, vendor_name)
-    findings = build_mac_findings(asset.asset_id, report)
-    intel = MacIntel(report=report, asset=asset, vendor=vendor_name, findings=findings)
+    except MacScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except MacOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_MAC_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
     typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
     if output is not None:
         export_mac_intel(intel, output)
@@ -797,7 +833,8 @@ def myip(
 ) -> None:
     """Discover this machine's own public IP address (and optionally geolocate it)."""
     try:
-        result = discover(UrllibHttpClient.from_config(), geolocate=geo)
+        http = UrllibHttpClient.from_config()
+        result = MyIpDiscoveryService(http, http).run(MyIpDiscoveryRequest(geolocate=geo))
     except MyIpError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
