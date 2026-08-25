@@ -828,3 +828,58 @@ only the **security**, **functional**, and **licence** items are actual requirem
   policy fragments and are not represented as adopted.
 - **Next activity:** migrate Helios and Artemis first because both are network-active, then apply the
   same policy/redaction/cancellation boundary to the remaining offline and subprocess modules.
+
+### Cycle 27 — enforce shared execution policy in Helios and Artemis
+
+- **Status:** `VERIFIED`; the repository-wide policy and application-boundary items remain
+  `IN PROGRESS` pending the remaining modules and vendored/native execution surfaces.
+- **Objective:** make every HELIOS and ARTEMIS network path fail closed on authorization, retain each
+  dedicated scope dialect, enforce cancellation/deadline/retry/rate limits around real adapters, and
+  move the primary scan/fetch use cases behind command-independent application services.
+- **Component:** Core structured audit persistence, HELIOS scanner/scope/application/CLI/export path,
+  ARTEMIS DNS-pinned HTTP/content/fingerprint/Metabase/XSS paths, reference/policy docs, and tests.
+- **Dependencies:** shared `ExecutionPolicy` and cancellation protocol; HELIOS CIDR scope and socket
+  connector; ARTEMIS URL/path plus resolved-IP scope, resolver and pinned transport; versioned
+  observation/finding exports; and append-only local audit logs.
+- **Completion criteria:** malformed limits fail before traffic; every live CLI and lower-level web API
+  requires explicit authorization; scope is applied before connector/DNS/transport calls and again on
+  redirects; cancellation is observed before and between work; transport-only retries and rate waits
+  cannot escape the overall deadline; scope denials are structured/redacted; CLI and application
+  services consume the same real results; tests and a real loopback execution prove both stacks.
+- **Implementation:** added `SurfaceScanService` and `ScopedFetchService` request/outcome boundaries;
+  HELIOS now validates/deduplicates ports before authorization, checks CIDR scope before TCP, raises the
+  shared cancellation signal between probes, accepts bounded timeout/authorization CLI options, and
+  exports the same real observations/findings from the service. ARTEMIS `fetch`/`fingerprint` now use
+  the application service, while content, Metabase and XSS receive the same explicit policy. The
+  low-level web functions no longer infer authorization. The HTTP engine caps each attempt by remaining
+  deadline, retries only `HttpClientError`, checks cancellation before retry/rate waits, and revalidates
+  every redirect URL and resolved address. Shared audit serialization now redacts the top-level target
+  URL and has an append helper used by HELIOS/ARTEMIS scope denials.
+- **Files modified:** `src/olympus/core/execution.py`, `src/olympus/core/__init__.py`,
+  `src/olympus/helios/scanner.py`, `src/olympus/helios/scope.py`,
+  `src/olympus/helios/application.py`, `src/olympus/helios/cli.py`,
+  `src/olympus/artemis/http.py`, `src/olympus/artemis/scope.py`,
+  `src/olympus/artemis/application.py`, `src/olympus/artemis/cli.py`,
+  `src/olympus/artemis/content.py`, `src/olympus/artemis/metabase.py`,
+  `src/olympus/artemis/xss.py`, `docs/execution-policy.md`, `docs/reference.md`,
+  `tests/unit/test_core_execution.py`, `tests/unit/test_helios.py`,
+  `tests/unit/test_artemis_http.py`, `tests/unit/test_artemis_content.py`,
+  `tests/unit/test_artemis_metabase.py`,
+  `tests/unit/test_artemis_xss.py`, and `upgrade.md`.
+- **Tests executed:** focused Core/HELIOS/ARTEMIS policy and adapter suite: `70 passed`; complete
+  offline suite: `604 passed`; Ruff: clean; strict mypy: clean across 117 source files with a fresh
+  generated cache directory.
+- **Real execution evidence:** an ephemeral loopback HTTP server was opened on port 8765. The installed
+  `olympus helios scan` command, with explicit authorization and a temporary loopback CIDR scope,
+  detected that actual open socket and exported one strict `olympus.observation`; the installed
+  `olympus artemis fetch`, with its independent URL/resolved-IP scope, completed a real pinned GET and
+  returned HTTP 200 plus the actual body length. Both commands exited 0; the server was then stopped.
+  Injected adapter tests additionally prove zero DNS/socket calls for unauthorized, out-of-scope, or
+  pre-cancelled requests and two actual transport attempts for a one-retry transient failure.
+- **Residual limitations:** no public or third-party target was probed because no live engagement scope
+  was supplied. Cancellation remains cooperative and cannot interrupt a connector already inside its
+  hard timeout. Full Typer separation for ARTEMIS content/Metabase/XSS and operation-completion audit
+  records remain in the parent backlog; neither is represented as complete here.
+- **Next activity:** inspect Proteus and Hermes for locally interpreted policy, secret/process hazards,
+  and Typer-owned orchestration; implement their independent application boundaries before moving to
+  Apollo, Minerva, Vulcan, and AEGIS.

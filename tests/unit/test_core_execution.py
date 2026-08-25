@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,7 @@ from olympus.core.execution import (
     ExecutionPolicyError,
     NeverCancelled,
     StructuredAuditRecord,
+    append_structured_audit,
     redact_mapping,
 )
 
@@ -76,8 +78,29 @@ def test_structured_audit_redacts_nested_secrets_and_url_queries() -> None:
         execution_id="EXEC-1",
         action="request",
         outcome="blocked",
+        target="https://api.example/v1?token=target-secret&target=example.com",
         metadata=raw,
     )
     serialized = record.to_json()
     assert "top-secret" not in serialized
+    assert "target-secret" not in serialized
     assert json.loads(serialized)["metadata"]["api_key"] == "[REDACTED]"
+
+
+def test_structured_audit_append_writes_one_redacted_line(tmp_path: Path) -> None:
+    path = tmp_path / "audit" / "events.ndjson"
+    append_structured_audit(
+        path,
+        StructuredAuditRecord(
+            timestamp="2026-08-25T00:00:00Z",
+            execution_id="EXEC-2",
+            action="request",
+            outcome="completed",
+            metadata={"authorization": "Bearer synthetic-secret"},
+        ),
+    )
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["metadata"]["authorization"] == "[REDACTED]"
+    assert "synthetic-secret" not in lines[0]

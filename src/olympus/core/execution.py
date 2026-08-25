@@ -11,6 +11,7 @@ import json
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -120,7 +121,7 @@ class ExecutionPolicy:
             )
 
     def authorize_target(
-        self, operation: str, target: str, scope_authorizer: Callable[[str], None]
+        self, operation: str, target: str, scope_authorizer: Callable[[str], object]
     ) -> None:
         """Require authorization, then invoke the module's dedicated scope gate."""
         self.require_authorization(operation)
@@ -194,10 +195,17 @@ class StructuredAuditRecord:
             "execution_id": self.execution_id,
             "action": self.action,
             "outcome": self.outcome,
-            "target": self.target,
+            "target": redact_url(self.target) if self.target is not None else None,
             "metadata": redact_mapping(self.metadata),
         }
 
     def to_json(self) -> str:
         """Return deterministic one-line JSON suitable for append-only logs."""
         return json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
+
+
+def append_structured_audit(path: Path, record: StructuredAuditRecord) -> None:
+    """Append one already-redacted record without exposing raw fields on disk."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as audit:
+        audit.write(record.to_json() + "\n")

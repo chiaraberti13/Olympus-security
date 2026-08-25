@@ -23,6 +23,7 @@ from olympus.core.execution import (
     ExecutionPolicy,
     ExecutionPolicyError,
     StructuredAuditRecord,
+    append_structured_audit,
 )
 from olympus.core.ids import IdGenerator, new_id
 from olympus.core.models import (
@@ -64,6 +65,7 @@ __all__ = [
     "Source",
     "StructuredAuditRecord",
     "ValidationReport",
+    "append_structured_audit",
     "format_validation_error",
     "new_id",
 ]

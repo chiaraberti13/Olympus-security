@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from olympus.artemis import cli as artemis_cli
 from olympus.artemis import http as artemis_http
+from olympus.artemis.application import ScopedFetchRequest, ScopedFetchService
 from olympus.artemis.http import (
     HttpClientError,
     HttpResponse,
@@ -21,6 +22,12 @@ from olympus.artemis.http import (
 )
 from olympus.artemis.scope import OutOfScopeError, ScopeError
 from olympus.cli import app
+from olympus.core.execution import (
+    AuthorizationRequiredError,
+    CancellationRequested,
+    CancellationToken,
+    ExecutionPolicy,
+)
 
 runner = CliRunner()
 
@@ -40,28 +47,39 @@ class FakeTransport:
 class FakeResolver:
     def __init__(self, addresses: list[str] | None = None) -> None:
         self.addresses = ["192.0.2.10"] if addresses is None else addresses
+        self.requests: list[tuple[str, int]] = []
 
     def resolve(self, hostname: str, port: int) -> list[str]:
-        del hostname, port
+        self.requests.append((hostname, port))
         return self.addresses
 
 
 def _scope(path: Path) -> Path:
-    path.write_text(json.dumps({
-        "allowed_origins": ["https://portal.olympusdemocorp.example"],
-        "allowed_path_prefixes": ["/app"],
-        "allowed_ip_networks": ["192.0.2.0/24", "2001:db8::/32"],
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "allowed_origins": ["https://portal.olympusdemocorp.example"],
+                "allowed_path_prefixes": ["/app"],
+                "allowed_ip_networks": ["192.0.2.0/24", "2001:db8::/32"],
+            }
+        )
+    )
     return path
+
+
+def _policy(timeout: float = 5.0) -> ExecutionPolicy:
+    return ExecutionPolicy(authorized=True, timeout_seconds=timeout, deadline_seconds=60.0)
 
 
 def test_fetch_follows_only_scope_checked_redirects(tmp_path: Path) -> None:
     login = "https://portal.olympusdemocorp.example/app/login"
     home = "https://portal.olympusdemocorp.example/app/home"
-    transport = FakeTransport({
-        login: HttpResponse(login, 302, {"location": "/app/home"}, b""),
-        home: HttpResponse(home, 200, {"content-type": "text/html"}, b"demo"),
-    })
+    transport = FakeTransport(
+        {
+            login: HttpResponse(login, 302, {"location": "/app/home"}, b""),
+            home: HttpResponse(home, 200, {"content-type": "text/html"}, b"demo"),
+        }
+    )
 
     result = fetch_scoped(
         login,
@@ -69,6 +87,7 @@ def test_fetch_follows_only_scope_checked_redirects(tmp_path: Path) -> None:
         tmp_path / "log",
         FakeResolver(),
         transport,
+        policy=_policy(),
     )
 
     assert result.response.body == b"demo"
@@ -79,9 +98,9 @@ def test_fetch_follows_only_scope_checked_redirects(tmp_path: Path) -> None:
 
 def test_fetch_blocks_redirect_before_second_request(tmp_path: Path) -> None:
     login = "https://portal.olympusdemocorp.example/app/login"
-    transport = FakeTransport({
-        login: HttpResponse(login, 302, {"location": "https://outside.example/steal"}, b"")
-    })
+    transport = FakeTransport(
+        {login: HttpResponse(login, 302, {"location": "https://outside.example/steal"}, b"")}
+    )
 
     with pytest.raises(OutOfScopeError):
         fetch_scoped(
@@ -90,6 +109,7 @@ def test_fetch_blocks_redirect_before_second_request(tmp_path: Path) -> None:
             tmp_path / "log",
             FakeResolver(),
             transport,
+            policy=_policy(),
         )
     assert len(transport.requested) == 1
 
@@ -105,6 +125,7 @@ def test_fetch_requires_every_ipv4_ipv6_answer_in_scope(tmp_path: Path) -> None:
         tmp_path / "log",
         FakeResolver(["192.0.2.10", "2001:db8::10"]),
         transport,
+        policy=_policy(),
     )
     assert transport.requested[0][1] == ("192.0.2.10", "2001:db8::10")
 
@@ -115,25 +136,127 @@ def test_fetch_requires_every_ipv4_ipv6_answer_in_scope(tmp_path: Path) -> None:
             tmp_path / "blocked.log",
             FakeResolver(["192.0.2.10", "127.0.0.1"]),
             transport,
+            policy=_policy(),
         )
     assert "resolved_address_not_allowed" in (tmp_path / "blocked.log").read_text()
     with pytest.raises(ScopeError, match="no addresses"):
-        fetch_scoped(target, scope, tmp_path / "log", FakeResolver([]), transport)
+        fetch_scoped(target, scope, tmp_path / "log", FakeResolver([]), transport, policy=_policy())
 
 
 def test_fetch_enforces_redirect_and_option_limits(tmp_path: Path) -> None:
     login = "https://portal.olympusdemocorp.example/app/login"
-    transport = FakeTransport({
-        login: HttpResponse(login, 302, {"location": "/app/login"}, b"")
-    })
+    transport = FakeTransport({login: HttpResponse(login, 302, {"location": "/app/login"}, b"")})
     scope = _scope(tmp_path / "scope.json")
 
     with pytest.raises(HttpClientError, match="redirect limit"):
-        fetch_scoped(login, scope, tmp_path / "log", FakeResolver(), transport, max_redirects=0)
+        fetch_scoped(
+            login,
+            scope,
+            tmp_path / "log",
+            FakeResolver(),
+            transport,
+            policy=_policy(),
+            max_redirects=0,
+        )
     with pytest.raises(ValueError, match="timeout"):
-        fetch_scoped(login, scope, tmp_path / "log", FakeResolver(), transport, timeout=0)
+        fetch_scoped(
+            login, scope, tmp_path / "log", FakeResolver(), transport, policy=_policy(0.05)
+        )
     with pytest.raises(ValueError, match="max_bytes"):
-        fetch_scoped(login, scope, tmp_path / "log", FakeResolver(), transport, max_bytes=0)
+        fetch_scoped(
+            login,
+            scope,
+            tmp_path / "log",
+            FakeResolver(),
+            transport,
+            policy=_policy(),
+            max_bytes=0,
+        )
+
+
+def test_fetch_service_checks_policy_before_dns_or_transport(tmp_path: Path) -> None:
+    target = "https://portal.olympusdemocorp.example/app"
+    resolver = FakeResolver()
+    transport = FakeTransport({target: HttpResponse(target, 200, {}, b"")})
+    service = ScopedFetchService(resolver, transport)
+    request = ScopedFetchRequest(
+        url=target,
+        scope_path=_scope(tmp_path / "scope.json"),
+        audit_log_path=tmp_path / "blocked.log",
+    )
+
+    with pytest.raises(AuthorizationRequiredError):
+        service.run(request)
+    assert resolver.requests == []
+    assert transport.requested == []
+
+    with pytest.raises(OutOfScopeError):
+        service.run(
+            ScopedFetchRequest(
+                url="https://outside.example/app",
+                scope_path=request.scope_path,
+                audit_log_path=request.audit_log_path,
+                authorized=True,
+            )
+        )
+    assert resolver.requests == []
+    assert transport.requested == []
+
+
+def test_fetch_service_observes_cancellation_before_dns(tmp_path: Path) -> None:
+    target = "https://portal.olympusdemocorp.example/app"
+    resolver = FakeResolver()
+    transport = FakeTransport({target: HttpResponse(target, 200, {}, b"")})
+    token = CancellationToken()
+    token.cancel()
+
+    with pytest.raises(CancellationRequested):
+        ScopedFetchService(resolver, transport, token).run(
+            ScopedFetchRequest(
+                url=target,
+                scope_path=_scope(tmp_path / "scope.json"),
+                audit_log_path=tmp_path / "blocked.log",
+                authorized=True,
+            )
+        )
+    assert resolver.requests == []
+    assert transport.requested == []
+
+
+def test_fetch_retries_only_transport_failures(tmp_path: Path) -> None:
+    target = "https://portal.olympusdemocorp.example/app"
+
+    class FlakyTransport:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del addresses, timeout, max_bytes
+            self.attempts += 1
+            if self.attempts == 1:
+                raise HttpClientError("temporary transport failure")
+            return HttpResponse(url, 200, {}, b"ok")
+
+    transport = FlakyTransport()
+    result = fetch_scoped(
+        target,
+        _scope(tmp_path / "scope.json"),
+        tmp_path / "blocked.log",
+        FakeResolver(),
+        transport,
+        policy=ExecutionPolicy(
+            authorized=True,
+            timeout_seconds=1.0,
+            deadline_seconds=5.0,
+            retries=1,
+            backoff_seconds=0.0,
+        ),
+    )
+
+    assert result.response.body == b"ok"
+    assert transport.attempts == 2
 
 
 def test_fetch_rejects_redirect_without_location(tmp_path: Path) -> None:
@@ -146,6 +269,7 @@ def test_fetch_rejects_redirect_without_location(tmp_path: Path) -> None:
             tmp_path / "log",
             FakeResolver(),
             transport,
+            policy=_policy(),
         )
 
 
@@ -189,9 +313,12 @@ def test_pinned_transport_enforces_scheme_address_and_size(
     assert response.body == b"demo"
     assert response.headers == {"content-type": "text/plain"}
     monkeypatch.setattr(artemis_http, "_PinnedHTTPConnection", FakeConnection)
-    assert PinnedTransport().get(
-        "http://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 4
-    ).status == 200
+    assert (
+        PinnedTransport()
+        .get("http://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 4)
+        .status
+        == 200
+    )
 
     with pytest.raises(HttpClientError, match=r"HTTP\(S\)"):
         PinnedTransport().get("file:///etc/passwd", ("192.0.2.10",), 1.0, 4)
@@ -199,9 +326,7 @@ def test_pinned_transport_enforces_scheme_address_and_size(
         PinnedTransport().get("https://example.test/", (), 1.0, 4)
     FakeConnection.response = FakeRawResponse(b"oversized")
     with pytest.raises(HttpClientError, match="byte limit"):
-        PinnedTransport().get(
-            "https://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 4
-        )
+        PinnedTransport().get("https://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 4)
 
 
 def test_socket_resolver_deduplicates_and_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -266,9 +391,37 @@ def test_fetch_cli_prints_metadata_only(tmp_path: Path, monkeypatch: pytest.Monk
             str(_scope(tmp_path / "scope.json")),
             "--log",
             str(tmp_path / "log"),
+            "--i-am-authorized",
         ],
     )
 
     assert result.exit_code == 0
     assert json.loads(result.stdout)["body_bytes"] == 12
     assert "BODY-CONTENT" not in result.stdout
+
+
+def test_fetch_cli_requires_authorization_before_adapters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = "https://portal.olympusdemocorp.example/app"
+    resolver = FakeResolver()
+    transport = FakeTransport({target: HttpResponse(target, 200, {}, b"")})
+    monkeypatch.setattr(artemis_cli, "PinnedTransport", lambda: transport)
+    monkeypatch.setattr(artemis_cli, "SocketResolver", lambda: resolver)
+
+    result = runner.invoke(
+        app,
+        [
+            "artemis",
+            "fetch",
+            "--url",
+            target,
+            "--scope",
+            str(_scope(tmp_path / "scope.json")),
+        ],
+    )
+
+    assert result.exit_code == 4
+    assert "AUTHORIZED USE ONLY" in result.output
+    assert resolver.requests == []
+    assert transport.requested == []

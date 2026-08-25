@@ -241,13 +241,13 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus argus ip --ip <ip>` | profiles an in-scope IP offline; authorized optional geolocation uses the encrypted `ipwho.is` endpoint and is returned explicitly in `geo` |
 | `olympus argus investigate --name <n>` | builds an authorized OSINT graph; every networked domain, IP, or username pivot is checked against its dedicated scope before lookup |
 | **Helios** — 🔴 network attack-surface mapping | |
-| `olympus helios scan <target>` | bounded, non-destructive TCP discovery, only after scope authorization |
+| `olympus helios scan <target>` | bounded, non-destructive TCP discovery; requires `--i-am-authorized` and CIDR scope before any connection |
 | **Artemis** — 🔴 web recon | |
-| `olympus artemis fetch --url <u>` | one scope-safe GET, prints metadata only |
-| `olympus artemis fingerprint --url <u>` | identifies the technology stack from one passive GET |
-| `olympus artemis content --url <u>` | real content/directory discovery on an authorized base URL |
-| `olympus artemis xss --url <u>` | non-destructive reflected-XSS test (marker reflection only) |
-| `olympus artemis metabase --url <u>` | non-exploitative check for CVE-2026-72898 exposure |
+| `olympus artemis fetch --url <u>` | one bounded scope-safe GET; requires `--i-am-authorized` and prints metadata only |
+| `olympus artemis fingerprint --url <u>` | identifies the technology stack from one authorized passive GET |
+| `olympus artemis content --url <u>` | real, authorized and rate/deadline-bounded content discovery |
+| `olympus artemis xss --url <u>` | authorized non-destructive reflected-XSS test (marker reflection only) |
+| `olympus artemis metabase --url <u>` | authorized non-exploitative check for CVE-2026-72898 exposure |
 | `olympus artemis check-scope --url <u>` | validates URL authorization without making any request |
 | **Proteus** — 🔴 authorized phishing simulation | |
 | `olympus proteus campaign --targets <f>` | builds a simulation campaign (unique token per in-scope target) |
@@ -585,13 +585,13 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus argus ip --ip <ip>` | profila offline un IP in scope; la geolocalizzazione opzionale autorizzata usa l'endpoint cifrato `ipwho.is` ed è restituita esplicitamente in `geo` |
 | `olympus argus investigate --name <n>` | costruisce un grafo OSINT autorizzato; ogni pivot di rete su dominio, IP o username viene verificato nel relativo scope prima del lookup |
 | **Helios** — 🔴 mappatura della superficie di rete | |
-| `olympus helios scan <target>` | discovery TCP non distruttiva e limitata, solo dopo autorizzazione di scope |
+| `olympus helios scan <target>` | discovery TCP non distruttiva e limitata; richiede `--i-am-authorized` e scope CIDR prima di ogni connessione |
 | **Artemis** — 🔴 web recon | |
-| `olympus artemis fetch --url <u>` | una singola GET scope-safe, stampa solo i metadati |
-| `olympus artemis fingerprint --url <u>` | identifica lo stack tecnologico da una GET passiva |
-| `olympus artemis content --url <u>` | content/directory discovery reale su una base URL autorizzata |
-| `olympus artemis xss --url <u>` | test non distruttivo di reflected XSS (solo riflessione di un marker) |
-| `olympus artemis metabase --url <u>` | verifica non distruttiva dell'esposizione a CVE-2026-72898 |
+| `olympus artemis fetch --url <u>` | una GET scope-safe e limitata; richiede `--i-am-authorized` e stampa solo i metadati |
+| `olympus artemis fingerprint --url <u>` | identifica lo stack da una GET passiva autorizzata |
+| `olympus artemis content --url <u>` | content discovery reale, autorizzata e limitata da rate/deadline |
+| `olympus artemis xss --url <u>` | test autorizzato non distruttivo di reflected XSS (solo marker) |
+| `olympus artemis metabase --url <u>` | verifica autorizzata e non distruttiva dell'esposizione a CVE-2026-72898 |
 | `olympus artemis check-scope --url <u>` | valida l'autorizzazione dell'URL senza fare alcuna richiesta |
 | **Proteus** — 🔴 simulazione phishing autorizzata | |
 | `olympus proteus campaign --targets <f>` | costruisce una campagna di simulazione (token unico per target, tutti in scope) |

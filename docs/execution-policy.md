@@ -57,6 +57,13 @@ uses the same URL redactor before SQLite persistence.
 - Athena: plan limits become one shared policy; its formerly unused retry budget
   now drives transient adapter retries, cancellation tokens are issued per job,
   and audit URL queries are redacted before storage.
-- Helios, Artemis, Proteus, Hermes, Apollo, Minerva, Vulcan, and AEGIS adoption
-  is tracked in `upgrade.md`; offline-only work uses the same validation/redaction
-  pieces where applicable but does not invent network authorization requirements.
+- Helios: the application service validates ports, requires explicit authorization,
+  applies CIDR scope, observes cancellation between probes, and emits versioned
+  observations/findings. Scope denials use the shared redacted NDJSON audit format.
+- Artemis: every active web command supplies an explicit policy to the DNS-pinned
+  transport. Authorization and URL/IP scope precede DNS and traffic; redirects repeat
+  scope checks; retries cover transport failures only; rate waits and each request obey
+  cancellation and an overall deadline. No low-level network API assumes authorization.
+- Proteus, Hermes, Apollo, Minerva, Vulcan, and AEGIS adoption is tracked in
+  `upgrade.md`; offline-only work uses the same validation/redaction pieces where
+  applicable but does not invent network authorization requirements.

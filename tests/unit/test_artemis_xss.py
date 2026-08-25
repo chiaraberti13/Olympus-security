@@ -7,6 +7,7 @@ from pathlib import Path
 from olympus.artemis.http import HttpClientError, HttpResponse
 from olympus.artemis.xss import MARKER, check_reflected_xss
 from olympus.core.enums import Severity
+from olympus.core.execution import ExecutionPolicy
 from olympus.core.models import Finding
 
 ASSET = "AST-2026-00001"
@@ -51,7 +52,14 @@ class _Transport:
 
 def _run(tmp_path: Path, transport: _Transport) -> list[Finding]:
     return check_reflected_xss(
-        ASSET, BASE, "q", _scope(tmp_path), tmp_path / "log", _Resolver(), transport
+        ASSET,
+        BASE,
+        "q",
+        _scope(tmp_path),
+        tmp_path / "log",
+        _Resolver(),
+        transport,
+        policy=ExecutionPolicy(authorized=True, timeout_seconds=5.0, deadline_seconds=60.0),
     )
 
 

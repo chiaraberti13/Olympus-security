@@ -5,12 +5,14 @@ from __future__ import annotations
 import http.client
 import socket
 import ssl
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from olympus.artemis.scope import enforce_address_scope, enforce_scope
+from olympus.core.execution import Cancellation, ExecutionPolicy, NeverCancelled
 
 USER_AGENT = "Olympus-Security-Artemis/0.1 (authorized-recon)"
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
@@ -65,9 +67,7 @@ class _PinnedHTTPConnection(http.client.HTTPConnection):
         self._pinned_address = address
 
     def connect(self) -> None:
-        self.sock = socket.create_connection(
-            (self._pinned_address, self.port), self.timeout
-        )
+        self.sock = socket.create_connection((self._pinned_address, self.port), self.timeout)
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -77,9 +77,7 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         self._pinned_address = address
 
     def connect(self) -> None:
-        raw_socket = socket.create_connection(
-            (self._pinned_address, self.port), self.timeout
-        )
+        raw_socket = socket.create_connection((self._pinned_address, self.port), self.timeout)
         self.sock = self._ssl_context.wrap_socket(raw_socket, server_hostname=self.host)
 
 
@@ -102,9 +100,7 @@ class PinnedTransport:
         path = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
         host_header = parsed.netloc
         try:
-            connection.request(
-                "GET", path, headers={"Host": host_header, "User-Agent": USER_AGENT}
-            )
+            connection.request("GET", path, headers={"Host": host_header, "User-Agent": USER_AGENT})
             response = connection.getresponse()
             body = response.read(max_bytes + 1)
             if len(body) > max_bytes:
@@ -124,25 +120,57 @@ def fetch_scoped(
     resolver: Resolver,
     transport: Transport,
     *,
-    timeout: float = 5.0,
+    policy: ExecutionPolicy,
     max_bytes: int = 1_000_000,
     max_redirects: int = 5,
+    cancellation: Cancellation | None = None,
 ) -> FetchResult:
     """Resolve once per hop, authorize all answers, then connect only to an approved IP."""
-    if not 0.1 <= timeout <= 30.0:
+    if not 0.1 <= policy.timeout_seconds <= 30.0:
         raise ValueError("timeout must be between 0.1 and 30 seconds")
     if not 1 <= max_bytes <= 10_000_000:
         raise ValueError("max_bytes must be between 1 and 10000000")
     if not 0 <= max_redirects <= 10:
         raise ValueError("max_redirects must be between 0 and 10")
+    policy.require_authorization("Artemis scoped HTTP fetch")
     current = enforce_scope(target, scope_path, log_path)
+    token = cancellation or NeverCancelled()
+    deadline = time.monotonic() + policy.deadline_seconds
     redirects: list[str] = []
     for redirect_count in range(max_redirects + 1):
+        policy.check_cancellation(token)
+        if time.monotonic() >= deadline:
+            raise HttpClientError("overall HTTP deadline exceeded")
         parsed = urlsplit(current.url)
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         resolved = resolver.resolve(parsed.hostname or "", port)
         approved = enforce_address_scope(current, resolved, scope_path, log_path)
-        response = transport.get(current.url, approved, timeout, max_bytes)
+        last_error: HttpClientError | None = None
+        response: HttpResponse | None = None
+        for attempt in range(policy.retries + 1):
+            policy.check_cancellation(token)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise HttpClientError("overall HTTP deadline exceeded")
+            try:
+                response = transport.get(
+                    current.url,
+                    approved,
+                    min(policy.timeout_seconds, remaining),
+                    max_bytes,
+                )
+            except HttpClientError as exc:
+                last_error = exc
+                if attempt < policy.retries:
+                    policy.check_cancellation(token)
+                    delay = policy.backoff_seconds * (2**attempt)
+                    if delay >= deadline - time.monotonic():
+                        raise HttpClientError("overall HTTP deadline exceeded") from exc
+                    time.sleep(delay)
+            else:
+                break
+        if response is None:
+            raise last_error or HttpClientError("HTTP transport failed")
         if response.status not in REDIRECT_STATUSES:
             return FetchResult(response, redirects)
         location = response.headers.get("location")

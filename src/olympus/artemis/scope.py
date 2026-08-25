@@ -10,6 +10,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit, urlunsplit
+from uuid import uuid4
+
+from olympus.core.execution import StructuredAuditRecord, append_structured_audit
 
 
 class ScopeError(ValueError):
@@ -31,15 +34,17 @@ class ScopedUrl:
 
 def _audit_block(target: str, log_path: Path, reason: str) -> None:
     """Append a query-free, structured scope denial record."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    record = {
-        "event": "blocked_out_of_scope",
-        "reason": reason,
-        "target": target,
-        "timestamp": datetime.now(UTC).isoformat(),
-    }
-    with log_path.open("a", encoding="utf-8") as audit:
-        audit.write(json.dumps(record, sort_keys=True) + "\n")
+    append_structured_audit(
+        log_path,
+        StructuredAuditRecord(
+            timestamp=datetime.now(UTC).isoformat(),
+            execution_id=str(uuid4()),
+            action="artemis.scope",
+            outcome="blocked",
+            target=target,
+            metadata={"reason": reason},
+        ),
+    )
 
 
 def _canonicalize(raw_url: str) -> ScopedUrl:

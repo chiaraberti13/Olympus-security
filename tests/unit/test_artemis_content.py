@@ -16,10 +16,15 @@ from olympus.artemis.content import (
 )
 from olympus.artemis.http import HttpResponse
 from olympus.cli import app
+from olympus.core.execution import ExecutionPolicy
 
 runner = CliRunner()
 
 BASE = "https://portal.olympusdemocorp.example/app"
+
+
+def _policy() -> ExecutionPolicy:
+    return ExecutionPolicy(authorized=True, timeout_seconds=5.0, deadline_seconds=60.0)
 
 
 def _write_scope(path: Path) -> Path:
@@ -82,6 +87,7 @@ def test_discover_reports_only_existing_paths(tmp_path: Path) -> None:
         tmp_path / "blocked.log",
         _Resolver(),
         _Transport(),
+        policy=_policy(),
     )
     paths = {d.path: d.status for d in found}
     assert paths == {"admin": 200, ".env": 200}
@@ -109,6 +115,7 @@ def test_out_of_scope_base_yields_nothing(tmp_path: Path) -> None:
         log,
         _Resolver(),
         _Transport(),
+        policy=_policy(),
     )
     assert found == []
     assert log.exists()  # blocked candidates are audited
@@ -136,9 +143,19 @@ def test_cli_content_finds_paths_with_exit_1(
     result = runner.invoke(
         app,
         [
-            "artemis", "content", "--url", BASE, "--wordlist", str(wl),
-            "--scope", str(scope), "--log", str(tmp_path / "b.log"),
-            "--i-am-authorized", "--output", str(out),
+            "artemis",
+            "content",
+            "--url",
+            BASE,
+            "--wordlist",
+            str(wl),
+            "--scope",
+            str(scope),
+            "--log",
+            str(tmp_path / "b.log"),
+            "--i-am-authorized",
+            "--output",
+            str(out),
         ],
     )
     assert result.exit_code == 1, result.output

@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 import typer
 
+from olympus.artemis.application import ScopedFetchRequest, ScopedFetchService
 from olympus.artemis.content import (
     WordlistError,
     discover_content,
@@ -19,12 +20,16 @@ from olympus.artemis.http import (
     HttpClientError,
     PinnedTransport,
     SocketResolver,
-    fetch_scoped,
 )
 from olympus.artemis.metabase import detect_metabase
 from olympus.artemis.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.artemis.xss import check_reflected_xss
 from olympus.core.enums import AssetType, Source
+from olympus.core.execution import (
+    AuthorizationRequiredError,
+    ExecutionPolicy,
+    ExecutionPolicyError,
+)
 from olympus.core.models import Asset, Finding
 
 app = typer.Typer(help="Artemis — authorized web reconnaissance.", no_args_is_help=True)
@@ -49,6 +54,16 @@ def _render_findings(findings: list[Finding]) -> str:
     )
 
 
+def _require_active_authorization(authorized: bool) -> ExecutionPolicy:
+    policy = ExecutionPolicy(authorized=authorized, timeout_seconds=5.0, deadline_seconds=60.0)
+    try:
+        policy.require_authorization("Artemis live web probe")
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    return policy
+
+
 @app.command()
 def fetch(
     url: str = typer.Option(..., "--url"),
@@ -56,18 +71,25 @@ def fetch(
     log: Path = typer.Option(DEFAULT_LOG, "--log"),
     timeout: float = typer.Option(5.0, "--timeout"),
     max_bytes: int = typer.Option(1_000_000, "--max-bytes"),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm documented authorization for this live fetch."
+    ),
 ) -> None:
     """Perform one bounded, scope-safe GET flow and print metadata only."""
     try:
-        result = fetch_scoped(
-            url,
-            scope,
-            log,
-            SocketResolver(),
-            PinnedTransport(),
-            timeout=timeout,
-            max_bytes=max_bytes,
+        result = ScopedFetchService(SocketResolver(), PinnedTransport()).run(
+            ScopedFetchRequest(
+                url=url,
+                scope_path=scope,
+                audit_log_path=log,
+                authorized=i_am_authorized,
+                timeout_seconds=timeout,
+                max_bytes=max_bytes,
+            )
         )
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
     except (ScopeError, OutOfScopeError, HttpClientError, ValueError) as exc:
         typer.echo(f"artemis: fetch blocked or failed: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -96,14 +118,20 @@ def fingerprint(
     output: Path | None = typer.Option(None, "--output", help="Export findings JSON to this path."),
 ) -> None:
     """Identify the technology stack from one scope-safe GET (passive, no extra requests)."""
-    if not i_am_authorized:
-        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
     try:
-        result = fetch_scoped(
-            url, scope, log, SocketResolver(), PinnedTransport(),
-            timeout=timeout, max_bytes=max_bytes,
+        result = ScopedFetchService(SocketResolver(), PinnedTransport()).run(
+            ScopedFetchRequest(
+                url=url,
+                scope_path=scope,
+                audit_log_path=log,
+                authorized=i_am_authorized,
+                timeout_seconds=timeout,
+                max_bytes=max_bytes,
+            )
         )
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
     except (ScopeError, OutOfScopeError, HttpClientError, ValueError) as exc:
         typer.echo(f"artemis: fingerprint blocked or failed: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -143,27 +171,40 @@ def content(
     only ever touches authorized origins/path-prefixes. GET-only, bounded and
     rate-limited — it discovers, it never exploits.
     """
-    if not i_am_authorized:
-        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
+    _require_active_authorization(i_am_authorized)
     try:
         words = load_wordlist(wordlist)
     except WordlistError as exc:
         typer.echo(f"artemis: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    discovered = discover_content(
-        url, words, scope, log, SocketResolver(), PinnedTransport(),
-        timeout=timeout, max_bytes=max_bytes, min_interval=rate,
-    )
+    try:
+        policy = ExecutionPolicy(
+            authorized=i_am_authorized,
+            timeout_seconds=timeout,
+            deadline_seconds=min(86_400.0, max(timeout * max(len(words), 1), timeout)),
+            min_interval_seconds=rate,
+        )
+        discovered = discover_content(
+            url,
+            words,
+            scope,
+            log,
+            SocketResolver(),
+            PinnedTransport(),
+            max_bytes=max_bytes,
+            policy=policy,
+        )
+    except ExecutionPolicyError as exc:
+        typer.echo(f"artemis: invalid execution policy: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
     findings = discoveries_to_findings(asset_id, discovered)
     typer.echo(_render_findings(findings))
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(_render_findings(findings), encoding="utf-8")
     typer.echo(
-        f"artemis: content discovery tried {len(words)} path(s), "
-        f"found {len(discovered)}", err=True
+        f"artemis: content discovery tried {len(words)} path(s), found {len(discovered)}", err=True
     )
     if discovered:
         raise typer.Exit(code=1)
@@ -202,16 +243,22 @@ def metabase(
     Reads the public version and endpoint reachability through the scope-safe,
     DNS-pinned transport. Never sends a SQL injection payload.
     """
-    if not i_am_authorized:
-        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
+    policy = _require_active_authorization(i_am_authorized)
     asset = Asset(
         asset_type=AssetType.WEB_SERVER,
         hostname=url,
         source=Source.ARTEMIS,
         tags=["artemis", "metabase"],
     )
-    findings = detect_metabase(asset.asset_id, url, scope, log, SocketResolver(), PinnedTransport())
+    findings = detect_metabase(
+        asset.asset_id,
+        url,
+        scope,
+        log,
+        SocketResolver(),
+        PinnedTransport(),
+        policy=policy,
+    )
     typer.echo(_render_findings(findings))
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -244,9 +291,7 @@ def xss(
     Sends a benign structural marker (no script/payload) through the scope-safe
     transport and flags an unescaped reflection. No WAF evasion is performed.
     """
-    if not i_am_authorized:
-        typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
+    policy = _require_active_authorization(i_am_authorized)
     params = _target_params(url, param)
     if not params:
         typer.echo(
@@ -263,7 +308,16 @@ def xss(
     findings: list[Finding] = []
     for target in params:
         findings.extend(
-            check_reflected_xss(asset.asset_id, url, target, scope, log, resolver, transport)
+            check_reflected_xss(
+                asset.asset_id,
+                url,
+                target,
+                scope,
+                log,
+                resolver,
+                transport,
+                policy=policy,
+            )
         )
     typer.echo(_render_findings(findings))
     if output is not None:

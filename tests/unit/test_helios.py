@@ -1,21 +1,32 @@
 """Tests for bounded and scoped Helios surface discovery."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from olympus.cli import app
+from olympus.core.execution import (
+    AuthorizationRequiredError,
+    CancellationRequested,
+    CancellationToken,
+)
 from olympus.core.models import Finding, Observation
 from olympus.helios import cli as helios_cli
+from olympus.helios.application import SurfaceScanRequest, SurfaceScanService
 from olympus.helios.export import export_findings, to_findings, to_observations
 from olympus.helios.scanner import OpenPort, discover
 from olympus.helios.scope import OutOfScopeError, enforce_scope
 
 
 class FakeConnector:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int, float]] = []
+
     def is_open(self, host: str, port: int, timeout: float) -> bool:
+        self.calls.append((host, port, timeout))
         return host == "192.0.2.10" and port == 443 and timeout == 1.0
 
 
@@ -35,7 +46,10 @@ def test_scope_accepts_ipv4_and_ipv6_and_logs_blocks(tmp_path: Path) -> None:
     assert str(enforce_scope("2001:db8::10", scope, log)) == "2001:db8::10"
     with pytest.raises(OutOfScopeError):
         enforce_scope("203.0.113.10", scope, log)
-    assert "BLOCK target=203.0.113.10" in log.read_text(encoding="utf-8")
+    audit = json.loads(log.read_text(encoding="utf-8"))
+    assert audit["action"] == "helios.scope"
+    assert audit["outcome"] == "blocked"
+    assert audit["target"] == "203.0.113.10"
 
 
 def test_discovery_is_bounded_and_injectable() -> None:
@@ -46,6 +60,45 @@ def test_discovery_is_bounded_and_injectable() -> None:
         discover("192.0.2.10", [0], FakeConnector())
     with pytest.raises(ValueError):
         discover("192.0.2.10", list(range(1, 130)), FakeConnector())
+
+
+def test_surface_service_authorizes_and_scopes_before_connector(tmp_path: Path) -> None:
+    connector = FakeConnector()
+    scope = _scope(tmp_path / "scope.json")
+    request = SurfaceScanRequest(
+        target="192.0.2.10",
+        ports=(443,),
+        scope_path=scope,
+        audit_log_path=tmp_path / "audit.log",
+        asset_id="AST-1",
+    )
+
+    with pytest.raises(AuthorizationRequiredError):
+        SurfaceScanService(connector).run(request)
+    assert connector.calls == []
+
+    with pytest.raises(OutOfScopeError):
+        SurfaceScanService(connector).run(replace(request, target="203.0.113.10", authorized=True))
+    assert connector.calls == []
+
+
+def test_surface_service_observes_cancellation_before_connector(tmp_path: Path) -> None:
+    connector = FakeConnector()
+    token = CancellationToken()
+    token.cancel()
+
+    with pytest.raises(CancellationRequested):
+        SurfaceScanService(connector, token).run(
+            SurfaceScanRequest(
+                target="192.0.2.10",
+                ports=(443,),
+                scope_path=_scope(tmp_path / "scope.json"),
+                audit_log_path=tmp_path / "audit.log",
+                asset_id="AST-1",
+                authorized=True,
+            )
+        )
+    assert connector.calls == []
 
 
 def test_findings_round_trip_through_core(tmp_path: Path) -> None:
@@ -101,6 +154,7 @@ def test_cli_scan_enforces_scope_and_exports(
             str(output),
             "--log",
             str(tmp_path / "blocked.log"),
+            "--i-am-authorized",
         ],
     )
 
@@ -120,3 +174,11 @@ def test_open_ports_map_to_versioned_observations() -> None:
     observations = to_observations("AST-2026-00001", [OpenPort("192.0.2.10", 443, "https")])
     assert observations[0].schema_name == "olympus.observation"
     assert observations[0].observation_type == "tcp.open-port"
+
+
+def test_cli_scan_requires_explicit_authorization(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["helios", "scan", "192.0.2.10", "--scope", str(_scope(tmp_path / "scope.json"))],
+    )
+    assert result.exit_code == 4

@@ -24,12 +24,13 @@ sensitive names (``.git``, ``.env``, backups, admin panels…) is raised to
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from olympus.artemis.http import HttpClientError, Resolver, Transport, fetch_scoped
 from olympus.artemis.scope import OutOfScopeError, ScopeError
 from olympus.core.enums import Severity, Source
+from olympus.core.execution import Cancellation, ExecutionPolicy, NeverCancelled
 from olympus.core.models import Finding
 
 # Response statuses that mean "this path exists / is worth reporting".
@@ -110,9 +111,9 @@ def discover_content(
     resolver: Resolver,
     transport: Transport,
     *,
-    timeout: float = 5.0,
+    policy: ExecutionPolicy,
     max_bytes: int = 1_000_000,
-    min_interval: float = 0.0,
+    cancellation: Cancellation | None = None,
 ) -> list[DiscoveredPath]:
     """Request each candidate path under ``base_url`` and collect existing ones.
 
@@ -120,18 +121,41 @@ def discover_content(
     audited by :func:`fetch_scoped`). ``min_interval`` throttles requests for
     politeness. Returns the interesting paths in wordlist order.
     """
+    policy.require_authorization("Artemis content discovery")
+    token = cancellation or NeverCancelled()
+    deadline = time.monotonic() + policy.deadline_seconds
     discovered: list[DiscoveredPath] = []
     last_request = 0.0
     for word in words:
-        if min_interval > 0.0:
-            wait = min_interval - (time.monotonic() - last_request)
+        policy.check_cancellation(token)
+        if time.monotonic() >= deadline:
+            break
+        if policy.min_interval_seconds > 0.0:
+            wait = policy.min_interval_seconds - (time.monotonic() - last_request)
             if wait > 0:
+                policy.check_cancellation(token)
+                if wait >= deadline - time.monotonic():
+                    break
                 time.sleep(wait)
+                policy.check_cancellation(token)
         url = _candidate_url(base_url, word)
+        remaining = deadline - time.monotonic()
+        if remaining < 0.05:
+            break
+        request_policy = replace(
+            policy,
+            deadline_seconds=min(policy.deadline_seconds, remaining),
+        )
         try:
             result = fetch_scoped(
-                url, scope_path, log_path, resolver, transport,
-                timeout=timeout, max_bytes=max_bytes,
+                url,
+                scope_path,
+                log_path,
+                resolver,
+                transport,
+                max_bytes=max_bytes,
+                policy=request_policy,
+                cancellation=token,
             )
         except (HttpClientError, ScopeError, OutOfScopeError, ValueError):
             continue

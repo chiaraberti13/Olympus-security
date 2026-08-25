@@ -17,6 +17,7 @@ from pathlib import Path
 from olympus.artemis.http import HttpClientError, Resolver, Transport, fetch_scoped
 from olympus.artemis.scope import OutOfScopeError, ScopeError
 from olympus.core.enums import Severity, Source
+from olympus.core.execution import ExecutionPolicy
 from olympus.core.models import Finding
 
 CVE_ID = "CVE-2026-72898"
@@ -59,11 +60,16 @@ def _extract_version_tag(body: str) -> str | None:
 
 
 def _get_status(
-    url: str, scope_path: Path, log_path: Path, resolver: Resolver, transport: Transport
+    url: str,
+    scope_path: Path,
+    log_path: Path,
+    resolver: Resolver,
+    transport: Transport,
+    policy: ExecutionPolicy,
 ) -> tuple[int, str] | None:
     """Scoped GET of ``url``; returns ``(status, body_text)`` or ``None`` on failure."""
     try:
-        result = fetch_scoped(url, scope_path, log_path, resolver, transport)
+        result = fetch_scoped(url, scope_path, log_path, resolver, transport, policy=policy)
     except (HttpClientError, ScopeError, OutOfScopeError, ValueError):
         return None
     return result.response.status, result.response.body.decode("utf-8", errors="replace")
@@ -76,11 +82,13 @@ def detect_metabase(
     log_path: Path,
     resolver: Resolver,
     transport: Transport,
+    *,
+    policy: ExecutionPolicy,
 ) -> list[Finding]:
     """Fingerprint a possible Metabase instance and flag CVE-2026-72898 exposure."""
     base = base_url.rstrip("/")
     properties = _get_status(
-        f"{base}/api/session/properties", scope_path, log_path, resolver, transport
+        f"{base}/api/session/properties", scope_path, log_path, resolver, transport, policy
     )
     if properties is None or properties[0] != 200:
         return []
@@ -89,7 +97,7 @@ def detect_metabase(
         return []  # not a Metabase properties endpoint
 
     reset = _get_status(
-        f"{base}/api/session/reset_password", scope_path, log_path, resolver, transport
+        f"{base}/api/session/reset_password", scope_path, log_path, resolver, transport, policy
     )
     evidence = [f"version={version_tag}", "GET /api/session/properties -> 200"]
     if reset is not None:
