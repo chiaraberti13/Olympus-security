@@ -72,7 +72,7 @@ class NumverifyClient:
     ``None`` when the key is absent, so nothing ever calls out by default.
     """
 
-    _ENDPOINT = "http://apilayer.net/api/validate"
+    _ENDPOINT = "https://apilayer.net/api/validate"
 
     def __init__(self, api_key: str, client: HttpClient) -> None:
         self._api_key = api_key
@@ -90,7 +90,11 @@ class NumverifyClient:
         try:
             response = self._client.get(f"{self._ENDPOINT}?{query}")
         except HttpRequestError as exc:
-            raise EnrichmentError(f"numverify request failed: {exc}") from exc
+            # The request URL contains the API key. Never reflect the transport
+            # exception because it may embed that URL in logs or CLI output.
+            raise EnrichmentError("numverify request failed") from exc
+        if response.status_code != 200:
+            raise EnrichmentError(f"numverify returned HTTP {response.status_code}")
         try:
             data = json.loads(response.body)
         except json.JSONDecodeError as exc:
@@ -123,6 +127,8 @@ class HudsonRockBreachClient:
             response = self._client.get(f"{self._endpoint}?phone={quote(e164)}")
         except HttpRequestError as exc:
             raise EnrichmentError(f"breach-intel request failed: {exc}") from exc
+        if response.status_code != 200:
+            raise EnrichmentError(f"breach-intel returned HTTP {response.status_code}")
         try:
             data = json.loads(response.body)
         except json.JSONDecodeError as exc:
@@ -170,6 +176,8 @@ class RapidApiMessagingClient:
             response = self._client.get(f"{self._ENDPOINT}?phone={quote(e164)}", headers=headers)
         except HttpRequestError as exc:
             raise EnrichmentError(f"messaging request failed: {exc}") from exc
+        if response.status_code != 200:
+            raise EnrichmentError(f"messaging lookup returned HTTP {response.status_code}")
         try:
             data = json.loads(response.body)
         except json.JSONDecodeError as exc:

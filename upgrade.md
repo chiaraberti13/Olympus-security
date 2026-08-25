@@ -106,6 +106,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
     port.
   - [x] Argus `myip`: public-IP discovery and optional geolocation service with independently
     injected HTTP ports.
+  - [x] Argus `phone`: offline/batch profiling and authorized, phone-scoped enrichment service with
+    injected carrier, breach, and messaging ports.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -525,3 +527,41 @@ only the **security**, **functional**, and **licence** items are actual requirem
   covered offline and this external-evidence gap is recorded as `BLOCKED`, not as verified.
 - **Next activity:** extract the privacy-sensitive `argus phone` analysis/enrichment workflow from
   Typer while retaining authorization, phone-specific scope, audit, and stable exit behavior.
+
+### Cycle 20 — separate and repair Argus phone enrichment
+
+- **Status:** `VERIFIED` (real-person third-party enrichment remains intentionally unexecuted; the
+  parent repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move the complete single/batch phone workflow out of Typer, preserve enrichment
+  results instead of discarding them, and close a secret-transport defect in Numverify.
+- **Component:** ARGUS Olympus-native application/CLI boundary, phone contracts, three optional
+  enrichment adapters, scope/audit policy, parity manifest, reference documentation, and tests.
+- **Dependencies:** phone-specific E.164 prefix scope, `PhoneEnrichmentClient` and
+  `MessagingPresenceClient` ports, shared bounded HTTP configuration, environment-only API keys,
+  and shared asset/finding contracts.
+- **Completion criteria:** offline mode never calls enrichment ports; real lookups require explicit
+  authorization and valid phone scope; batch skips are explicit and audited; carrier, breach, and
+  messaging results survive into JSON/assets/findings; secrets never cross plaintext HTTP or appear
+  in surfaced failures; non-2xx responses are not treated as successful data.
+- **Implementation:** added `PhoneProfileService`, single/batch requests and outcomes, injected
+  carrier/breach/messaging ports, safe non-fatal adapter warnings, and batch skip records. Removed
+  enrichment/scope/domain orchestration from Typer. Extended `PhoneIntel` and phone asset metadata
+  with real enrichment/messaging output. Changed Numverify to HTTPS, stopped reflecting secret-bearing
+  transport URLs, and made all three adapters reject non-2xx responses explicitly.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/cli.py`,
+  `src/olympus/argus/phone.py`, `src/olympus/argus/enrichment.py`,
+  `docs/parity/argus.json`, `docs/reference.md`, `tests/unit/test_argus_application.py`,
+  `tests/unit/test_argus_cli_phone.py`, `tests/unit/test_argus_phone.py`,
+  `tests/unit/test_argus_enrichment.py`, and `upgrade.md`.
+- **Tests executed:** focused application/phone/CLI/enrichment/parity suite: `62 passed`; complete
+  offline suite: `535 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed CLI profiled the reserved fictional example number with
+  exit 0 and explicit `enrichment: null`; an unconfirmed breach request exited 4 before network; an
+  out-of-scope number exited 3 and produced an audit record. Direct tests prove zero adapter calls
+  offline/unauthorized/out-of-scope and prove authorized carrier/breach/messaging data reaches the
+  exported contract and findings.
+- **Residual limitations:** no real-person Numverify, Hudson Rock, or messaging query was sent from
+  this environment; Numverify/RapidAPI also require operator credentials. These external proofs are
+  not represented as verified, while the adapters and security boundary are tested offline.
+- **Next activity:** extract `argus ip` analysis/geolocation from Typer, preserving CIDR scope,
+  authorization, offline classification, and explicit geolocation failures.

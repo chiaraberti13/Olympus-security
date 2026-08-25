@@ -22,13 +22,17 @@ from olympus.argus.application import (
     MacAnalysisService,
     MyIpDiscoveryRequest,
     MyIpDiscoveryService,
+    PhoneProfileRequest,
+    PhoneProfileService,
     WebReconRequest,
     WebReconService,
     WhoisLookupRequest,
     WhoisLookupService,
 )
+from olympus.argus.enrichment import MessagingPresence, PhoneEnrichment
 from olympus.argus.mac_scope import MacOutOfScopeError
 from olympus.argus.myip import PROVIDERS, MyIpError
+from olympus.argus.phone_scope import PhoneOutOfScopeError
 from olympus.argus.scope import OutOfScopeError
 from olympus.core.http import HttpResponse
 
@@ -123,6 +127,29 @@ class RecordingGeoClient:
         )
 
 
+class RecordingPhoneEnrichmentClient:
+    """Offline carrier or breach port with exact call evidence."""
+
+    def __init__(self, result: PhoneEnrichment) -> None:
+        self.result = result
+        self.calls: list[str] = []
+
+    def enrich(self, e164: str) -> PhoneEnrichment:
+        self.calls.append(e164)
+        return self.result
+
+
+class RecordingMessagingClient:
+    """Offline messaging port with exact call evidence."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def lookup(self, e164: str) -> MessagingPresence:
+        self.calls.append(e164)
+        return MessagingPresence("test-messaging", registered=True, has_public_photo=True)
+
+
 def _scope(path: Path) -> Path:
     path.write_text(
         json.dumps({"engagement": "test", "allowed_domains": [DOMAIN]}),
@@ -134,6 +161,14 @@ def _scope(path: Path) -> Path:
 def _mac_scope(path: Path, oui: str = "00:1A:2B") -> Path:
     path.write_text(
         json.dumps({"engagement": "test", "allowed_ouis": [oui]}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _phone_scope(path: Path, prefix: str = "+1650555") -> Path:
+    path.write_text(
+        json.dumps({"engagement": "test", "allowed_prefixes": [prefix]}),
         encoding="utf-8",
     )
     return path
@@ -159,9 +194,7 @@ def test_email_service_offline_does_not_call_network() -> None:
     resolver = RecordingResolver()
     http = RecordingHttpClient()
 
-    intel = EmailAnalysisService(resolver, http).run(
-        EmailAnalysisRequest(f"alice@{DOMAIN}")
-    )
+    intel = EmailAnalysisService(resolver, http).run(EmailAnalysisRequest(f"alice@{DOMAIN}"))
 
     assert intel.report.email == f"alice@{DOMAIN}"
     assert intel.enrichment is None
@@ -306,6 +339,113 @@ def test_myip_service_reports_provider_failure_without_geo_call() -> None:
     assert geo.calls == []
 
 
+def test_phone_service_offline_does_not_call_enrichment_ports(tmp_path: Path) -> None:
+    carrier = RecordingPhoneEnrichmentClient(PhoneEnrichment(carrier="Example"))
+    breach = RecordingPhoneEnrichmentClient(PhoneEnrichment(breach_count=1))
+    messaging = RecordingMessagingClient()
+    service = PhoneProfileService(carrier, breach, messaging)
+
+    outcome = service.run(
+        PhoneProfileRequest(
+            "+16505550123",
+            _phone_scope(tmp_path / "scope.json"),
+            tmp_path / "audit.log",
+        )
+    )
+
+    assert outcome.intel.report.e164 == "+16505550123"
+    assert carrier.calls == []
+    assert breach.calls == []
+    assert messaging.calls == []
+
+
+def test_phone_service_requires_authorization_before_network(tmp_path: Path) -> None:
+    breach = RecordingPhoneEnrichmentClient(PhoneEnrichment(breach_count=1))
+
+    with pytest.raises(AuthorizationRequiredError):
+        PhoneProfileService(breach_client=breach).run(
+            PhoneProfileRequest(
+                "+16505550123",
+                _phone_scope(tmp_path / "scope.json"),
+                tmp_path / "audit.log",
+                breach=True,
+            )
+        )
+
+    assert breach.calls == []
+
+
+def test_phone_service_blocks_out_of_scope_before_network(tmp_path: Path) -> None:
+    breach = RecordingPhoneEnrichmentClient(PhoneEnrichment(breach_count=1))
+    audit = tmp_path / "audit.log"
+
+    with pytest.raises(PhoneOutOfScopeError):
+        PhoneProfileService(breach_client=breach).run(
+            PhoneProfileRequest(
+                "+14155550123",
+                _phone_scope(tmp_path / "scope.json"),
+                audit,
+                breach=True,
+                authorized=True,
+            )
+        )
+
+    assert breach.calls == []
+    assert "+14155550123" in audit.read_text(encoding="utf-8")
+
+
+def test_phone_service_preserves_authorized_enrichment_in_contract(tmp_path: Path) -> None:
+    carrier = RecordingPhoneEnrichmentClient(
+        PhoneEnrichment(carrier="Example Mobile", line_type="mobile")
+    )
+    breach = RecordingPhoneEnrichmentClient(
+        PhoneEnrichment(breach_count=2, breach_sources=("Example",))
+    )
+    messaging = RecordingMessagingClient()
+
+    outcome = PhoneProfileService(carrier, breach, messaging).run(
+        PhoneProfileRequest(
+            "+16505550123",
+            _phone_scope(tmp_path / "scope.json"),
+            tmp_path / "audit.log",
+            enrich=True,
+            breach=True,
+            messaging=True,
+            authorized=True,
+        )
+    )
+
+    payload = outcome.intel.to_dict()
+    assert payload["enrichment"] == {
+        "carrier": "Example Mobile",
+        "line_type": "mobile",
+        "breach_count": 2,
+        "breach_sources": ["Example"],
+    }
+    messaging_payload = payload["messaging"]
+    assert isinstance(messaging_payload, dict)
+    assert messaging_payload["registered"] is True
+    assert outcome.intel.asset.metadata["enrichment_carrier"] == "Example Mobile"
+    assert len(outcome.intel.findings) == 2
+
+
+def test_phone_batch_records_skips_without_calling_network(tmp_path: Path) -> None:
+    breach = RecordingPhoneEnrichmentClient(PhoneEnrichment(breach_count=1))
+    scope = _phone_scope(tmp_path / "scope.json")
+    audit = tmp_path / "audit.log"
+    requests = tuple(
+        PhoneProfileRequest(number, scope, audit)
+        for number in ("+16505550123", "not-a-number", "+14155550123")
+    )
+
+    result = PhoneProfileService(breach_client=breach).run_many(requests)
+
+    assert len(result.intels) == 1
+    assert any("unparseable" in warning for warning in result.warnings)
+    assert any("out-of-scope" in warning for warning in result.warnings)
+    assert breach.calls == []
+
+
 def test_domain_scan_service_blocks_before_network_dependencies(tmp_path: Path) -> None:
     resolver = RecordingResolver()
     ct_client = RecordingCtClient()
@@ -347,9 +487,7 @@ def test_fronting_service_blocks_before_network_dependencies(tmp_path: Path) -> 
 
     with pytest.raises(OutOfScopeError):
         FrontingAssessmentService(resolver, ct_client).run(
-            FrontingAssessmentRequest(
-                "outside.example", _scope(tmp_path / "scope.json"), audit_log
-            )
+            FrontingAssessmentRequest("outside.example", _scope(tmp_path / "scope.json"), audit_log)
         )
 
     assert resolver.calls == []

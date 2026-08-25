@@ -101,8 +101,12 @@ def analyze_phone(raw_number: str, default_region: str | None = None) -> PhoneRe
     )
 
 
-def build_phone_asset(report: PhoneReport) -> Asset:
-    """Convert a :class:`PhoneReport` into a `core.Asset` (``AssetType.PHONE``)."""
+def build_phone_asset(
+    report: PhoneReport,
+    enrichment: PhoneEnrichment | None = None,
+    messaging: MessagingPresence | None = None,
+) -> Asset:
+    """Convert offline and authorized enrichment data into a shared asset."""
     metadata: dict[str, str] = {
         "line_type": report.line_type,
         "is_valid": str(report.is_valid).lower(),
@@ -117,6 +121,15 @@ def build_phone_asset(report: PhoneReport) -> Asset:
         metadata["location"] = report.location
     if report.carrier_name:
         metadata["carrier"] = report.carrier_name
+    if enrichment is not None:
+        if enrichment.carrier:
+            metadata["enrichment_carrier"] = enrichment.carrier
+        if enrichment.line_type:
+            metadata["enrichment_line_type"] = enrichment.line_type
+        metadata["breach_count"] = str(enrichment.breach_count)
+    if messaging is not None:
+        metadata["messaging_platform"] = messaging.platform
+        metadata["messaging_registered"] = str(messaging.registered).lower()
 
     return Asset(
         asset_type=AssetType.PHONE,
@@ -203,6 +216,8 @@ class PhoneIntel:
 
     report: PhoneReport
     asset: Asset
+    enrichment: PhoneEnrichment | None = None
+    messaging: MessagingPresence | None = None
     findings: list[Finding] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -210,6 +225,26 @@ class PhoneIntel:
         return {
             "report": self.report.to_dict(),
             "asset": json.loads(self.asset.model_dump_json()),
+            "enrichment": (
+                {
+                    "carrier": self.enrichment.carrier,
+                    "line_type": self.enrichment.line_type,
+                    "breach_count": self.enrichment.breach_count,
+                    "breach_sources": list(self.enrichment.breach_sources),
+                }
+                if self.enrichment is not None
+                else None
+            ),
+            "messaging": (
+                {
+                    "platform": self.messaging.platform,
+                    "registered": self.messaging.registered,
+                    "has_public_photo": self.messaging.has_public_photo,
+                    "is_business": self.messaging.is_business,
+                }
+                if self.messaging is not None
+                else None
+            ),
             "findings": [json.loads(f.model_dump_json()) for f in self.findings],
         }
 

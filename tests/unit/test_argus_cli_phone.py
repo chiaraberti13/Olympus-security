@@ -20,6 +20,10 @@ DEMO_NUMBER = "+16505550123"
 class _FakeClient:
     """Offline HttpClient double: routes by URL substring to canned JSON."""
 
+    @classmethod
+    def from_config(cls, *, min_interval: float | None = None) -> _FakeClient:
+        return cls()
+
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         if "apilayer.net" in url:
             body = json.dumps({"carrier": "Demo Mobile", "line_type": "mobile"})
@@ -54,8 +58,14 @@ def test_phone_out_of_scope_blocks_and_logs(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "argus", "phone", "--number", "+14155550123",
-            "--scope", str(_scope_file(tmp_path)), "--log", str(log),
+            "argus",
+            "phone",
+            "--number",
+            "+14155550123",
+            "--scope",
+            str(_scope_file(tmp_path)),
+            "--log",
+            str(log),
         ],
     )
     assert result.exit_code == 3
@@ -75,25 +85,34 @@ def test_phone_real_lookup_refused_without_authorization(tmp_path: Path) -> None
     result = runner.invoke(
         app,
         [
-            "argus", "phone", "--number", DEMO_NUMBER,
-            "--scope", str(_scope_file(tmp_path)), "--breach",
+            "argus",
+            "phone",
+            "--number",
+            DEMO_NUMBER,
+            "--scope",
+            str(_scope_file(tmp_path)),
+            "--breach",
         ],
     )
     assert result.exit_code == 4
     assert "AUTHORIZED USE ONLY" in result.output
 
 
-def test_phone_enrich_without_key_warns(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_phone_enrich_without_key_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_NUMVERIFY_KEY", raising=False)
     monkeypatch.delenv("OLYMPUS_RAPIDAPI_KEY", raising=False)
     result = runner.invoke(
         app,
         [
-            "argus", "phone", "--number", DEMO_NUMBER,
-            "--scope", str(_scope_file(tmp_path)),
-            "--enrich", "--messaging", "--i-am-authorized",
+            "argus",
+            "phone",
+            "--number",
+            DEMO_NUMBER,
+            "--scope",
+            str(_scope_file(tmp_path)),
+            "--enrich",
+            "--messaging",
+            "--i-am-authorized",
         ],
     )
     assert result.exit_code == 0
@@ -101,22 +120,31 @@ def test_phone_enrich_without_key_warns(
     assert "OLYMPUS_RAPIDAPI_KEY" in result.output
 
 
-def test_phone_full_enrichment_with_fakes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_phone_full_enrichment_with_fakes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_NUMVERIFY_KEY", "k")
     monkeypatch.setenv("OLYMPUS_RAPIDAPI_KEY", "k")
     monkeypatch.setattr(argus_cli, "UrllibHttpClient", _FakeClient)
     result = runner.invoke(
         app,
         [
-            "argus", "phone", "--number", DEMO_NUMBER,
-            "--scope", str(_scope_file(tmp_path)),
-            "--enrich", "--breach", "--messaging", "--i-am-authorized",
+            "argus",
+            "phone",
+            "--number",
+            DEMO_NUMBER,
+            "--scope",
+            str(_scope_file(tmp_path)),
+            "--enrich",
+            "--breach",
+            "--messaging",
+            "--i-am-authorized",
         ],
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
+    assert payload["enrichment"]["carrier"] == "Demo Mobile"
+    assert payload["enrichment"]["line_type"] == "mobile"
+    assert payload["enrichment"]["breach_count"] == 1
+    assert payload["messaging"]["registered"] is True
     titles = {f["title"] for f in payload["findings"]}
     assert "Number appears in known data breaches" in titles
     assert any("Registered on messaging platform" in t for t in titles)
@@ -136,8 +164,14 @@ def test_phone_batch_skips_invalid_and_out_of_scope(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "argus", "phone", "--input", str(numbers),
-            "--scope", str(_scope_file(tmp_path)), "--log", str(tmp_path / "log"),
+            "argus",
+            "phone",
+            "--input",
+            str(numbers),
+            "--scope",
+            str(_scope_file(tmp_path)),
+            "--log",
+            str(tmp_path / "log"),
         ],
     )
     assert result.exit_code == 0, result.output

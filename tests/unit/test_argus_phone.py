@@ -83,6 +83,33 @@ def test_findings_report_breach_and_messaging() -> None:
     assert breach.remediation
 
 
+def test_asset_and_intel_preserve_authorized_enrichment() -> None:
+    report = analyze_phone(DEMO_NUMBER)
+    enrichment = PhoneEnrichment(
+        carrier="Example Mobile",
+        line_type="mobile",
+        breach_count=1,
+        breach_sources=("Example",),
+    )
+    messaging = MessagingPresence(platform="example", registered=True)
+    asset = build_phone_asset(report, enrichment, messaging)
+    intel = PhoneIntel(
+        report=report,
+        asset=asset,
+        enrichment=enrichment,
+        messaging=messaging,
+    )
+
+    payload = intel.to_dict()
+    assert asset.metadata["enrichment_carrier"] == "Example Mobile"
+    enrichment_payload = payload["enrichment"]
+    messaging_payload = payload["messaging"]
+    assert isinstance(enrichment_payload, dict)
+    assert isinstance(messaging_payload, dict)
+    assert enrichment_payload["breach_count"] == 1
+    assert messaging_payload["platform"] == "example"
+
+
 def test_no_findings_for_clean_valid_number() -> None:
     findings = build_phone_findings("AST-2026-00003", analyze_phone(DEMO_NUMBER))
     assert findings == []

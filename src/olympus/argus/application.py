@@ -18,6 +18,13 @@ from olympus.argus.email_osint import (
     build_email_findings,
     enrich_email,
 )
+from olympus.argus.enrichment import (
+    EnrichmentError,
+    MessagingPresence,
+    MessagingPresenceClient,
+    PhoneEnrichment,
+    PhoneEnrichmentClient,
+)
 from olympus.argus.fronting import FrontingReport, assess_fronting
 from olympus.argus.mac import (
     MacIntel,
@@ -28,6 +35,14 @@ from olympus.argus.mac import (
 )
 from olympus.argus.mac_scope import enforce_mac_scope
 from olympus.argus.myip import MyIpResult, build_result, discover_public_ip
+from olympus.argus.phone import (
+    PhoneIntel,
+    PhoneParseError,
+    analyze_phone,
+    build_phone_asset,
+    build_phone_findings,
+)
+from olympus.argus.phone_scope import PhoneOutOfScopeError, enforce_phone_scope
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
 from olympus.argus.scope import enforce_scope
@@ -166,6 +181,133 @@ class MyIpDiscoveryService:
         """Keep provider and optional geolocation traffic independently injectable."""
         public_ip = discover_public_ip(self.discovery_http)
         return build_result(public_ip, self.geo_http if request.geolocate else None)
+
+
+@dataclass(frozen=True)
+class PhoneProfileRequest:
+    """Command-independent input for one scoped phone profile."""
+
+    number: str
+    scope_path: Path
+    audit_log_path: Path
+    region: str | None = None
+    enrich: bool = False
+    breach: bool = False
+    messaging: bool = False
+    authorized: bool = False
+
+
+@dataclass(frozen=True)
+class PhoneProfileOutcome:
+    """One phone profile plus non-fatal adapter availability warnings."""
+
+    intel: PhoneIntel
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PhoneBatchProfileResult:
+    """Batch result with successful profiles and explicit skipped-target warnings."""
+
+    intels: tuple[PhoneIntel, ...]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PhoneProfileService:
+    """Authorize, scope, enrich, and map phone intelligence without Typer."""
+
+    carrier_client: PhoneEnrichmentClient | None = None
+    breach_client: PhoneEnrichmentClient | None = None
+    messaging_client: MessagingPresenceClient | None = None
+
+    @staticmethod
+    def _require_authorization(request: PhoneProfileRequest) -> None:
+        if (request.enrich or request.breach or request.messaging) and not request.authorized:
+            raise AuthorizationRequiredError(
+                "phone enrichment requires explicit documented authorization"
+            )
+
+    def run(self, request: PhoneProfileRequest) -> PhoneProfileOutcome:
+        """Profile one number, refusing unauthorized/out-of-scope network activity."""
+        self._require_authorization(request)
+        report = analyze_phone(request.number, request.region)
+        enforce_phone_scope(
+            report.e164 or request.number, request.scope_path, request.audit_log_path
+        )
+
+        warnings: list[str] = []
+        carrier_result: PhoneEnrichment | None = None
+        breach_result: PhoneEnrichment | None = None
+        messaging_result: MessagingPresence | None = None
+        if report.e164 is not None:
+            if request.enrich:
+                if self.carrier_client is None:
+                    warnings.append("--enrich skipped (set OLYMPUS_NUMVERIFY_KEY to enable)")
+                else:
+                    try:
+                        carrier_result = self.carrier_client.enrich(report.e164)
+                    except EnrichmentError:
+                        warnings.append("carrier enrichment failed (third-party service error)")
+            if request.breach:
+                if self.breach_client is None:
+                    warnings.append("--breach skipped (breach adapter unavailable)")
+                else:
+                    try:
+                        breach_result = self.breach_client.enrich(report.e164)
+                    except EnrichmentError:
+                        warnings.append("breach lookup failed (third-party service error)")
+            if request.messaging:
+                if self.messaging_client is None:
+                    warnings.append("--messaging skipped (set OLYMPUS_RAPIDAPI_KEY to enable)")
+                else:
+                    try:
+                        messaging_result = self.messaging_client.lookup(report.e164)
+                    except EnrichmentError:
+                        warnings.append("messaging lookup failed (third-party service error)")
+
+        enrichment_result = self._merge_enrichment(carrier_result, breach_result)
+        asset = build_phone_asset(report, enrichment_result, messaging_result)
+        intel = PhoneIntel(
+            report=report,
+            asset=asset,
+            enrichment=enrichment_result,
+            messaging=messaging_result,
+            findings=build_phone_findings(
+                asset.asset_id, report, enrichment_result, messaging_result
+            ),
+        )
+        return PhoneProfileOutcome(intel=intel, warnings=tuple(warnings))
+
+    def run_many(self, requests: tuple[PhoneProfileRequest, ...]) -> PhoneBatchProfileResult:
+        """Profile a batch, recording parse/scope skips while preserving fatal scope errors."""
+        intels: list[PhoneIntel] = []
+        warnings: list[str] = []
+        for request in requests:
+            try:
+                outcome = self.run(request)
+            except PhoneParseError:
+                warnings.append(f"skipping unparseable number {request.number!r}")
+            except PhoneOutOfScopeError:
+                warnings.append(f"skipping out-of-scope number {request.number!r} (logged)")
+            else:
+                intels.append(outcome.intel)
+                warnings.extend(outcome.warnings)
+        return PhoneBatchProfileResult(intels=tuple(intels), warnings=tuple(warnings))
+
+    @staticmethod
+    def _merge_enrichment(
+        carrier: PhoneEnrichment | None,
+        breach: PhoneEnrichment | None,
+    ) -> PhoneEnrichment | None:
+        if carrier is None and breach is None:
+            return None
+        return PhoneEnrichment(
+            carrier=carrier.carrier if carrier is not None else "",
+            line_type=carrier.line_type if carrier is not None else "",
+            breach_count=breach.breach_count if breach is not None else 0,
+            breach_sources=breach.breach_sources if breach is not None else (),
+        )
 
 
 @dataclass(frozen=True)
