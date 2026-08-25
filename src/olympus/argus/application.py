@@ -15,6 +15,7 @@ from olympus.argus.fronting import FrontingReport, assess_fronting
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
 from olympus.argus.scope import enforce_scope
+from olympus.argus.whois import WhoisReport, lookup_domain
 from olympus.core.http import HttpClient
 
 
@@ -95,3 +96,24 @@ class DnsLookupService:
             raise ValueError("record_types cannot contain empty values")
         enforce_scope(request.domain, request.scope_path, request.audit_log_path)
         return resolve_records(request.domain, self.http, record_types)
+
+
+@dataclass(frozen=True)
+class WhoisLookupRequest:
+    """Command-independent input for one scoped RDAP lookup."""
+
+    domain: str
+    scope_path: Path
+    audit_log_path: Path
+
+
+@dataclass(frozen=True)
+class WhoisLookupService:
+    """Authorize and execute domain-registration intelligence via RDAP."""
+
+    http: HttpClient
+
+    def run(self, request: WhoisLookupRequest) -> WhoisReport:
+        """Enforce scope before invoking the injected network transport."""
+        enforce_scope(request.domain, request.scope_path, request.audit_log_path)
+        return lookup_domain(request.domain, self.http)

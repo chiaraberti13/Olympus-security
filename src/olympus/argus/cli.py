@@ -29,6 +29,8 @@ from olympus.argus.application import (
     DomainScanService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
+    WhoisLookupRequest,
+    WhoisLookupService,
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
@@ -118,7 +120,6 @@ from olympus.argus.whois import (
     WhoisError,
     build_whois_asset,
     export_whois_report,
-    lookup_domain,
 )
 from olympus.core.http import UrllibHttpClient
 
@@ -916,7 +917,9 @@ def whois(
 ) -> None:
     """Query registration data (registrar, dates, name servers) for an in-scope domain via RDAP."""
     try:
-        enforce_scope(domain, scope, log)
+        report = WhoisLookupService(UrllibHttpClient.from_config()).run(
+            WhoisLookupRequest(domain=domain, scope_path=scope, audit_log_path=log)
+        )
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -924,8 +927,6 @@ def whois(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    try:
-        report = lookup_domain(domain, UrllibHttpClient.from_config())
     except WhoisError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
