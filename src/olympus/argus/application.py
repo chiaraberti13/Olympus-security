@@ -9,6 +9,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from olympus.argus.accounts import (
+    AccountIntel,
+    SiteSpec,
+    build_account_assets,
+    build_account_finding,
+    enumerate_accounts,
+)
+from olympus.argus.accounts_scope import AccountOutOfScopeError, enforce_account_scope
 from olympus.argus.ct import CertificateTransparencyClient
 from olympus.argus.dns_records import RECORD_TYPES, DnsRecordReport, resolve_records
 from olympus.argus.email_osint import (
@@ -71,6 +79,78 @@ from olympus.core.http import HttpClient
 
 class AuthorizationRequiredError(PermissionError):
     """Raised when a privacy-sensitive use case lacks explicit authorization."""
+
+
+@dataclass(frozen=True)
+class AccountEnumerationRequest:
+    """Command-independent input for one scoped account enumeration."""
+
+    handle: str
+    scope_path: Path
+    audit_log_path: Path
+    metadata: bool = False
+    authorized: bool = False
+    concurrency: int = 8
+
+
+@dataclass(frozen=True)
+class AccountEnumerationOutcome:
+    """One handle's complete presence/partial/error results."""
+
+    intel: AccountIntel
+
+
+@dataclass(frozen=True)
+class AccountBatchEnumerationResult:
+    """Batch account result with explicit out-of-scope skips."""
+
+    intels: tuple[AccountIntel, ...]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AccountEnumerationService:
+    """Authorize, scope, enumerate, and map account intelligence without Typer."""
+
+    specs: tuple[SiteSpec, ...]
+    http: HttpClient
+
+    def run(self, request: AccountEnumerationRequest) -> AccountEnumerationOutcome:
+        """Enforce policy before any configured site can receive the handle."""
+        if request.metadata and not request.authorized:
+            raise AuthorizationRequiredError(
+                "account metadata extraction requires explicit documented authorization"
+            )
+        if not 1 <= request.concurrency <= 64:
+            raise ValueError("concurrency must be between 1 and 64")
+        enforce_account_scope(request.handle, request.scope_path, request.audit_log_path)
+        result = enumerate_accounts(
+            request.handle,
+            list(self.specs),
+            self.http,
+            want_metadata=request.metadata,
+            concurrency=request.concurrency,
+        )
+        assets = build_account_assets(result)
+        finding = build_account_finding(assets[0].asset_id, result) if assets else None
+        return AccountEnumerationOutcome(
+            AccountIntel(result=result, assets=assets, findings=[finding] if finding else [])
+        )
+
+    def run_many(
+        self, requests: tuple[AccountEnumerationRequest, ...]
+    ) -> AccountBatchEnumerationResult:
+        """Enumerate a batch while auditing and recording out-of-scope skips."""
+        intels: list[AccountIntel] = []
+        warnings: list[str] = []
+        for request in requests:
+            try:
+                outcome = self.run(request)
+            except AccountOutOfScopeError:
+                warnings.append(f"skipping out-of-scope handle {request.handle!r} (logged)")
+            else:
+                intels.append(outcome.intel)
+        return AccountBatchEnumerationResult(intels=tuple(intels), warnings=tuple(warnings))
 
 
 @dataclass(frozen=True)

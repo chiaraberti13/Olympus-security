@@ -16,7 +16,7 @@
     "accounts": {
       "options": ["--username", "--input", "--scope", "--log", "--sites", "--metadata", "--i-am-authorized", "--concurrency", "--rate", "--output"],
       "capabilities": ["account-presence", "public-profile-metadata", "batch"],
-      "mapping": ["accounts.py", "accounts_scope.py"]
+      "mapping": ["accounts.py", "accounts_scope.py", "application.py"]
     },
     "diff": {
       "options": ["before", "after"],

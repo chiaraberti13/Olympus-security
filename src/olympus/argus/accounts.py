@@ -15,12 +15,13 @@ Deliberate safety choices (unlike the source tool this concept comes from):
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -98,9 +99,46 @@ def load_site_registry(path: Path) -> list[SiteSpec]:
     if not isinstance(raw, list):
         raise SiteRegistryError(f"site registry {path} must contain a JSON array")
     try:
-        return [SiteSpec.model_validate(item) for item in raw]
+        specs = [SiteSpec.model_validate(item) for item in raw]
     except ValidationError as exc:
         raise SiteRegistryError(f"site registry {path} failed validation: {exc}") from exc
+    for spec in specs:
+        _validate_site_template(spec, path)
+    return specs
+
+
+def validate_public_site_url(url: str) -> None:
+    """Reject non-HTTPS, credential-bearing, or local/private registry destinations."""
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() != "https":
+        raise SiteRegistryError(f"site URL must use HTTPS: {url!r}")
+    if parsed.username is not None or parsed.password is not None:
+        raise SiteRegistryError(f"site URL must not contain credentials: {url!r}")
+    if not parsed.hostname:
+        raise SiteRegistryError(f"site URL has no hostname: {url!r}")
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname == "localhost" or hostname.endswith((".localhost", ".local", ".internal")):
+        raise SiteRegistryError(f"site URL resolves to a local hostname: {url!r}")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return
+    if not address.is_global:
+        raise SiteRegistryError(f"site URL must not target a non-public IP: {url!r}")
+
+
+def _validate_site_template(spec: SiteSpec, path: Path | None = None) -> None:
+    if spec.url_template.count("{username}") != 1:
+        location = f" in {path}" if path is not None else ""
+        raise SiteRegistryError(
+            f"site {spec.name!r}{location} must contain exactly one '{{username}}' placeholder"
+        )
+    authority = spec.url_template.split("://", 1)[-1].split("/", 1)[0]
+    if "{username}" in authority:
+        raise SiteRegistryError(
+            f"site {spec.name!r} must place '{{username}}' in the path or query, not hostname"
+        )
+    validate_public_site_url(spec.url_template.format(username="olympus_probe"))
 
 
 def _extract_metadata(spec: SiteSpec, body: str) -> dict[str, str]:
@@ -117,7 +155,9 @@ def check_site(
     handle: str, spec: SiteSpec, client: HttpClient, *, want_metadata: bool = False
 ) -> SiteCheck:
     """Probe a single site for ``handle`` and classify presence."""
-    url = spec.url_template.format(username=quote(handle))
+    _validate_site_template(spec)
+    url = spec.url_template.format(username=quote(handle, safe=""))
+    validate_public_site_url(url)
     try:
         response = client.get(url)
     except HttpRequestError:

@@ -110,6 +110,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
     injected carrier, breach, and messaging ports.
   - [x] Argus `ip`: offline/batch classification and authorized, CIDR-scoped geolocation service with
     an injected HTTPS provider port.
+  - [x] Argus `accounts`: scoped single/batch enumeration with authorized metadata extraction,
+    validated public HTTPS registries, bounded concurrency, and an injected HTTP port.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -604,3 +606,44 @@ only the **security**, **functional**, and **licence** items are actual requirem
   its real documented schema offline; this external proof remains `BLOCKED`, not verified.
 - **Next activity:** extract `argus accounts` single/batch enumeration from Typer, retaining handle
   scope, metadata authorization, bounded concurrency/rate, partial results, and actionable failures.
+
+### Cycle 22 — separate and harden Argus account enumeration
+
+- **Status:** `VERIFIED` (live third-party account queries are intentionally unexecuted; the parent
+  repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move `argus accounts` single/batch orchestration out of Typer, prove policy checks
+  happen before network traffic, and prevent a custom site registry from becoming an immediate SSRF
+  or handle-injection primitive.
+- **Component:** ARGUS Olympus-native application/CLI boundary, account contracts, handle scope and
+  audit policy, shared bounded HTTP client, site-registry validation, parity/reference docs, and tests.
+- **Dependencies:** `HttpClient`, account allowlist/audit primitives, shared asset/finding contracts,
+  the declarative site registry, and the shared retry/rate-limit configuration.
+- **Completion criteria:** metadata extraction requires explicit authorization; every handle is
+  checked against scope before network; batch skips are explicit and audited; partial site failures
+  remain indeterminate rather than invented; concurrency is bounded and cannot bypass rate limiting;
+  configured and redirected destinations reject plaintext, credentials, local hostnames, private
+  literal IPs, and authority injection; output/export remains compatible.
+- **Implementation:** added `AccountEnumerationService` with single/batch request and result contracts,
+  injected site specs/HTTP port, authorization and scope-first ordering, stable partial results, and
+  explicit batch warnings. Typer now only validates command shape, constructs adapters, presents, and
+  exports. Registry templates must use HTTPS, contain exactly one path/query `{username}` placeholder,
+  and target a public-looking host without embedded credentials; the handle is encoded as one segment
+  and every redirect is revalidated. The shared HTTP throttle now serializes dispatch timing across
+  account worker threads.
+- **Files modified:** `src/olympus/argus/accounts.py`, `src/olympus/argus/application.py`,
+  `src/olympus/argus/cli.py`, `src/olympus/core/http.py`, `docs/parity/argus.json`,
+  `docs/reference.md`, `tests/unit/test_argus_accounts.py`,
+  `tests/unit/test_argus_application.py`, `tests/unit/test_argus_cli_accounts.py`, and `upgrade.md`.
+- **Tests executed:** focused accounts/application/scope/CLI/HTTP/parity suite: `99 passed`; complete
+  offline suite: `558 passed`; Ruff: clean; strict mypy: clean across 113 source files.
+- **Real execution evidence:** the installed CLI rejected metadata collection without confirmation
+  with exit 4 before any site request; an out-of-scope handle exited 3 and wrote a timestamped
+  `blocked_out_of_scope` record. Application/CLI integration tests with an injected deterministic
+  transport prove the authorized in-scope success path, metadata propagation, partial-error behavior,
+  batch skip semantics, and zero HTTP calls for unauthorized/out-of-scope requests.
+- **Residual limitations:** no real handle was sent to GitHub or the other public-site providers because
+  no target authorization was supplied. Literal private destinations and unsafe redirects are blocked;
+  hostname DNS rebinding cannot be completely excluded by URL validation alone and deployments should
+  retain outbound network controls. These limits are not represented as live-provider verification.
+- **Next activity:** extract `argus investigate` graph orchestration from Typer, verify each networked
+  transform is authorization/scope gated, and remove simulated or silently invented pivot results.

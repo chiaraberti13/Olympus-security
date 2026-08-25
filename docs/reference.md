@@ -237,7 +237,7 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus argus fronting --domain <d>` | checks whether the domain sits behind a known CDN/WAF and whether a public subdomain leaks its origin IP |
 | `olympus argus diff <a> <b>` | compares two Argus asset snapshots, no network |
 | `olympus argus phone --number <n>` | profiles an in-scope number offline; opt-in authorized enrichment is returned explicitly in `enrichment` / `messaging` and never runs without `--i-am-authorized` |
-| `olympus argus accounts --username <u>` | checks the handle's presence across a curated list of public sites |
+| `olympus argus accounts --username <u>` | checks an in-scope handle through a validated HTTPS-only public-site registry; metadata requires explicit authorization |
 | `olympus argus ip --ip <ip>` | profiles an in-scope IP offline; authorized optional geolocation uses the encrypted `ipwho.is` endpoint and is returned explicitly in `geo` |
 | `olympus argus investigate --name <n>` | builds an OSINT investigation graph by pivoting from a seed entity (flowsint-style) |
 | **Helios** — 🔴 network attack-surface mapping | |
@@ -581,7 +581,7 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus argus fronting --domain <d>` | verifica se il dominio è dietro un CDN/WAF noto e se un sottodominio pubblico ne espone l'IP d'origine |
 | `olympus argus diff <a> <b>` | confronta due snapshot di asset Argus, senza rete |
 | `olympus argus phone --number <n>` | profila offline un numero in scope; gli arricchimenti autorizzati opzionali sono restituiti esplicitamente in `enrichment` / `messaging` e non partono senza `--i-am-authorized` |
-| `olympus argus accounts --username <u>` | verifica la presenza dell'handle su una lista curata di siti pubblici |
+| `olympus argus accounts --username <u>` | verifica un handle in scope tramite un registro validato di siti pubblici solo HTTPS; i metadati richiedono autorizzazione esplicita |
 | `olympus argus ip --ip <ip>` | profila offline un IP in scope; la geolocalizzazione opzionale autorizzata usa l'endpoint cifrato `ipwho.is` ed è restituita esplicitamente in `geo` |
 | `olympus argus investigate --name <n>` | costruisce un grafo d'indagine OSINT pivotando da un'entità seed (stile flowsint) |
 | **Helios** — 🔴 mappatura della superficie di rete | |

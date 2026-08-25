@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from olympus.argus.accounts import SiteSpec
+from olympus.argus.accounts_scope import AccountOutOfScopeError
 from olympus.argus.application import (
+    AccountEnumerationRequest,
+    AccountEnumerationService,
     AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
@@ -165,6 +169,18 @@ class RecordingIpGeoClient:
         return IpGeo(country="Example", org="Example Network", asn="AS64500")
 
 
+class RecordingAccountClient:
+    """Offline account-site HTTP port with partial-result evidence."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
+        status = 200 if "github.com" in url else 503
+        return HttpResponse(status_code=status, body="<bio>example</bio>")
+
+
 def _scope(path: Path) -> Path:
     path.write_text(
         json.dumps({"engagement": "test", "allowed_domains": [DOMAIN]}),
@@ -195,6 +211,25 @@ def _ip_scope(path: Path, network: str = "203.0.113.0/24") -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _account_scope(path: Path, handle: str = "olympus_demo") -> Path:
+    path.write_text(
+        json.dumps({"engagement": "test", "allowed_handles": [handle]}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _account_specs() -> tuple[SiteSpec, ...]:
+    return (
+        SiteSpec(
+            name="GitHub",
+            url_template="https://github.com/{username}",
+            metadata_patterns={"bio": r"<bio>([^<]+)</bio>"},
+        ),
+        SiteSpec(name="Unavailable", url_template="https://example.com/u/{username}"),
+    )
 
 
 def test_domain_scan_service_returns_recon_without_cli_dependency(tmp_path: Path) -> None:
@@ -545,8 +580,7 @@ def test_ip_batch_records_invalid_and_scope_skips(tmp_path: Path) -> None:
     scope = _ip_scope(tmp_path / "scope.json")
     audit = tmp_path / "audit.log"
     requests = tuple(
-        IpProfileRequest(ip, scope, audit)
-        for ip in ("203.0.113.10", "not-an-ip", "8.8.8.8")
+        IpProfileRequest(ip, scope, audit) for ip in ("203.0.113.10", "not-an-ip", "8.8.8.8")
     )
 
     result = IpProfileService().run_many(requests)
@@ -554,6 +588,93 @@ def test_ip_batch_records_invalid_and_scope_skips(tmp_path: Path) -> None:
     assert len(result.intels) == 1
     assert any("invalid IP" in warning for warning in result.warnings)
     assert any("out-of-scope" in warning for warning in result.warnings)
+
+
+def test_account_service_requires_authorization_before_metadata_network(tmp_path: Path) -> None:
+    http = RecordingAccountClient()
+
+    with pytest.raises(AuthorizationRequiredError):
+        AccountEnumerationService(_account_specs(), http).run(
+            AccountEnumerationRequest(
+                "olympus_demo",
+                _account_scope(tmp_path / "scope.json"),
+                tmp_path / "audit.log",
+                metadata=True,
+            )
+        )
+
+    assert http.calls == []
+
+
+def test_account_service_blocks_out_of_scope_before_network(tmp_path: Path) -> None:
+    http = RecordingAccountClient()
+    audit = tmp_path / "audit.log"
+
+    with pytest.raises(AccountOutOfScopeError):
+        AccountEnumerationService(_account_specs(), http).run(
+            AccountEnumerationRequest(
+                "intruder",
+                _account_scope(tmp_path / "scope.json"),
+                audit,
+            )
+        )
+
+    assert http.calls == []
+    assert "intruder" in audit.read_text(encoding="utf-8")
+
+
+def test_account_service_preserves_success_and_partial_results(tmp_path: Path) -> None:
+    http = RecordingAccountClient()
+
+    outcome = AccountEnumerationService(_account_specs(), http).run(
+        AccountEnumerationRequest(
+            "olympus_demo",
+            _account_scope(tmp_path / "scope.json"),
+            tmp_path / "audit.log",
+            metadata=True,
+            authorized=True,
+            concurrency=2,
+        )
+    )
+
+    checks = outcome.intel.result.checks
+    assert [check.exists for check in checks] == [True, None]
+    assert checks[0].metadata == {"bio": "example"}
+    assert len(outcome.intel.assets) == 1
+    assert len(http.calls) == 2
+
+
+def test_account_batch_records_scope_skip(tmp_path: Path) -> None:
+    http = RecordingAccountClient()
+    scope = _account_scope(tmp_path / "scope.json")
+    audit = tmp_path / "audit.log"
+
+    result = AccountEnumerationService(_account_specs(), http).run_many(
+        tuple(
+            AccountEnumerationRequest(handle, scope, audit)
+            for handle in ("olympus_demo", "intruder")
+        )
+    )
+
+    assert len(result.intels) == 1
+    assert result.warnings == ("skipping out-of-scope handle 'intruder' (logged)",)
+    assert len(http.calls) == 2
+
+
+def test_account_service_rejects_unsafe_concurrency_before_network(tmp_path: Path) -> None:
+    http = RecordingAccountClient()
+
+    with pytest.raises(ValueError, match="concurrency"):
+        AccountEnumerationService(_account_specs(), http).run(
+            AccountEnumerationRequest(
+                "olympus_demo",
+                _account_scope(tmp_path / "scope.json"),
+                tmp_path / "audit.log",
+                concurrency=65,
+            )
+        )
+
+    assert http.calls == []
 
 
 def test_domain_scan_service_blocks_before_network_dependencies(tmp_path: Path) -> None:

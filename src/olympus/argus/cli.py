@@ -10,19 +10,17 @@ import typer
 
 from olympus.argus.accounts import (
     AccountIntel,
-    AccountScanResult,
     SiteRegistryError,
-    build_account_assets,
-    build_account_finding,
-    enumerate_accounts,
     load_site_registry,
+    validate_public_site_url,
 )
 from olympus.argus.accounts_scope import (
     AccountOutOfScopeError,
     AccountScopeError,
-    enforce_account_scope,
 )
 from olympus.argus.application import (
+    AccountEnumerationRequest,
+    AccountEnumerationService,
     AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
@@ -346,13 +344,6 @@ def phone(
     typer.echo(f"argus: profiled {len(batch.intels)} number(s)", err=True)
 
 
-def _build_account_intel(result: AccountScanResult) -> AccountIntel:
-    """Turn a raw scan into assets + a summary finding bundle."""
-    assets = build_account_assets(result)
-    finding = build_account_finding(assets[0].asset_id, result) if assets else None
-    return AccountIntel(result=result, assets=assets, findings=[finding] if finding else [])
-
-
 @app.command()
 def accounts(
     username: str | None = typer.Option(
@@ -392,37 +383,57 @@ def accounts(
         typer.echo("argus: provide exactly one of --username or --input", err=True)
         raise typer.Exit(code=2)
 
-    if metadata and not i_am_authorized:
-        typer.echo(f"argus: {_METADATA_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
-
     try:
         specs = load_site_registry(sites)
-    except SiteRegistryError as exc:
+        client = UrllibHttpClient.from_config(
+            min_interval=rate if rate > 0.0 else None,
+            redirect_validator=validate_public_site_url,
+        )
+        service = AccountEnumerationService(tuple(specs), client)
+
+        def request_for(handle: str) -> AccountEnumerationRequest:
+            return AccountEnumerationRequest(
+                handle=handle,
+                scope_path=scope,
+                audit_log_path=log,
+                metadata=metadata,
+                authorized=i_am_authorized,
+                concurrency=concurrency,
+            )
+
+        intels: tuple[AccountIntel, ...]
+        if username is not None:
+            outcome = service.run(request_for(username))
+            intels = (outcome.intel,)
+        else:
+            assert input_file is not None  # noqa: S101 (guaranteed by exactly-one check)
+            batch = service.run_many(
+                tuple(request_for(handle) for handle in _read_targets(input_file))
+            )
+            intels = batch.intels
+            for warning in batch.warnings:
+                typer.echo(f"argus: {warning}", err=True)
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_METADATA_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    except (SiteRegistryError, ValueError) as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
+    except AccountScopeError as exc:
+        typer.echo(f"argus: account scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except AccountOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: could not read account input: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
-    client = UrllibHttpClient.from_config(min_interval=rate if rate > 0.0 else None)
-    handles = [username] if username is not None else _read_targets(input_file)  # type: ignore[arg-type]
-    intels: list[AccountIntel] = []
-    for handle in handles:
-        try:
-            enforce_account_scope(handle, scope, log)
-        except AccountScopeError as exc:
-            typer.echo(f"argus: account scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except AccountOutOfScopeError as exc:
-            if username is not None:
-                typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-                raise typer.Exit(code=3) from exc
-            typer.echo(f"argus: skipping out-of-scope handle {handle!r} (logged)", err=True)
-            continue
-        result = enumerate_accounts(
-            handle, specs, client, want_metadata=metadata, concurrency=concurrency
-        )
-        intels.append(_build_account_intel(result))
+    for intel in intels:
         typer.echo(
-            f"argus: '{handle}' found on {len(result.existing())}/{len(specs)} site(s)", err=True
+            f"argus: '{intel.result.handle}' found on "
+            f"{len(intel.result.existing())}/{len(specs)} site(s)",
+            err=True,
         )
 
     if username is not None:

@@ -14,6 +14,7 @@ authorized fetches against a target's own web perimeter.
 
 from __future__ import annotations
 
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -85,6 +86,7 @@ class UrllibHttpClient:
         self._backoff = max(backoff, 0.0)
         self._min_interval = max(min_interval, 0.0)
         self._last_request_at = 0.0
+        self._throttle_lock = threading.Lock()
         self._opener = (
             urllib.request.build_opener(_ValidatingRedirectHandler(redirect_validator))
             if redirect_validator is not None
@@ -119,10 +121,13 @@ class UrllibHttpClient:
         """Sleep just enough to honor the configured minimum request interval."""
         if self._min_interval <= 0.0:
             return
-        elapsed = time.monotonic() - self._last_request_at
-        if 0.0 <= elapsed < self._min_interval:
-            time.sleep(self._min_interval - elapsed)
-        self._last_request_at = time.monotonic()
+        # Account enumeration shares one client across a thread pool. Serialize
+        # dispatch timing so concurrent workers cannot bypass the configured rate.
+        with self._throttle_lock:
+            elapsed = time.monotonic() - self._last_request_at
+            if 0.0 <= elapsed < self._min_interval:
+                time.sleep(self._min_interval - elapsed)
+            self._last_request_at = time.monotonic()
 
     def _perform(self, request: urllib.request.Request, url: str) -> HttpResponse:
         try:
