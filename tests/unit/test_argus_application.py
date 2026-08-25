@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from olympus.argus.application import DomainScanRequest, DomainScanService
+from olympus.argus.application import (
+    DomainScanRequest,
+    DomainScanService,
+    FrontingAssessmentRequest,
+    FrontingAssessmentService,
+)
 from olympus.argus.scope import OutOfScopeError
 
 DOMAIN = "olympusdemocorp.example"
@@ -79,3 +84,52 @@ def test_domain_scan_service_blocks_before_network_dependencies(tmp_path: Path) 
     assert resolver.calls == []
     assert ct_client.calls == []
     assert "outside.example" in audit_log.read_text(encoding="utf-8")
+
+
+def test_fronting_service_runs_without_cli_dependency(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+
+    result = FrontingAssessmentService(resolver, ct_client).run(
+        FrontingAssessmentRequest(DOMAIN, _scope(tmp_path / "scope.json"), tmp_path / "audit.log")
+    )
+
+    assert result.domain == DOMAIN
+    assert resolver.calls == [(DOMAIN, "A"), (DOMAIN, "AAAA")]
+    # A non-fronted apex intentionally avoids CT fan-out.
+    assert ct_client.calls == []
+
+
+def test_fronting_service_blocks_before_network_dependencies(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+    audit_log = tmp_path / "audit.log"
+
+    with pytest.raises(OutOfScopeError):
+        FrontingAssessmentService(resolver, ct_client).run(
+            FrontingAssessmentRequest(
+                "outside.example", _scope(tmp_path / "scope.json"), audit_log
+            )
+        )
+
+    assert resolver.calls == []
+    assert ct_client.calls == []
+    assert "outside.example" in audit_log.read_text(encoding="utf-8")
+
+
+def test_fronting_service_rejects_invalid_limit_before_network(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    ct_client = RecordingCtClient()
+
+    with pytest.raises(ValueError, match="max_subdomains"):
+        FrontingAssessmentService(resolver, ct_client).run(
+            FrontingAssessmentRequest(
+                DOMAIN,
+                _scope(tmp_path / "scope.json"),
+                tmp_path / "audit.log",
+                max_subdomains=-1,
+            )
+        )
+
+    assert resolver.calls == []
+    assert ct_client.calls == []

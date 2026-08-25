@@ -89,7 +89,7 @@ only the **security**, **functional**, and **licence** items are actual requirem
 
 - [~] Separate domain logic from Typer command handlers in every affected module.
   - [x] Argus `scan`: scoped application service with injected DNS and CT ports.
-  - [ ] **Next task: Argus `fronting` application service.**
+  - [x] Argus `fronting`: scoped application service with injected DNS and CT ports.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -349,3 +349,16 @@ only the **security**, **functional**, and **licence** items are actual requirem
   stack remains environment-dependent (documented, never simulated).
 - **Held:** the optional SCA profile (OSV/Syft/Grype/Trivy/Checkov) is NOT
   implemented — deferred until AEGIS execution coverage is broader.
+
+### Cycle 12 — separate Argus fronting orchestration from Typer
+
+- **Task:** extract the next checklist-sized application slice: Argus `fronting`.
+- **Result:** completed on 2026-08-25. `FrontingAssessmentService` now owns input-policy
+  validation, scope authorization, and passive fronting orchestration through injected DNS and
+  Certificate Transparency ports. The Typer handler is limited to dependency construction, error
+  translation, presentation, and export.
+- **Verification:** direct offline application tests prove execution without the CLI, rejection of
+  an invalid fan-out limit, and that out-of-scope targets are audited before either network-capable
+  dependency is invoked. Existing CLI fronting tests continue to cover output and exit semantics.
+- **Scope intentionally deferred:** the repository-wide audit and remaining application-service
+  extractions stay open; no broader completeness claim is made by this cycle.
