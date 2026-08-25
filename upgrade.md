@@ -127,8 +127,12 @@ only the **security**, **functional**, and **licence** items are actual requirem
     authorization/concurrency adoption, and Athena plan/retry/job-token/audit adoption (Cycle 26).
   - [x] Shared HTTP redirect hook validates every destination before following it; Argus `web`
     applies the engagement scope and audit policy to each hop.
-  - [ ] Adopt the shared policy across Helios, Artemis, Proteus, Hermes, Apollo, Minerva, Vulcan,
-    AEGIS, native integrations, and any API/worker paths that execute equivalent work.
+  - [x] HELIOS and ARTEMIS authorization, scope, cancellation, deadlines, retry/rate bounds, and
+    structured scope audit adoption (Cycle 27).
+  - [x] PROTEUS campaign authorization, recipient/sender/landing scope, cancellation, redacted audit,
+    and protected versioned token artifact adoption (Cycle 28).
+  - [ ] Adopt the shared policy across Hermes, Apollo, Minerva, Vulcan, AEGIS, native integrations,
+    and any API/worker paths that execute equivalent work.
 - [ ] Add adapters for network, persistence, and third-party services so domain tests remain offline
   and deterministic.
 - [ ] Define secure configuration precedence and validate it at startup; reject unsafe or ambiguous
@@ -883,3 +887,50 @@ only the **security**, **functional**, and **licence** items are actual requirem
 - **Next activity:** inspect Proteus and Hermes for locally interpreted policy, secret/process hazards,
   and Typer-owned orchestration; implement their independent application boundaries before moving to
   Apollo, Minerva, Vulcan, and AEGIS.
+
+### Cycle 28 — make Proteus campaigns fail closed and protect tracking artifacts
+
+- **Status:** `DONE` for PROTEUS application/policy adoption; the repository-wide policy parent remains
+  `IN PROGRESS` for HERMES and later modules.
+- **Objective:** ensure a declared training simulation cannot target an unapproved sender, recipient,
+  engagement or landing origin; remove Typer-owned orchestration; and prevent bearer tracking tokens
+  or recipient addresses from leaking through stdout, weak files, audit logs, or malformed contracts.
+- **Component:** PROTEUS scope/domain/application/CLI, campaign/report contracts, protected persistence,
+  example configuration, policy/reference/security documentation, ecosystem inventory, and tests.
+- **Dependencies:** shared authorization/cancellation and structured audit primitives, strict SemVer
+  compatibility, standard-library IDNA/URL parsing, cryptographic token generation, and atomic local
+  file replacement.
+- **Completion criteria:** static input validates before authorization; campaign creation requires
+  explicit authorization even below CLI; command/scope engagements match; sender and every recipient
+  use an exact allowed domain; only an exact allowlisted HTTPS training origin can carry tokens; header
+  injection and duplicate recipients/tokens fail; cancellation is observed; CLI orchestration is an
+  application service; campaign/report documents are versioned and strictly loaded; legacy migration
+  is explicit; token files are atomic/owner-only and normal stdout/audit contains no token/full email.
+- **Implementation:** added `CampaignApplicationService` with build/page/email/report use cases and
+  request/outcome contracts. Scope files now require exact `engagement`, `allowed_domains`, and
+  `allowed_landing_origins`; conservative mailbox/IDNA and credential-free HTTPS URL normalization
+  precede scope checks. Both service and builder enforce shared authorization; campaign-level scope is
+  checked before recipient iteration, and cancellation is checked before every target/token. Tracking
+  links replace any prior `t` parameter safely, email headers reject control/newline injection, and the
+  training page remains static/no-capture. Campaign `1.0.0` and report `1.0.0` identities were added;
+  the loader rejects unknown/incompatible/duplicate data with only the exact prior unversioned shape
+  migrated. Export uses fsync, atomic replacement and mode `0600`. CLI output now exposes only counts;
+  denial audits hash the address and retain only its domain, while completion audit stores counts.
+- **Files modified:** `src/olympus/proteus/scope.py`, `src/olympus/proteus/campaign.py`,
+  `src/olympus/proteus/application.py`, `src/olympus/proteus/cli.py`,
+  `examples/input/proteus-scope.json`, `docs/proteus.md`, `docs/execution-policy.md`,
+  `docs/reference.md`, `docs/ecosystem-audit.md`, `tests/unit/test_proteus.py`, and `upgrade.md`.
+- **Tests executed:** focused PROTEUS scope/domain/application/CLI suite: `14 passed`; complete offline
+  suite: `609 passed`; Ruff: clean; strict mypy: clean across 118 source files with a fresh cache.
+- **Real execution evidence:** the installed CLI consumed a two-recipient file and the checked-in scope,
+  accepted only the authorized Olympus demo domain, skipped/audited the external address, and emitted a
+  `olympus.proteus-campaign` `1.0.0` document with one real cryptographically generated token. The file
+  mode was verified as `0600`; stdout contained counts/path rather than the token; two NDJSON records
+  captured the denial and successful completion without a full email address. Exit code was 0.
+- **Residual limitations:** Proteus intentionally renders artifacts and metrics but does not deliver
+  mail, host the training HTML, or collect clicks; those external systems need their own authorization,
+  access control and retention policy. `0600` semantics are POSIX-specific, while non-POSIX deployments
+  must enforce equivalent ACLs. These boundaries are documented and are not presented as delivery.
+- **Next activity:** migrate HERMES behind a bounded application service, reject missing/symlink/device
+  paths instead of returning false-clean, cap file/history work, make Git subprocess execution
+  cancellation/timeout-aware, and keep every emitted value masked.

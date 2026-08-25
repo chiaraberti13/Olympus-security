@@ -250,7 +250,7 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus artemis metabase --url <u>` | authorized non-exploitative check for CVE-2026-72898 exposure |
 | `olympus artemis check-scope --url <u>` | validates URL authorization without making any request |
 | **Proteus** — 🔴 authorized phishing simulation | |
-| `olympus proteus campaign --targets <f>` | builds a simulation campaign (unique token per in-scope target) |
+| `olympus proteus campaign --targets <f>` | requires confirmation; validates engagement, sender/recipient domains and HTTPS training origin, then writes owner-only versioned tokens |
 | `olympus proteus page --engagement <e>` | renders the training page a clicker lands on (captures nothing) |
 | `olympus proteus email --campaign <f> --token <t>` | renders the simulated lure email for one token |
 | `olympus proteus report --campaign <f>` | summarizes campaign click-through (a training metric, never secrets) |
@@ -594,7 +594,7 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus artemis metabase --url <u>` | verifica autorizzata e non distruttiva dell'esposizione a CVE-2026-72898 |
 | `olympus artemis check-scope --url <u>` | valida l'autorizzazione dell'URL senza fare alcuna richiesta |
 | **Proteus** — 🔴 simulazione phishing autorizzata | |
-| `olympus proteus campaign --targets <f>` | costruisce una campagna di simulazione (token unico per target, tutti in scope) |
+| `olympus proteus campaign --targets <f>` | richiede conferma; valida ingaggio, domini mittente/destinatari e origine HTTPS di training, poi salva token versionati con permessi solo proprietario |
 | `olympus proteus page --engagement <e>` | genera la pagina di training che vede chi clicca (non cattura nulla) |
 | `olympus proteus email --campaign <f> --token <t>` | genera l'email-esca simulata per un token |
 | `olympus proteus report --campaign <f>` | riassume il click-through della campagna (metrica di training, mai segreti) |

@@ -53,7 +53,7 @@ commands.
 | athena | plan validate, run, status, cancel, recover, adapters | pydantic, typer | none | SQLite (local file) | plan JSON, --storage dir | assessment JSON, audit, reports | n/a |
 | helios | scan | pydantic | none | none | scope JSON | findings JSON | n/a |
 | artemis | check-scope, content, fetch, fingerprint, metabase, xss | pydantic | none | none | scope JSON, wordlists | findings JSON | n/a |
-| proteus | campaign, email, page, report | pydantic | none | none | scope JSON | campaign JSON | n/a |
+| proteus | campaign, email, page, report | core policy/contracts | none | none | recipient/sender/landing scope JSON | protected versioned campaign JSON, report JSON, training HTML | n/a |
 | hermes | scan | pydantic | none | none | targets | SARIF | n/a |
 | apollo | rules, run, test | pydantic | none | none | rules YAML, events | alerts JSON | n/a |
 | minerva | record, timeline, triage, verify | pydantic | none | none | evidence JSON | incident/custody JSON | n/a |

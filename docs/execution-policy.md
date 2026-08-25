@@ -64,6 +64,10 @@ uses the same URL redactor before SQLite persistence.
   transport. Authorization and URL/IP scope precede DNS and traffic; redirects repeat
   scope checks; retries cover transport failures only; rate waits and each request obey
   cancellation and an overall deadline. No low-level network API assumes authorization.
-- Proteus, Hermes, Apollo, Minerva, Vulcan, and AEGIS adoption is tracked in
+- Proteus: campaign creation requires explicit authorization at both application and
+  domain boundaries. Engagement, sender, recipient domains and the HTTPS training origin
+  are scope-checked before token generation; cancellation is cooperative, and structured
+  audit records contain recipient hashes/domains rather than complete email addresses.
+- Hermes, Apollo, Minerva, Vulcan, and AEGIS adoption is tracked in
   `upgrade.md`; offline-only work uses the same validation/redaction pieces where
   applicable but does not invent network authorization requirements.

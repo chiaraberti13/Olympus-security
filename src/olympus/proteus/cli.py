@@ -7,13 +7,15 @@ from pathlib import Path
 
 import typer
 
+from olympus.core.contracts import ContractCompatibilityError
+from olympus.core.execution import AuthorizationRequiredError, CancellationRequested
+from olympus.proteus.application import (
+    CampaignApplicationService,
+    CampaignBuildRequest,
+    CampaignTokenNotFoundError,
+)
 from olympus.proteus.campaign import (
-    build_campaign,
-    campaign_report,
     export_campaign,
-    load_campaign,
-    render_email,
-    render_training_page,
 )
 from olympus.proteus.scope import (
     ProteusOutOfScopeError,
@@ -35,11 +37,6 @@ _DISCLAIMER = (
 )
 
 
-def _read_lines(path: Path) -> list[str]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
-
-
 @app.command()
 def campaign(
     engagement: str = typer.Option(..., "--engagement", help="Engagement name."),
@@ -59,30 +56,49 @@ def campaign(
     ),
 ) -> None:
     """Build an authorized simulation campaign (unique token per in-scope target)."""
-    if not i_am_authorized:
+    service = CampaignApplicationService()
+    try:
+        outcome = service.build(
+            CampaignBuildRequest(
+                engagement=engagement,
+                targets_path=targets,
+                landing_url=landing_url,
+                subject=subject,
+                sender=sender,
+                scope_path=scope,
+                audit_log_path=log,
+                authorized=i_am_authorized,
+            )
+        )
+        export_campaign(outcome.campaign, output)
+    except AuthorizationRequiredError as exc:
         typer.echo(f"proteus: {_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
-
-    emails = _read_lines(targets)
-    kept: list[str] = []
-    for email in emails:
-        try:
-            build_campaign(engagement, [email], scope, log, subject=subject, sender=sender,
-                           landing_url=landing_url)
-        except ProteusScopeError as exc:
-            typer.echo(f"proteus: scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except ProteusOutOfScopeError:
-            typer.echo(f"proteus: skipping out-of-scope target {email!r} (logged)", err=True)
-            continue
-        kept.append(email)
-
-    built = build_campaign(engagement, kept, scope, log, subject=subject, sender=sender,
-                           landing_url=landing_url)
-    export_campaign(built, output)
-    typer.echo(json.dumps(built.to_dict(), indent=2, sort_keys=True))
+        raise typer.Exit(code=4) from exc
+    except ProteusOutOfScopeError as exc:
+        typer.echo(f"proteus: blocked by scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except (ProteusScopeError, CancellationRequested, OSError, UnicodeError, ValueError) as exc:
+        typer.echo(f"proteus: campaign error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    for skipped in outcome.skipped_targets:
+        typer.echo(f"proteus: skipping out-of-scope target {skipped!r} (logged)", err=True)
     typer.echo(
-        f"proteus: campaign '{engagement}' built for {len(built.targets)} target(s); {output}",
+        json.dumps(
+            {
+                "schema_name": outcome.campaign.SCHEMA_NAME,
+                "schema_version": outcome.campaign.SCHEMA_VERSION,
+                "engagement": outcome.campaign.engagement,
+                "targets": len(outcome.campaign.targets),
+                "skipped_targets": len(outcome.skipped_targets),
+                "output": str(output),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    typer.echo(
+        f"proteus: campaign '{engagement}' built for "
+        f"{len(outcome.campaign.targets)} target(s); {output}",
         err=True,
     )
 
@@ -95,8 +111,12 @@ def page(
     ),
 ) -> None:
     """Render the training/awareness page a clicker lands on (captures nothing)."""
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_training_page(engagement), encoding="utf-8")
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(CampaignApplicationService().render_page(engagement), encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        typer.echo(f"proteus: page error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
     typer.echo(f"proteus: wrote training page to {output}")
 
 
@@ -108,13 +128,18 @@ def email(
     token: str = typer.Option(..., "--token", help="Target token to render the lure email for."),
 ) -> None:
     """Render the simulated lure email for one target token."""
-    built = load_campaign(campaign_file)
-    for target in built.targets:
-        if target.token == token:
-            typer.echo(render_email(built, target))
-            return
-    typer.echo(f"proteus: no target with token {token!r} in campaign", err=True)
-    raise typer.Exit(code=2)
+    try:
+        rendered = CampaignApplicationService().render_campaign_email(campaign_file, token)
+    except (
+        CampaignTokenNotFoundError,
+        ContractCompatibilityError,
+        OSError,
+        json.JSONDecodeError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"proteus: email error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(rendered)
 
 
 @app.command()
@@ -127,6 +152,9 @@ def report(
     ),
 ) -> None:
     """Summarize campaign click-through (a training metric, never secrets)."""
-    built = load_campaign(campaign_file)
-    summary = campaign_report(built, set(clicked))
+    try:
+        summary = CampaignApplicationService().report(campaign_file, set(clicked))
+    except (ContractCompatibilityError, OSError, json.JSONDecodeError, ValueError) as exc:
+        typer.echo(f"proteus: report error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
     typer.echo(json.dumps(summary, indent=2, sort_keys=True))
