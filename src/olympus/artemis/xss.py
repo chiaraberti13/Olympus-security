@@ -23,6 +23,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from olympus.artemis.http import HttpClientError, Resolver, Transport, fetch_scoped
 from olympus.artemis.scope import OutOfScopeError, ScopeError
 from olympus.core.enums import Severity, Source
+from olympus.core.execution import ExecutionPolicy
 from olympus.core.models import Finding
 
 # Unique, non-executable marker carrying HTML-significant characters only.
@@ -47,11 +48,13 @@ def check_reflected_xss(
     log_path: Path,
     resolver: Resolver,
     transport: Transport,
+    *,
+    policy: ExecutionPolicy,
 ) -> list[Finding]:
     """Probe ``param`` on ``url`` for an unescaped reflection of the benign marker."""
     probed = _inject(url, param, MARKER)
     try:
-        result = fetch_scoped(probed, scope_path, log_path, resolver, transport)
+        result = fetch_scoped(probed, scope_path, log_path, resolver, transport, policy=policy)
     except (HttpClientError, ScopeError, OutOfScopeError, ValueError):
         return []
 

@@ -23,7 +23,9 @@ class _FakeClient:
         pass
 
     @classmethod
-    def from_config(cls, *, min_interval: object = None) -> _FakeClient:
+    def from_config(
+        cls, *, min_interval: object = None, redirect_validator: object = None
+    ) -> _FakeClient:
         return cls()
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
@@ -54,15 +56,19 @@ def _sites(tmp_path: Path) -> Path:
     return path
 
 
-def test_accounts_real_with_fake_client(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_accounts_real_with_fake_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(argus_cli, "UrllibHttpClient", _FakeClient)
     result = runner.invoke(
         app,
         [
-            "argus", "accounts", "--username", "olympus_demo",
-            "--scope", str(_scope(tmp_path)), "--sites", str(_sites(tmp_path)),
+            "argus",
+            "accounts",
+            "--username",
+            "olympus_demo",
+            "--scope",
+            str(_scope(tmp_path)),
+            "--sites",
+            str(_sites(tmp_path)),
         ],
     )
     assert result.exit_code == 0, result.output
@@ -78,9 +84,16 @@ def test_accounts_out_of_scope_blocks(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "argus", "accounts", "--username", "intruder",
-            "--scope", str(_scope(tmp_path)), "--log", str(log),
-            "--sites", str(_sites(tmp_path)),
+            "argus",
+            "accounts",
+            "--username",
+            "intruder",
+            "--scope",
+            str(_scope(tmp_path)),
+            "--log",
+            str(log),
+            "--sites",
+            str(_sites(tmp_path)),
         ],
     )
     assert result.exit_code == 3
@@ -91,8 +104,15 @@ def test_accounts_metadata_requires_authorization(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "argus", "accounts", "--username", "olympus_demo",
-            "--scope", str(_scope(tmp_path)), "--sites", str(_sites(tmp_path)), "--metadata",
+            "argus",
+            "accounts",
+            "--username",
+            "olympus_demo",
+            "--scope",
+            str(_scope(tmp_path)),
+            "--sites",
+            str(_sites(tmp_path)),
+            "--metadata",
         ],
     )
     assert result.exit_code == 4
@@ -105,8 +125,14 @@ def test_accounts_bad_registry(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "argus", "accounts", "--username", "olympus_demo",
-            "--scope", str(_scope(tmp_path)), "--sites", str(bad),
+            "argus",
+            "accounts",
+            "--username",
+            "olympus_demo",
+            "--scope",
+            str(_scope(tmp_path)),
+            "--sites",
+            str(bad),
         ],
     )
     assert result.exit_code == 2
@@ -121,17 +147,21 @@ def test_accounts_requires_username_or_input(tmp_path: Path) -> None:
     assert "exactly one" in result.output
 
 
-def test_accounts_batch_skips_out_of_scope(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_accounts_batch_skips_out_of_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(argus_cli, "UrllibHttpClient", _FakeClient)
     handles = tmp_path / "handles.txt"
     handles.write_text("olympus_demo\nintruder\n", encoding="utf-8")
     result = runner.invoke(
         app,
         [
-            "argus", "accounts", "--input", str(handles),
-            "--scope", str(_scope(tmp_path)), "--sites", str(_sites(tmp_path)),
+            "argus",
+            "accounts",
+            "--input",
+            str(handles),
+            "--scope",
+            str(_scope(tmp_path)),
+            "--sites",
+            str(_sites(tmp_path)),
         ],
     )
     assert result.exit_code == 0, result.output

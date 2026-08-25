@@ -16,26 +16,56 @@ from olympus.core.enums import (
     Source,
 )
 from olympus.core.errors import ValidationReport, format_validation_error
+from olympus.core.execution import (
+    AuthorizationRequiredError,
+    CancellationRequested,
+    CancellationToken,
+    ExecutionPolicy,
+    ExecutionPolicyError,
+    StructuredAuditRecord,
+    append_structured_audit,
+)
 from olympus.core.ids import IdGenerator, new_id
-from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident, OlympusModel
+from olympus.core.models import (
+    Alert,
+    Asset,
+    Event,
+    Evidence,
+    Finding,
+    Incident,
+    Observation,
+    OlympusModel,
+    ScanJob,
+    SecurityReport,
+)
 
 __all__ = [
     "Alert",
     "AlertStatus",
     "Asset",
     "AssetType",
+    "AuthorizationRequiredError",
+    "CancellationRequested",
+    "CancellationToken",
     "Criticality",
     "Event",
     "Evidence",
+    "ExecutionPolicy",
+    "ExecutionPolicyError",
     "Finding",
     "FindingStatus",
     "IdGenerator",
     "Incident",
     "IncidentStatus",
+    "Observation",
     "OlympusModel",
+    "ScanJob",
+    "SecurityReport",
     "Severity",
     "Source",
+    "StructuredAuditRecord",
     "ValidationReport",
+    "append_structured_audit",
     "format_validation_error",
     "new_id",
 ]

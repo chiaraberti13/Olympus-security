@@ -14,12 +14,20 @@ authorized fetches against a target's own web perimeter.
 
 from __future__ import annotations
 
+import threading
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
+
+from olympus.core.execution import (
+    Cancellation,
+    CancellationRequested,
+    ExecutionPolicy,
+    NeverCancelled,
+)
 
 #: Honest, fixed identifier sent on every Olympus OSINT HTTP request.
 USER_AGENT = "Olympus/1.0 (+authorized-security-testing)"
@@ -79,16 +87,45 @@ class UrllibHttpClient:
         backoff: float = 0.5,
         min_interval: float = 0.0,
         redirect_validator: Callable[[str], None] | None = None,
+        cancellation: Cancellation | None = None,
     ) -> None:
-        self._timeout = timeout
-        self._retries = max(retries, 0)
-        self._backoff = max(backoff, 0.0)
-        self._min_interval = max(min_interval, 0.0)
+        self._policy = ExecutionPolicy(
+            authorized=True,
+            timeout_seconds=timeout,
+            deadline_seconds=max(timeout, 600.0),
+            retries=retries,
+            backoff_seconds=backoff,
+            min_interval_seconds=min_interval,
+        )
+        self._timeout = self._policy.timeout_seconds
+        self._retries = self._policy.retries
+        self._backoff = self._policy.backoff_seconds
+        self._min_interval = self._policy.min_interval_seconds
+        self._cancellation = cancellation or NeverCancelled()
         self._last_request_at = 0.0
+        self._throttle_lock = threading.Lock()
         self._opener = (
             urllib.request.build_opener(_ValidatingRedirectHandler(redirect_validator))
             if redirect_validator is not None
             else None
+        )
+
+    @classmethod
+    def from_policy(
+        cls,
+        policy: ExecutionPolicy,
+        *,
+        redirect_validator: Callable[[str], None] | None = None,
+        cancellation: Cancellation | None = None,
+    ) -> UrllibHttpClient:
+        """Build a client from the shared validated execution policy."""
+        return cls(
+            policy.timeout_seconds,
+            retries=policy.retries,
+            backoff=policy.backoff_seconds,
+            min_interval=policy.min_interval_seconds,
+            redirect_validator=redirect_validator,
+            cancellation=cancellation,
         )
 
     @classmethod
@@ -115,14 +152,23 @@ class UrllibHttpClient:
             redirect_validator=redirect_validator,
         )
 
+    def _check_cancelled(self) -> None:
+        try:
+            self._policy.check_cancellation(self._cancellation)
+        except CancellationRequested as exc:
+            raise HttpRequestError("HTTP request cancelled") from exc
+
     def _throttle(self) -> None:
         """Sleep just enough to honor the configured minimum request interval."""
         if self._min_interval <= 0.0:
             return
-        elapsed = time.monotonic() - self._last_request_at
-        if 0.0 <= elapsed < self._min_interval:
-            time.sleep(self._min_interval - elapsed)
-        self._last_request_at = time.monotonic()
+        # Account enumeration shares one client across a thread pool. Serialize
+        # dispatch timing so concurrent workers cannot bypass the configured rate.
+        with self._throttle_lock:
+            elapsed = time.monotonic() - self._last_request_at
+            if 0.0 <= elapsed < self._min_interval:
+                time.sleep(self._min_interval - elapsed)
+            self._last_request_at = time.monotonic()
 
     def _perform(self, request: urllib.request.Request, url: str) -> HttpResponse:
         try:
@@ -155,6 +201,7 @@ class UrllibHttpClient:
 
         last_error: HttpRequestError | None = None
         for attempt in range(self._retries + 1):
+            self._check_cancelled()
             self._throttle()
             try:
                 response = self._perform(request, url)
@@ -169,6 +216,7 @@ class UrllibHttpClient:
                 if attempt == self._retries:
                     return response  # out of retries: hand back the last response
             if attempt < self._retries:
+                self._check_cancelled()
                 time.sleep(self._backoff * (2**attempt))
 
         raise last_error or HttpRequestError(f"HTTP GET failed for {url}")

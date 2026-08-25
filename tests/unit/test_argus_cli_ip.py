@@ -1,5 +1,7 @@
 """CLI-level tests for `olympus argus ip`."""
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
@@ -14,10 +16,18 @@ runner = CliRunner()
 
 
 class _GeoClient:
+    @classmethod
+    def from_config(cls, *, min_interval: float | None = None) -> _GeoClient:
+        return cls()
+
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         body = json.dumps(
-            {"status": "success", "country": "Italy", "org": "DemoVPN", "as": "AS1",
-             "proxy": True, "hosting": False}
+            {
+                "success": True,
+                "country": "Italy",
+                "connection": {"org": "DemoVPN", "asn": 1},
+                "security": {"proxy": True, "hosting": False},
+            }
         )
         return HttpResponse(status_code=200, headers={}, body=body)
 
@@ -80,6 +90,7 @@ def test_ip_geo_with_fake_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["asset"]["metadata"]["country"] == "Italy"
+    assert payload["geo"]["asn"] == "AS1"
     assert any("proxy/VPN" in f["title"] for f in payload["findings"])
 
 

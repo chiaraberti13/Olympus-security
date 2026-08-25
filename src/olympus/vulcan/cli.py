@@ -1,4 +1,4 @@
-"""Command-line interface for the Vulcan aggregation & report engine."""
+"""Command-line presentation for bounded Vulcan application workflows."""
 
 from __future__ import annotations
 
@@ -8,27 +8,35 @@ from pathlib import Path
 import typer
 
 from olympus.core.enums import Severity
+from olympus.core.execution import CancellationRequested, ExecutionPolicyError
 from olympus.core.output import OutputFormat, render
 from olympus.vulcan.aggregate import (
+    DEFAULT_MAX_FILES,
+    DEFAULT_MAX_INPUT_BYTES,
+    DEFAULT_MAX_ITEMS_PER_FILE,
+    DEFAULT_MAX_TOTAL_ITEMS,
     AggregationError,
-    dedupe_findings,
-    filter_min_severity,
-    load_alerts,
-    load_assets,
-    load_findings,
-    rank_findings,
 )
-from olympus.vulcan.report import (
-    build_report,
-    export_report,
-    export_text,
-    render_html,
-    render_markdown,
+from olympus.vulcan.application import (
+    DEFAULT_MAX_OUTPUT_BYTES,
+    DEFAULT_MAX_TOTAL_INPUT_BYTES,
+    VulcanApplicationService,
+    VulcanRankRequest,
+    VulcanReportRequest,
 )
+from olympus.vulcan.report import export_report, export_text
 
 app = typer.Typer(
     help="Vulcan — Findings aggregation & report engine.",
     no_args_is_help=True,
+)
+_APPLICATION_ERRORS = (
+    AggregationError,
+    CancellationRequested,
+    ExecutionPolicyError,
+    OSError,
+    TimeoutError,
+    ValueError,
 )
 
 
@@ -56,29 +64,54 @@ def report(
     min_severity: Severity | None = typer.Option(
         None, "--min-severity", help="Only include findings at or above this severity."
     ),
+    max_files: int = typer.Option(DEFAULT_MAX_FILES, "--max-files"),
+    max_input_bytes: int = typer.Option(DEFAULT_MAX_INPUT_BYTES, "--max-input-bytes"),
+    max_total_input_bytes: int = typer.Option(
+        DEFAULT_MAX_TOTAL_INPUT_BYTES, "--max-total-input-bytes"
+    ),
+    max_items_per_file: int = typer.Option(
+        DEFAULT_MAX_ITEMS_PER_FILE, "--max-items-per-file"
+    ),
+    max_total_items: int = typer.Option(DEFAULT_MAX_TOTAL_ITEMS, "--max-total-items"),
+    max_output_bytes: int = typer.Option(DEFAULT_MAX_OUTPUT_BYTES, "--max-output-bytes"),
+    deadline: float = typer.Option(120.0, "--deadline"),
 ) -> None:
-    """Aggregate, dedupe and rank module outputs into one consolidated report."""
+    """Aggregate strict inputs into consistent JSON, Markdown and HTML views."""
+    outputs = tuple(path for path in (output, markdown, html_output) if path is not None)
     try:
-        asset_list = load_assets(list(assets))
-        finding_list = dedupe_findings(load_findings(list(findings)))
-        alert_list = load_alerts(list(alerts))
-    except AggregationError as exc:
+        outcome = VulcanApplicationService().report(
+            VulcanReportRequest(
+                engagement=engagement,
+                asset_paths=tuple(assets),
+                finding_paths=tuple(findings),
+                alert_paths=tuple(alerts),
+                excluded_paths=outputs,
+                min_severity=min_severity,
+                render_markdown=markdown is not None,
+                render_html=html_output is not None,
+                max_files=max_files,
+                max_input_bytes=max_input_bytes,
+                max_total_input_bytes=max_total_input_bytes,
+                max_items_per_file=max_items_per_file,
+                max_total_items=max_total_items,
+                max_output_bytes=max_output_bytes,
+                deadline_seconds=deadline,
+            )
+        )
+        export_report(outcome.report, output)
+        if markdown is not None and outcome.markdown is not None:
+            export_text(outcome.markdown, markdown)
+        if html_output is not None and outcome.html is not None:
+            export_text(outcome.html, html_output)
+    except _APPLICATION_ERRORS as exc:
         typer.echo(f"vulcan: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    if min_severity is not None:
-        finding_list = filter_min_severity(finding_list, min_severity)
-
-    report_json = build_report(engagement, asset_list, finding_list, alert_list)
-    export_report(report_json, output)
-    typer.echo(json.dumps(report_json["summary"], indent=2, sort_keys=True))
+    typer.echo(json.dumps(outcome.report.summary.model_dump(mode="json"), indent=2, sort_keys=True))
     typer.echo(f"vulcan: wrote report to {output}", err=True)
-
     if markdown is not None:
-        export_text(render_markdown(engagement, asset_list, finding_list, alert_list), markdown)
         typer.echo(f"vulcan: wrote Markdown report to {markdown}", err=True)
     if html_output is not None:
-        export_text(render_html(engagement, asset_list, finding_list, alert_list), html_output)
         typer.echo(f"vulcan: wrote HTML report to {html_output}", err=True)
 
 
@@ -90,21 +123,42 @@ def rank(
     output_format: OutputFormat = typer.Option(
         OutputFormat.TABLE, "--format", help="Render as a table (human) or json (machine)."
     ),
+    max_files: int = typer.Option(DEFAULT_MAX_FILES, "--max-files"),
+    max_input_bytes: int = typer.Option(DEFAULT_MAX_INPUT_BYTES, "--max-input-bytes"),
+    max_total_input_bytes: int = typer.Option(
+        DEFAULT_MAX_TOTAL_INPUT_BYTES, "--max-total-input-bytes"
+    ),
+    max_items_per_file: int = typer.Option(
+        DEFAULT_MAX_ITEMS_PER_FILE, "--max-items-per-file"
+    ),
+    max_total_items: int = typer.Option(DEFAULT_MAX_TOTAL_ITEMS, "--max-total-items"),
+    deadline: float = typer.Option(60.0, "--deadline"),
 ) -> None:
-    """Load findings, deduplicate and print them ranked by severity."""
+    """Load strict findings and print exact-ID-deduplicated severity ranking."""
     try:
-        ranked = rank_findings(dedupe_findings(load_findings(list(findings))))
-    except AggregationError as exc:
+        ranked = VulcanApplicationService().rank(
+            VulcanRankRequest(
+                finding_paths=tuple(findings),
+                max_files=max_files,
+                max_input_bytes=max_input_bytes,
+                max_total_input_bytes=max_total_input_bytes,
+                max_items_per_file=max_items_per_file,
+                max_total_items=max_total_items,
+                deadline_seconds=deadline,
+            )
+        )
+    except _APPLICATION_ERRORS as exc:
         typer.echo(f"vulcan: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    columns = ["severity", "title", "source", "asset_id"]
+    columns = ["severity", "title", "source", "asset_id", "finding_id"]
     records: list[dict[str, object]] = [
         {
-            "severity": f.severity.value,
-            "title": f.title,
-            "source": f.source.value,
-            "asset_id": f.asset_id,
+            "severity": finding.severity.value,
+            "title": finding.title,
+            "source": finding.source.value,
+            "asset_id": finding.asset_id,
+            "finding_id": finding.finding_id,
         }
-        for f in ranked
+        for finding in ranked
     ]
     typer.echo(render(records, columns, output_format, title="Findings (ranked)"))

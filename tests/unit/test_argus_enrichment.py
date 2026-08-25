@@ -18,16 +18,17 @@ from olympus.core.http import HttpRequestError, HttpResponse
 class _FakeClient:
     """Offline HttpClient double returning a preconfigured response or error."""
 
-    def __init__(self, *, body: str = "", error: bool = False) -> None:
+    def __init__(self, *, body: str = "", error: bool = False, status: int = 200) -> None:
         self._body = body
         self._error = error
+        self._status = status
         self.calls: list[str] = []
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         self.calls.append(url)
         if self._error:
             raise HttpRequestError("boom")
-        return HttpResponse(status_code=200, headers={}, body=self._body)
+        return HttpResponse(status_code=self._status, headers={}, body=self._body)
 
 
 def test_numverify_dormant_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -43,6 +44,7 @@ def test_numverify_active_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
     result = adapter.enrich("+16505550123")
     assert result.carrier == "Demo Mobile"
     assert result.line_type == "mobile"
+    assert client.calls[0].startswith("https://")
     assert "access_key=secret" in client.calls[0]
 
 
@@ -50,7 +52,17 @@ def test_numverify_network_error_wrapped(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("OLYMPUS_NUMVERIFY_KEY", "secret")
     adapter = NumverifyClient.from_env(_FakeClient(error=True))
     assert adapter is not None
-    with pytest.raises(EnrichmentError, match="numverify request failed"):
+    with pytest.raises(EnrichmentError, match="numverify request failed") as error:
+        adapter.enrich("+16505550123")
+    assert "secret" not in str(error.value)
+
+
+def test_numverify_non_success_status_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLYMPUS_NUMVERIFY_KEY", "secret")
+    adapter = NumverifyClient.from_env(_FakeClient(body="{}", status=401))
+    assert adapter is not None
+
+    with pytest.raises(EnrichmentError, match="HTTP 401"):
         adapter.enrich("+16505550123")
 
 
@@ -63,9 +75,7 @@ def test_numverify_bad_json_wrapped(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_breach_client_counts_stealers() -> None:
-    body = json.dumps(
-        {"stealers": [{"stealer_family": "Redline"}, {"stealer_family": "Raccoon"}]}
-    )
+    body = json.dumps({"stealers": [{"stealer_family": "Redline"}, {"stealer_family": "Raccoon"}]})
     result = HudsonRockBreachClient(_FakeClient(body=body)).enrich("+16505550123")
     assert result.breach_count == 2
     assert result.breach_sources == ("Redline", "Raccoon")

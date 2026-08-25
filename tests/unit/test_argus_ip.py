@@ -9,6 +9,7 @@ from olympus.argus.ip_osint import (
     IpGeo,
     IpGeoError,
     IpParseError,
+    IpWhoisClient,
     analyze_ip,
     build_ip_asset,
     build_ip_findings,
@@ -18,16 +19,17 @@ from olympus.core.http import HttpRequestError, HttpResponse
 
 
 class _FakeClient:
-    def __init__(self, *, body: str = "", error: bool = False) -> None:
+    def __init__(self, *, body: str = "", error: bool = False, status: int = 200) -> None:
         self._body = body
         self._error = error
+        self._status = status
         self.calls: list[str] = []
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         self.calls.append(url)
         if self._error:
             raise HttpRequestError("boom")
-        return HttpResponse(status_code=200, headers={}, body=self._body)
+        return HttpResponse(status_code=self._status, headers={}, body=self._body)
 
 
 def test_analyze_global_ipv4() -> None:
@@ -72,26 +74,40 @@ def test_findings_flag_proxy_hosting() -> None:
 
 def test_geolocate_success() -> None:
     body = json.dumps(
-        {"status": "success", "country": "Italy", "regionName": "Lazio", "city": "Rome",
-         "isp": "DemoISP", "org": "DemoOrg", "as": "AS64500", "proxy": False, "hosting": True}
+        {
+            "success": True,
+            "country": "Italy",
+            "region": "Lazio",
+            "city": "Rome",
+            "connection": {"isp": "DemoISP", "org": "DemoOrg", "asn": 64500},
+            "security": {"proxy": False, "hosting": True},
+        }
     )
-    geo = IpApiClient(_FakeClient(body=body)).geolocate("1.1.1.1")
+    http = _FakeClient(body=body)
+    geo = IpWhoisClient(http).geolocate("1.1.1.1")
     assert geo.country == "Italy"
     assert geo.asn == "AS64500"
     assert geo.is_hosting is True
+    assert http.calls == ["https://ipwho.is/1.1.1.1"]
+    assert IpApiClient is IpWhoisClient
 
 
 def test_geolocate_status_fail_raises() -> None:
-    body = json.dumps({"status": "fail", "message": "reserved range"})
+    body = json.dumps({"success": False, "message": "reserved range"})
     with pytest.raises(IpGeoError, match="reserved range"):
-        IpApiClient(_FakeClient(body=body)).geolocate("10.0.0.1")
+        IpWhoisClient(_FakeClient(body=body)).geolocate("10.0.0.1")
 
 
 def test_geolocate_bad_json_raises() -> None:
     with pytest.raises(IpGeoError, match="non-JSON"):
-        IpApiClient(_FakeClient(body="<html>")).geolocate("1.1.1.1")
+        IpWhoisClient(_FakeClient(body="<html>")).geolocate("1.1.1.1")
 
 
 def test_geolocate_network_error_wrapped() -> None:
     with pytest.raises(IpGeoError, match="request failed"):
-        IpApiClient(_FakeClient(error=True)).geolocate("1.1.1.1")
+        IpWhoisClient(_FakeClient(error=True)).geolocate("1.1.1.1")
+
+
+def test_geolocate_non_success_http_is_explicit() -> None:
+    with pytest.raises(IpGeoError, match="HTTP 429"):
+        IpWhoisClient(_FakeClient(body="{}", status=429)).geolocate("1.1.1.1")

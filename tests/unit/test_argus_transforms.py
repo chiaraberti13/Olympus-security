@@ -33,10 +33,14 @@ class _CtClient:
 
 class _HttpClient:
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
-        if "ip-api.com" in url:
+        if "ipwho.is" in url:
             body = json.dumps(
-                {"status": "success", "country": "Italy", "city": "Rome", "isp": "ISP",
-                 "as": "AS64500"}
+                {
+                    "success": True,
+                    "country": "Italy",
+                    "city": "Rome",
+                    "connection": {"isp": "ISP", "asn": 64500},
+                }
             )
             return HttpResponse(status_code=200, headers={}, body=body)
         if "github.com" in url:  # username account presence

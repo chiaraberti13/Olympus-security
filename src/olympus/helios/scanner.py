@@ -6,6 +6,8 @@ import socket
 from dataclasses import dataclass
 from typing import Protocol
 
+from olympus.core.execution import Cancellation, CancellationRequested, NeverCancelled
+
 
 class Connector(Protocol):
     """TCP connection probe abstraction."""
@@ -29,19 +31,54 @@ class SocketConnector:
 # Well-known TCP services, identified passively from the port number alone
 # (no application data is ever sent — Helios stays non-destructive).
 _SERVICE_NAMES: dict[int, str] = {
-    21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "dns", 80: "http",
-    110: "pop3", 135: "msrpc", 139: "netbios-ssn", 143: "imap", 443: "https",
-    445: "smb", 465: "smtps", 587: "submission", 993: "imaps", 995: "pop3s",
-    1433: "mssql", 1521: "oracle", 2049: "nfs", 3306: "mysql", 3389: "rdp",
-    5432: "postgres", 5900: "vnc", 6379: "redis", 8080: "http-alt",
-    8443: "https-alt", 9200: "elasticsearch", 27017: "mongodb",
+    21: "ftp",
+    22: "ssh",
+    23: "telnet",
+    25: "smtp",
+    53: "dns",
+    80: "http",
+    110: "pop3",
+    135: "msrpc",
+    139: "netbios-ssn",
+    143: "imap",
+    443: "https",
+    445: "smb",
+    465: "smtps",
+    587: "submission",
+    993: "imaps",
+    995: "pop3s",
+    1433: "mssql",
+    1521: "oracle",
+    2049: "nfs",
+    3306: "mysql",
+    3389: "rdp",
+    5432: "postgres",
+    5900: "vnc",
+    6379: "redis",
+    8080: "http-alt",
+    8443: "https-alt",
+    9200: "elasticsearch",
+    27017: "mongodb",
 }
 
 # Services that are risky to expose to untrusted networks (cleartext admin,
 # databases, remote desktop...). Everything else is informational.
 _RISKY_SERVICES: frozenset[str] = frozenset(
-    {"telnet", "ftp", "rdp", "vnc", "smb", "mssql", "mysql", "postgres", "redis",
-     "mongodb", "elasticsearch", "oracle", "nfs"}
+    {
+        "telnet",
+        "ftp",
+        "rdp",
+        "vnc",
+        "smb",
+        "mssql",
+        "mysql",
+        "postgres",
+        "redis",
+        "mongodb",
+        "elasticsearch",
+        "oracle",
+        "nfs",
+    }
 )
 
 
@@ -64,18 +101,31 @@ class OpenPort:
     service: str = "unknown"
 
 
-def discover(
-    host: str, ports: list[int], connector: Connector, timeout: float = 1.0
-) -> list[OpenPort]:
-    """Probe at most 128 unique valid ports without sending application data."""
-    normalized = sorted(set(ports))
+def normalize_ports(ports: list[int]) -> tuple[int, ...]:
+    """Validate, deduplicate, and sort a bounded TCP port set."""
+    normalized = tuple(sorted(set(ports)))
     invalid_port = any(not 1 <= port <= 65535 for port in normalized)
     if not normalized or len(normalized) > 128 or invalid_port:
         raise ValueError("ports must contain 1 to 128 values in the range 1..65535")
+    return normalized
+
+
+def discover(
+    host: str,
+    ports: list[int],
+    connector: Connector,
+    timeout: float = 1.0,
+    cancellation: Cancellation | None = None,
+) -> list[OpenPort]:
+    """Probe at most 128 unique valid ports without sending application data."""
+    normalized = normalize_ports(ports)
     if not 0.05 <= timeout <= 10.0:
         raise ValueError("timeout must be between 0.05 and 10 seconds")
-    return [
-        OpenPort(host, port, service_for(port))
-        for port in normalized
-        if connector.is_open(host, port, timeout)
-    ]
+    token = cancellation or NeverCancelled()
+    observations: list[OpenPort] = []
+    for port in normalized:
+        if token.is_cancelled():
+            raise CancellationRequested("operation cancelled")
+        if connector.is_open(host, port, timeout):
+            observations.append(OpenPort(host, port, service_for(port)))
+    return observations

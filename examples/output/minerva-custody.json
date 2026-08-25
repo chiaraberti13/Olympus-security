@@ -3,8 +3,9 @@
     {
       "action": "collected",
       "actor": "demo-responder",
-      "entry_hash": "47fc76b46cff5c30f13b881e19caad0d9b1cd151d0594db3925f9623d878b17e",
+      "entry_hash": "8c81d6ca74fe808cdad55cca1be362c17f4f08ad1a8797eed1a27367ab021e73",
       "evidence_id": "EVD-2026-00001",
+      "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "occurred_at": "2026-08-14T09:00:00Z",
       "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
       "sequence": 1
@@ -12,13 +13,14 @@
     {
       "action": "transferred",
       "actor": "demo-forensics",
-      "entry_hash": "59456c5d6847facdae9f1f368ebe88761616ac24e991795817f6828c4890f826",
+      "entry_hash": "91eb0aa36d04b431ab52b08a3e93eada7a7f28fcbb8ec9ba41d544bcca86b435",
       "evidence_id": "EVD-2026-00001",
+      "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "occurred_at": "2026-08-14T09:30:00Z",
-      "previous_hash": "47fc76b46cff5c30f13b881e19caad0d9b1cd151d0594db3925f9623d878b17e",
+      "previous_hash": "8c81d6ca74fe808cdad55cca1be362c17f4f08ad1a8797eed1a27367ab021e73",
       "sequence": 2
     }
   ],
   "schema_name": "olympus.custody",
-  "schema_version": "1.0.0"
+  "schema_version": "2.0.0"
 }

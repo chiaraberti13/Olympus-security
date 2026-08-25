@@ -1,3 +1,5 @@
+schema_name: olympus.apollo-rule
+schema_version: 1.0.0
 rule_id: APL-RT-KEYBOARD-HOOK
 title: Low-level global keyboard hook installed by an unsigned process (keylogging)
 event_type: edr.api

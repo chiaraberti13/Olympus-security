@@ -8,8 +8,9 @@ format negotiation. Each model declares its ``schema_name`` and
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -40,13 +41,13 @@ class OlympusModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     schema_name: str
-    schema_version: str = "1.0.0"
+    schema_version: Literal["1.0.0"] = "1.0.0"
 
 
 class Asset(OlympusModel):
     """A resource observed or managed by the platform (host, domain, URL...)."""
 
-    schema_name: str = "olympus.asset"
+    schema_name: Literal["olympus.asset"] = "olympus.asset"
     asset_id: str = Field(default_factory=lambda: new_id("asset"))
     asset_type: AssetType
     hostname: str | None = None
@@ -63,7 +64,7 @@ class Asset(OlympusModel):
 class Finding(OlympusModel):
     """A weakness, vulnerability or misconfiguration attached to an asset."""
 
-    schema_name: str = "olympus.finding"
+    schema_name: Literal["olympus.finding"] = "olympus.finding"
     finding_id: str = Field(default_factory=lambda: new_id("finding"))
     asset_id: str
     source: Source
@@ -90,7 +91,7 @@ class Finding(OlympusModel):
 class Event(OlympusModel):
     """A normalized observable consumed by detection rules."""
 
-    schema_name: str = "olympus.event"
+    schema_name: Literal["olympus.event"] = "olympus.event"
     event_id: str = Field(default_factory=lambda: new_id("event"))
     event_type: str = Field(min_length=1)
     source: Source
@@ -102,7 +103,7 @@ class Event(OlympusModel):
 class Evidence(OlympusModel):
     """An immutable reference to material supporting a finding or alert."""
 
-    schema_name: str = "olympus.evidence"
+    schema_name: Literal["olympus.evidence"] = "olympus.evidence"
     evidence_id: str = Field(default_factory=lambda: new_id("evidence"))
     evidence_type: str = Field(min_length=1)
     uri: str = Field(min_length=1)
@@ -113,21 +114,39 @@ class Evidence(OlympusModel):
 class Alert(OlympusModel):
     """A detection result linked to its source event and supporting evidence."""
 
-    schema_name: str = "olympus.alert"
+    schema_name: Literal["olympus.alert"] = "olympus.alert"
     alert_id: str = Field(default_factory=lambda: new_id("alert"))
     event_id: str
     title: str = Field(min_length=1)
     source: Source
     severity: Severity = Severity.MEDIUM
     status: AlertStatus = AlertStatus.OPEN
+    rule_id: str | None = None
+    mitre_attack: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_utcnow)
+
+    @field_validator("rule_id")
+    @classmethod
+    def _validate_rule_id(cls, value: str | None) -> str | None:
+        if value is not None and re.fullmatch(r"APL-[A-Z0-9-]+", value) is None:
+            raise ValueError("rule_id must match APL-[A-Z0-9-]+")
+        return value
+
+    @field_validator("mitre_attack")
+    @classmethod
+    def _validate_mitre_attack(cls, value: list[str]) -> list[str]:
+        if any(re.fullmatch(r"T\d{4}(?:\.\d{3})?", item) is None for item in value):
+            raise ValueError("mitre_attack IDs must match T#### or T####.###")
+        if len(value) != len(set(value)):
+            raise ValueError("mitre_attack IDs must be unique")
+        return value
 
 
 class Incident(OlympusModel):
     """An incident response case linking alerts, evidence and lifecycle state."""
 
-    schema_name: str = "olympus.incident"
+    schema_name: Literal["olympus.incident"] = "olympus.incident"
     incident_id: str = Field(default_factory=lambda: new_id("incident"))
     title: str = Field(min_length=1)
     summary: str = ""
@@ -152,3 +171,55 @@ class Incident(OlympusModel):
             if self.closed_at < self.opened_at:
                 raise ValueError("closed_at cannot be before opened_at")
         return self
+
+
+class Observation(OlympusModel):
+    """One normalized, non-interpretive fact produced by a scanner or sensor."""
+
+    schema_name: Literal["olympus.observation"] = "olympus.observation"
+    observation_id: str = Field(default_factory=lambda: new_id("observation"))
+    observation_type: str = Field(min_length=1)
+    source: Source
+    asset_id: str | None = None
+    observed_at: datetime = Field(default_factory=_utcnow)
+    attributes: dict[str, str] = Field(default_factory=dict)
+
+
+ScanJobState = Literal["queued", "running", "succeeded", "failed", "timed_out", "cancelled"]
+
+
+class ScanJob(OlympusModel):
+    """Persistable shared view of one bounded adapter invocation."""
+
+    schema_name: Literal["olympus.scan-job"] = "olympus.scan-job"
+    job_id: str = Field(min_length=1)
+    assessment_id: str = Field(min_length=1)
+    adapter: str = Field(min_length=1)
+    target_kind: str = Field(min_length=1)
+    target_value: str = Field(min_length=1)
+    state: ScanJobState = "queued"
+    error_code: str | None = None
+    result_id: str | None = None
+
+
+class ReportSummary(BaseModel):
+    """Stable counters embedded in a consolidated security report."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assets: int = Field(ge=0)
+    findings: int = Field(ge=0)
+    alerts: int = Field(ge=0)
+    severity_breakdown: dict[str, int]
+
+
+class SecurityReport(OlympusModel):
+    """Canonical machine-readable engagement report consumed across Olympus."""
+
+    schema_name: Literal["olympus.security-report"] = "olympus.security-report"
+    engagement: str = Field(min_length=1)
+    generated_at: datetime = Field(default_factory=_utcnow)
+    summary: ReportSummary
+    assets: list[Asset] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
+    alerts: list[Alert] = Field(default_factory=list)

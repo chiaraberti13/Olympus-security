@@ -18,6 +18,7 @@ from olympus.argus.accounts import (
     enumerate_accounts,
     export_account_intel,
     load_site_registry,
+    validate_public_site_url,
 )
 from olympus.core.enums import AssetType, Severity
 from olympus.core.http import HttpRequestError, HttpResponse
@@ -31,8 +32,10 @@ class _RoutingClient:
     ) -> None:
         self._routes = routes
         self._error_hosts = error_hosts
+        self.calls: list[str] = []
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
         for host in self._error_hosts:
             if host in url:
                 raise HttpRequestError("boom")
@@ -169,6 +172,51 @@ def test_load_registry_invalid_spec(tmp_path: Path) -> None:
     path.write_text(json.dumps([{"name": "x"}]), encoding="utf-8")  # missing url_template
     with pytest.raises(SiteRegistryError, match="failed validation"):
         load_site_registry(path)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com/{username}",
+        "https://127.0.0.1/{username}",
+        "https://localhost/{username}",
+        "https://user:password@example.com/{username}",
+        "https://{username}.example.com/profile",
+        "https://example.com/static",
+    ],
+)
+def test_registry_rejects_unsafe_templates(tmp_path: Path, url: str) -> None:
+    path = tmp_path / "sites.json"
+    path.write_text(
+        json.dumps([{"name": "unsafe", "url_template": url}]),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SiteRegistryError):
+        load_site_registry(path)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com/profile",
+        "https://127.0.0.1/profile",
+        "https://[::1]/profile",
+        "https://localhost/profile",
+        "https://service.internal/profile",
+    ],
+)
+def test_redirect_policy_rejects_non_public_destinations(url: str) -> None:
+    with pytest.raises(SiteRegistryError):
+        validate_public_site_url(url)
+
+
+def test_handle_is_encoded_as_one_path_segment() -> None:
+    client = _RoutingClient({"site.example": HttpResponse(status_code=404)})
+
+    check_site("../alice/bob", _spec(), client)
+
+    assert client.calls == ["https://site.example/..%2Falice%2Fbob"]
 
 
 def test_export_intel_roundtrips(tmp_path: Path) -> None:

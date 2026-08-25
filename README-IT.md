@@ -182,7 +182,9 @@ make check     # esegue tutti e tre, non bloccante — solo informativo
 ```
 
 Vedi [`docs/architecture/`](docs/architecture) per le decisioni di progetto
-accettate, [`docs/parity/`](docs/parity) per i manifest di capacità upstream e
+accettate, [`docs/contracts.md`](docs/contracts.md) per le regole di compatibilità
+dei contratti versionati, [`docs/execution-policy.md`](docs/execution-policy.md) per autorizzazione
+e limiti di esecuzione condivisi, [`docs/parity/`](docs/parity) per i manifest di capacità upstream e
 [`vendor/`](vendor) per i tool upstream completi, dentro il repository.
 
 ## 🔐 Modello di sicurezza

@@ -17,7 +17,18 @@ from olympus.apollo.cli import app as apollo_app
 from olympus.argus.cli import app as argus_app
 from olympus.artemis.cli import app as artemis_app
 from olympus.athena.cli import app as athena_app
-from olympus.core.models import Alert, Asset, Event, Evidence, Finding, Incident
+from olympus.athena.domain.contracts import AssessmentPlan, AssessmentResult
+from olympus.core.models import (
+    Alert,
+    Asset,
+    Event,
+    Evidence,
+    Finding,
+    Incident,
+    Observation,
+    ScanJob,
+    SecurityReport,
+)
 from olympus.helios.cli import app as helios_app
 from olympus.hermes.cli import app as hermes_app
 from olympus.integrations.cli import (
@@ -55,6 +66,7 @@ def _main(
 ) -> None:
     """Olympus — a single binary driving every Red and Blue module."""
 
+
 core_app = typer.Typer(help="Core data-contract utilities.", no_args_is_help=True)
 
 
@@ -67,12 +79,17 @@ def export_schemas(
 ) -> None:
     """Print the JSON Schema of the core models, or write it to a directory."""
     schemas = {
+        "olympus.athena.plan": AssessmentPlan.model_json_schema(),
+        "olympus.athena.result": AssessmentResult.model_json_schema(),
         "olympus.asset": Asset.model_json_schema(),
         "olympus.finding": Finding.model_json_schema(),
         "olympus.event": Event.model_json_schema(),
         "olympus.evidence": Evidence.model_json_schema(),
         "olympus.alert": Alert.model_json_schema(),
         "olympus.incident": Incident.model_json_schema(),
+        "olympus.observation": Observation.model_json_schema(),
+        "olympus.scan-job": ScanJob.model_json_schema(),
+        "olympus.security-report": SecurityReport.model_json_schema(),
     }
     payload = json.dumps(schemas, indent=2, sort_keys=True)
     if output_dir is None:

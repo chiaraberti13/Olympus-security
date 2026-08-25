@@ -1,17 +1,25 @@
-"""Command-line interface for Apollo detection testing."""
+"""Command-line presentation for bounded Apollo application use cases."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
-from pydantic import ValidationError
 
-from olympus.apollo.engine import evaluate, evaluate_stream
+from olympus.apollo.application import (
+    DEFAULT_MAX_ALERTS,
+    DEFAULT_MAX_EVALUATIONS,
+    DEFAULT_MAX_EVENT_BYTES,
+    DEFAULT_MAX_EVENTS,
+    DEFAULT_MAX_STREAM_BYTES,
+    ApolloApplicationService,
+    ApolloRunRequest,
+    ApolloTestRequest,
+)
 from olympus.apollo.export import export_alerts
-from olympus.apollo.rules import load_rule, load_rules
-from olympus.core.models import Event
+from olympus.apollo.rules import DEFAULT_MAX_RULE_BYTES, DEFAULT_MAX_RULES
+from olympus.core.contracts import ContractCompatibilityError
+from olympus.core.execution import CancellationRequested, ExecutionPolicyError
 from olympus.core.output import OutputFormat, render
 
 app = typer.Typer(help="Apollo — detection engineering and testing.", no_args_is_help=True)
@@ -24,17 +32,34 @@ def test(
     rule: Path,
     event: Path,
     output: Path = typer.Option(DEFAULT_OUTPUT, "--output"),
+    max_rule_bytes: int = typer.Option(DEFAULT_MAX_RULE_BYTES, "--max-rule-bytes"),
+    max_event_bytes: int = typer.Option(DEFAULT_MAX_EVENT_BYTES, "--max-event-bytes"),
+    deadline: float = typer.Option(60.0, "--deadline"),
 ) -> None:
-    """Evaluate one rule against one normalized Event fixture."""
+    """Evaluate one rule against one strict, normalized Event fixture."""
     try:
-        detection_rule = load_rule(rule)
-        normalized_event = Event.model_validate_json(event.read_text(encoding="utf-8"))
-    except (OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
-        typer.echo(f"apollo: invalid input: {exc}", err=True)
+        outcome = ApolloApplicationService().test(
+            ApolloTestRequest(
+                rule_path=rule,
+                event_path=event,
+                max_rule_bytes=max_rule_bytes,
+                max_event_bytes=max_event_bytes,
+                deadline_seconds=deadline,
+                excluded_paths=(output,),
+            )
+        )
+        export_alerts(outcome.alerts, output)
+    except (
+        CancellationRequested,
+        ContractCompatibilityError,
+        ExecutionPolicyError,
+        OSError,
+        TimeoutError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"apollo: invalid input or execution limit: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    alerts = evaluate([detection_rule], normalized_event)
-    export_alerts(alerts, output)
-    typer.echo(f"apollo: {len(alerts)} alert(s); output: {output}")
+    typer.echo(f"apollo: {len(outcome.alerts)} alert(s); output: {output}")
 
 
 @app.command()
@@ -42,30 +67,53 @@ def run(
     rules: Path = typer.Option(DEFAULT_RULES_DIR, "--rules", help="Directory of YAML rules."),
     events: Path = typer.Option(..., "--events", help="NDJSON file: one core.Event per line."),
     output: Path = typer.Option(DEFAULT_OUTPUT, "--output", help="Alerts JSON output."),
+    max_rules: int = typer.Option(DEFAULT_MAX_RULES, "--max-rules"),
+    max_rule_bytes: int = typer.Option(DEFAULT_MAX_RULE_BYTES, "--max-rule-bytes"),
+    max_event_bytes: int = typer.Option(DEFAULT_MAX_EVENT_BYTES, "--max-event-bytes"),
+    max_events: int = typer.Option(DEFAULT_MAX_EVENTS, "--max-events"),
+    max_stream_bytes: int = typer.Option(DEFAULT_MAX_STREAM_BYTES, "--max-stream-bytes"),
+    max_evaluations: int = typer.Option(DEFAULT_MAX_EVALUATIONS, "--max-evaluations"),
+    max_alerts: int = typer.Option(DEFAULT_MAX_ALERTS, "--max-alerts"),
+    deadline: float = typer.Option(600.0, "--deadline"),
 ) -> None:
-    """Evaluate a whole rule set against a stream of events (NDJSON)."""
+    """Evaluate a bounded rule set against a strict streaming NDJSON event source."""
     try:
-        rule_set = load_rules(rules)
-    except (OSError, ValueError) as exc:
-        typer.echo(f"apollo: rule error: {exc}", err=True)
+        outcome = ApolloApplicationService().run(
+            ApolloRunRequest(
+                rules_path=rules,
+                events_path=events,
+                excluded_paths=(output,),
+                max_rules=max_rules,
+                max_rule_bytes=max_rule_bytes,
+                max_event_bytes=max_event_bytes,
+                max_events=max_events,
+                max_stream_bytes=max_stream_bytes,
+                max_evaluations=max_evaluations,
+                max_alerts=max_alerts,
+                deadline_seconds=deadline,
+            )
+        )
+        export_alerts(outcome.alerts, output)
+    except (
+        CancellationRequested,
+        ContractCompatibilityError,
+        ExecutionPolicyError,
+        OSError,
+        TimeoutError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"apollo: input or execution error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    parsed: list[Event] = []
-    for number, line in enumerate(events.read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            parsed.append(Event.model_validate_json(line))
-        except (ValueError, ValidationError) as exc:
-            typer.echo(f"apollo: skipping malformed event on line {number}: {exc}", err=True)
-
-    alerts = evaluate_stream(rule_set, parsed)
-    export_alerts(alerts, output)
+    for error in outcome.input_errors:
+        typer.echo(f"apollo: malformed event on line {error.line}: {error.message}", err=True)
     typer.echo(
-        f"apollo: {len(rule_set)} rule(s) x {len(parsed)} event(s) -> {len(alerts)} alert(s); "
-        f"{output}"
+        f"apollo: {len(outcome.rules)} rule(s) x {outcome.events} event(s) -> "
+        f"{len(outcome.alerts)} alert(s); duplicates={outcome.duplicates}; {output}"
     )
-    if alerts:
+    if outcome.input_errors:
+        raise typer.Exit(code=2)
+    if outcome.alerts:
         raise typer.Exit(code=1)
 
 
@@ -75,22 +123,30 @@ def rules(
     output_format: OutputFormat = typer.Option(
         OutputFormat.TABLE, "--format", help="Render as table (human) or json (machine)."
     ),
+    max_rules: int = typer.Option(DEFAULT_MAX_RULES, "--max-rules"),
+    max_rule_bytes: int = typer.Option(DEFAULT_MAX_RULE_BYTES, "--max-rule-bytes"),
+    deadline: float = typer.Option(60.0, "--deadline"),
 ) -> None:
-    """Load and validate a rule directory, listing every rule."""
+    """Load, bound and validate a non-empty rule directory."""
     try:
-        rule_set = load_rules(directory)
-    except (OSError, ValueError) as exc:
+        rule_set = ApolloApplicationService().list_rules(
+            directory,
+            max_rules=max_rules,
+            max_rule_bytes=max_rule_bytes,
+            deadline_seconds=deadline,
+        )
+    except (ContractCompatibilityError, OSError, TimeoutError, ValueError) as exc:
         typer.echo(f"apollo: rule error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     records: list[dict[str, object]] = [
         {
-            "rule_id": r.rule_id,
-            "event_type": r.event_type,
-            "severity": r.severity.value,
-            "mitre": ",".join(r.mitre_attack),
-            "title": r.title,
+            "rule_id": rule.rule_id,
+            "event_type": rule.event_type,
+            "severity": rule.severity.value,
+            "mitre": ",".join(rule.mitre_attack),
+            "title": rule.title,
         }
-        for r in rule_set
+        for rule in rule_set
     ]
     columns = ["rule_id", "event_type", "severity", "mitre", "title"]
     typer.echo(render(records, columns, output_format, title=f"Apollo rules ({len(rule_set)})"))

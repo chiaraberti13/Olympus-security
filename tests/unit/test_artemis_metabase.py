@@ -6,6 +6,7 @@ from pathlib import Path
 from olympus.artemis.http import HttpClientError, HttpResponse
 from olympus.artemis.metabase import CVE_ID, detect_metabase
 from olympus.core.enums import Severity
+from olympus.core.execution import ExecutionPolicy
 from olympus.core.models import Finding
 
 ASSET = "AST-2026-00001"
@@ -64,7 +65,15 @@ def _properties(url_base: str, tag: str) -> dict[str, HttpResponse]:
 
 
 def _run(tmp_path: Path, transport: _Transport) -> list[Finding]:
-    return detect_metabase(ASSET, BASE, _scope(tmp_path), tmp_path / "log", _Resolver(), transport)
+    return detect_metabase(
+        ASSET,
+        BASE,
+        _scope(tmp_path),
+        tmp_path / "log",
+        _Resolver(),
+        transport,
+        policy=ExecutionPolicy(authorized=True, timeout_seconds=5.0, deadline_seconds=60.0),
+    )
 
 
 def test_flags_affected_version_as_critical(tmp_path: Path) -> None:

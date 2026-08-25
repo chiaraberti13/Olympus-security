@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
+from olympus.core.models import ScanJob
+
 
 class AssessmentState(StrEnum):
     """Lifecycle of a whole assessment."""
@@ -86,6 +88,19 @@ class Job:
         """Return ``True`` if the job can no longer transition."""
         return self.state in _JOB_TERMINAL
 
+    def to_contract(self, assessment_id: str) -> ScanJob:
+        """Return the versioned shared representation persisted with job results."""
+        return ScanJob(
+            job_id=self.job_id,
+            assessment_id=assessment_id,
+            adapter=self.adapter,
+            target_kind=self.target_kind,
+            target_value=self.target_value,
+            state=self.state.value,
+            error_code=self.error_code,
+            result_id=self.result_id,
+        )
+
 
 @dataclass(frozen=True)
 class Assessment:
@@ -97,8 +112,9 @@ class Assessment:
     jobs: tuple[Job, ...] = field(default_factory=tuple)
 
 
-def advance_job(job: Job, target: JobState, *, error_code: str | None = None,
-                result_id: str | None = None) -> Job:
+def advance_job(
+    job: Job, target: JobState, *, error_code: str | None = None, result_id: str | None = None
+) -> Job:
     """Return ``job`` moved to ``target`` state, or raise :class:`TransitionError`."""
     if job.state in _JOB_TERMINAL:
         raise TransitionError(f"job {job.job_id} is terminal ({job.state})")

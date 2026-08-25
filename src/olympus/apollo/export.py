@@ -1,12 +1,16 @@
 """Atomic Apollo alert export."""
 
 import json
+import os
+import tempfile
+from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
 
 from olympus.core.models import Alert
 
 
-def export_alerts(alerts: list[Alert], output: Path) -> None:
+def export_alerts(alerts: Sequence[Alert], output: Path) -> None:
     """Write core-compatible alerts as a versioned document."""
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -14,6 +18,17 @@ def export_alerts(alerts: list[Alert], output: Path) -> None:
         "schema_version": "1.0.0",
         "alerts": [alert.model_dump(mode="json") for alert in alerts],
     }
-    temporary = output.with_suffix(f"{output.suffix}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(output)
+    content = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(output)
+    except BaseException:
+        with suppress(OSError):
+            os.close(descriptor)
+        temporary.unlink(missing_ok=True)
+        raise

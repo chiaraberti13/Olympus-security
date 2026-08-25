@@ -19,6 +19,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from olympus.core.contracts import validate_contract_header
+from olympus.core.models import Asset, Finding, ScanJob
+
 # Resource-safety defaults (a safeguard against runtime resource exhaustion, not
 # a development constraint). These are intentionally generous and can be raised
 # freely — they exist only to keep a single plan from exhausting the host by
@@ -36,6 +39,10 @@ TargetKind = Literal["domain", "url"]
 
 class PlanValidationError(ValueError):
     """Raised when plan input cannot be turned into a valid :class:`AssessmentPlan`."""
+
+
+class ResultValidationError(ValueError):
+    """Raised when a stored Athena result violates its versioned contract."""
 
 
 class _StrictModel(BaseModel):
@@ -112,7 +119,7 @@ class AssessmentPlan(_StrictModel):
     """The complete, immutable description of one assessment."""
 
     schema_name: Literal["olympus.athena.plan"] = "olympus.athena.plan"
-    schema_version: Literal[1] = 1
+    schema_version: Literal["1.0.0"] = "1.0.0"
     engagement_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     targets: tuple[Target, ...] = Field(min_length=1, max_length=MAX_TARGETS)
@@ -137,9 +144,7 @@ class AssessmentPlan(_StrictModel):
 
     def canonical_json(self) -> str:
         """Return the deterministic JSON encoding used for digesting and storage."""
-        return json.dumps(
-            self.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-        )
+        return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
     def digest(self) -> str:
         """Return the SHA-256 digest of the plan's canonical encoding."""
@@ -153,6 +158,21 @@ class AssessmentPlan(_StrictModel):
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+class AssessmentResult(_StrictModel):
+    """Normalized, versioned output from one Athena scan job."""
+
+    schema_name: Literal["olympus.athena.result"] = "olympus.athena.result"
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    assessment_id: str = Field(min_length=1)
+    job: ScanJob
+    assets: tuple[Asset, ...] = ()
+    findings: tuple[Finding, ...] = ()
+
+    def canonical_json(self) -> str:
+        """Return a deterministic storage encoding."""
+        return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+
 def load_plan(raw: object) -> AssessmentPlan:
     """Validate ``raw`` (already-parsed JSON) into an :class:`AssessmentPlan`.
 
@@ -161,7 +181,27 @@ def load_plan(raw: object) -> AssessmentPlan:
     """
     if not isinstance(raw, dict):
         raise PlanValidationError("plan must be a JSON object")
+    candidate = dict(raw)
+    # Explicit compatibility adapter for plans persisted before the ecosystem
+    # standardized every contract on Semantic Versioning.
+    if "schema_name" not in candidate and "schema_version" not in candidate:
+        candidate["schema_name"] = "olympus.athena.plan"
+        candidate["schema_version"] = "1.0.0"
+    if candidate.get("schema_version") == 1:
+        candidate["schema_version"] = "1.0.0"
     try:
-        return AssessmentPlan.model_validate(raw)
+        validate_contract_header(candidate, schema_name="olympus.athena.plan")
+        return AssessmentPlan.model_validate(candidate)
     except ValueError as exc:
         raise PlanValidationError(str(exc)) from exc
+
+
+def load_result(raw: object) -> AssessmentResult:
+    """Validate a stored job result and its nested shared contracts."""
+    if not isinstance(raw, dict):
+        raise ResultValidationError("assessment result must be a JSON object")
+    try:
+        validate_contract_header(raw, schema_name="olympus.athena.result")
+        return AssessmentResult.model_validate(raw)
+    except ValueError as exc:
+        raise ResultValidationError(str(exc)) from exc

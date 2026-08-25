@@ -1,0 +1,58 @@
+# Vulcan bounded aggregation and reporting
+
+Vulcan is the offline reporting capstone. One application service loads shared
+producer contracts, applies exact deduplication and severity filtering, builds
+one canonical `olympus.security-report`, and renders JSON, Markdown and HTML
+from that same timestamped model.
+
+## Accepted inputs
+
+Vulcan validates complete versioned envelopes and every nested object for:
+
+- Argus assets and fronting results;
+- Athena assessment results;
+- Helios finding and observation/finding results;
+- Apollo alert collections;
+- existing Olympus security reports;
+- direct versioned `Asset`, `Finding`, and `Alert` objects.
+
+The original bare array or bare single-object forms remain one explicit legacy
+adapter. Unsupported/wrong schemas, unknown envelope fields, incompatible
+versions, symlinks, devices, malformed JSON and invalid nested objects fail.
+Errors omit raw Pydantic input values.
+
+Per-file bytes/items, aggregate bytes/items, file count, output bytes and the
+overall deadline are finite. Defaults are 50 MB per file, 200 MB total input,
+100 files, 100,000 items per file, 200,000 total items, 100 MB per output, and a
+120-second report deadline. Input/output overlaps and duplicate output paths
+fail before writing.
+
+## Provenance and rendering
+
+Assets, findings and alerts are deduplicated only when the same stable ID has
+exactly the same contract. A conflicting repeated ID is an error; different
+records with similar titles are retained, so evidence/remediation is never
+silently lost. When an asset inventory is supplied, every finding must refer to
+one of its asset IDs.
+
+JSON, Markdown and self-contained HTML include assets, ranked findings and
+alerts. Alert rule IDs and MITRE ATT&CK techniques survive the Apollo-to-report
+path. HTML escapes every untrusted value and has no external assets; Markdown
+collapses control whitespace and escapes active markup characters. Each file
+uses a unique fsynced atomic replacement.
+
+```bash
+olympus vulcan rank --findings helios-findings.json --format json
+
+olympus vulcan report --engagement ENG-2026-001 \
+  --assets argus-assets.json \
+  --findings helios-findings.json \
+  --alerts apollo-alerts.json \
+  --output report.json --markdown report.md --html report.html
+```
+
+Supplying JSON plus optional Markdown/HTML is prevalidated and rendered fully
+before the first write. The individual atomic replacements are durable, but a
+filesystem failure between separate output replacements cannot provide a
+cross-file transaction; the canonical JSON report remains the machine source
+of truth.

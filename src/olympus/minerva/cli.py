@@ -1,25 +1,39 @@
-"""Command-line interface for Minerva incident response workflows."""
+"""Command-line presentation for bounded Minerva application workflows."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import typer
-from pydantic import ValidationError
 
-from olympus.core.models import Evidence
+from olympus.core.contracts import ContractCompatibilityError
+from olympus.core.execution import CancellationRequested, ExecutionPolicyError
 from olympus.core.output import OutputFormat, render
-from olympus.minerva.custody import (
-    CustodyAction,
-    CustodyIntegrityError,
-    append_entry,
-    load_ledger,
+from olympus.minerva.application import (
+    DEFAULT_MAX_EVIDENCE_BYTES,
+    MinervaApplicationService,
+    MinervaLedgerRequest,
+    MinervaRecordRequest,
+    MinervaTriageRequest,
 )
-from olympus.minerva.triage import export_incident, load_alerts, triage_alerts
+from olympus.minerva.custody import (
+    DEFAULT_MAX_ENTRIES,
+    DEFAULT_MAX_LEDGER_BYTES,
+    CustodyAction,
+)
+from olympus.minerva.triage import DEFAULT_MAX_ALERT_BYTES, DEFAULT_MAX_ALERTS, export_incident
 
 app = typer.Typer(help="Minerva — incident response and DFIR.", no_args_is_help=True)
 DEFAULT_LEDGER = Path("examples/output/minerva-custody.json")
 DEFAULT_INCIDENT = Path("examples/output/minerva-incident.json")
+_APPLICATION_ERRORS = (
+    CancellationRequested,
+    ContractCompatibilityError,
+    ExecutionPolicyError,
+    OSError,
+    TimeoutError,
+    ValueError,
+)
 
 
 @app.command()
@@ -28,12 +42,25 @@ def triage(
     output: Path = typer.Option(DEFAULT_INCIDENT, "--output"),
     title: str = typer.Option(..., "--title"),
     owner: str | None = typer.Option(None, "--owner"),
+    max_alert_bytes: int = typer.Option(DEFAULT_MAX_ALERT_BYTES, "--max-alert-bytes"),
+    max_alerts: int = typer.Option(DEFAULT_MAX_ALERTS, "--max-alerts"),
+    deadline: float = typer.Option(60.0, "--deadline"),
 ) -> None:
-    """Create a normalized Incident from a validated Apollo alert export."""
+    """Create a stable Incident from one strict, bounded Apollo alert export."""
     try:
-        incident = triage_alerts(load_alerts(alerts), title, owner)
+        incident = MinervaApplicationService().triage(
+            MinervaTriageRequest(
+                alerts_path=alerts,
+                title=title,
+                owner=owner,
+                excluded_paths=(output,),
+                max_alert_bytes=max_alert_bytes,
+                max_alerts=max_alerts,
+                deadline_seconds=deadline,
+            )
+        )
         export_incident(incident, output)
-    except (OSError, ValueError, ValidationError) as exc:
+    except _APPLICATION_ERRORS as exc:
         typer.echo(f"minerva: triage error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     typer.echo(f"minerva: incident {incident.incident_id} written to {output}")
@@ -45,26 +72,56 @@ def record(
     ledger: Path,
     actor: str = typer.Option(..., "--actor"),
     action: CustodyAction = typer.Option(..., "--action"),
+    max_evidence_bytes: int = typer.Option(DEFAULT_MAX_EVIDENCE_BYTES, "--max-evidence-bytes"),
+    max_ledger_bytes: int = typer.Option(DEFAULT_MAX_LEDGER_BYTES, "--max-ledger-bytes"),
+    max_entries: int = typer.Option(DEFAULT_MAX_ENTRIES, "--max-entries"),
+    deadline: float = typer.Option(60.0, "--deadline"),
 ) -> None:
-    """Append a custody event after verifying the complete existing chain."""
+    """Append an evidence-digest-anchored event after verifying the complete chain."""
     try:
-        item = Evidence.model_validate_json(evidence.read_text(encoding="utf-8"))
-        entry = append_entry(ledger, item, action, actor)
-    except (OSError, ValidationError, CustodyIntegrityError) as exc:
+        entry = MinervaApplicationService().record(
+            MinervaRecordRequest(
+                evidence_path=evidence,
+                ledger_path=ledger,
+                actor=actor,
+                action=action,
+                max_evidence_bytes=max_evidence_bytes,
+                max_ledger_bytes=max_ledger_bytes,
+                max_entries=max_entries,
+                deadline_seconds=deadline,
+            )
+        )
+    except _APPLICATION_ERRORS as exc:
         typer.echo(f"minerva: custody error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    typer.echo(f"minerva: recorded custody sequence {entry.sequence}")
+    typer.echo(
+        f"minerva: recorded custody sequence {entry.sequence} "
+        f"for {entry.evidence_id} sha256={entry.evidence_sha256}"
+    )
 
 
 @app.command()
-def verify(ledger: Path) -> None:
-    """Verify every link in an existing custody ledger."""
+def verify(
+    ledger: Path,
+    max_ledger_bytes: int = typer.Option(DEFAULT_MAX_LEDGER_BYTES, "--max-ledger-bytes"),
+    max_entries: int = typer.Option(DEFAULT_MAX_ENTRIES, "--max-entries"),
+    deadline: float = typer.Option(60.0, "--deadline"),
+) -> None:
+    """Verify every hash, digest, state and timestamp in an existing ledger."""
     try:
-        entries = load_ledger(ledger)
-    except (OSError, ValidationError, CustodyIntegrityError) as exc:
+        outcome = MinervaApplicationService().inspect(
+            MinervaLedgerRequest(ledger, max_ledger_bytes, max_entries, deadline)
+        )
+    except _APPLICATION_ERRORS as exc:
         typer.echo(f"minerva: custody integrity failure: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    typer.echo(f"minerva: custody verified ({len(entries)} entries)")
+    qualifier = "evidence-anchored" if outcome.evidence_anchored else "legacy, not digest-anchored"
+    typer.echo(
+        f"minerva: custody {outcome.schema_version} verified "
+        f"({len(outcome.entries)} entries; {qualifier})"
+    )
+    if not outcome.evidence_anchored:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -73,11 +130,16 @@ def timeline(
     output_format: OutputFormat = typer.Option(
         OutputFormat.TABLE, "--format", help="Render as table (human) or json (machine)."
     ),
+    max_ledger_bytes: int = typer.Option(DEFAULT_MAX_LEDGER_BYTES, "--max-ledger-bytes"),
+    max_entries: int = typer.Option(DEFAULT_MAX_ENTRIES, "--max-entries"),
+    deadline: float = typer.Option(60.0, "--deadline"),
 ) -> None:
-    """Print the chain-of-custody timeline of a verified ledger, in order."""
+    """Print a verified custody timeline, including evidence digest provenance."""
     try:
-        entries = load_ledger(ledger)
-    except (OSError, ValidationError, CustodyIntegrityError) as exc:
+        outcome = MinervaApplicationService().inspect(
+            MinervaLedgerRequest(ledger, max_ledger_bytes, max_entries, deadline)
+        )
+    except _APPLICATION_ERRORS as exc:
         typer.echo(f"minerva: custody integrity failure: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     records: list[dict[str, object]] = [
@@ -87,8 +149,14 @@ def timeline(
             "action": entry.action.value,
             "actor": entry.actor,
             "evidence_id": entry.evidence_id,
+            "evidence_sha256": getattr(entry, "evidence_sha256", None),
         }
-        for entry in entries
+        for entry in outcome.entries
     ]
-    columns = ["seq", "occurred_at", "action", "actor", "evidence_id"]
-    typer.echo(render(records, columns, output_format, title=f"Custody timeline ({len(entries)})"))
+    columns = ["seq", "occurred_at", "action", "actor", "evidence_id", "evidence_sha256"]
+    typer.echo(
+        render(records, columns, output_format, title=f"Custody timeline ({len(records)})")
+    )
+    if not outcome.evidence_anchored:
+        typer.echo("minerva: legacy ledger has no evidence digest anchors", err=True)
+        raise typer.Exit(code=1)

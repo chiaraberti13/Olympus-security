@@ -3,26 +3,24 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
 
 from olympus.argus.accounts import (
     AccountIntel,
-    AccountScanResult,
     SiteRegistryError,
-    build_account_assets,
-    build_account_finding,
-    enumerate_accounts,
     load_site_registry,
+    validate_public_site_url,
 )
 from olympus.argus.accounts_scope import (
     AccountOutOfScopeError,
     AccountScopeError,
-    enforce_account_scope,
 )
 from olympus.argus.application import (
+    AccountEnumerationRequest,
+    AccountEnumerationService,
+    ArgusDiagnosticsService,
     AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
@@ -33,6 +31,17 @@ from olympus.argus.application import (
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
+    InvestigationRequest,
+    InvestigationService,
+    IpProfileRequest,
+    IpProfileService,
+    MacAnalysisRequest,
+    MacAnalysisService,
+    MyIpDiscoveryRequest,
+    MyIpDiscoveryService,
+    PhoneProfileRequest,
+    PhoneProfileService,
+    SnapshotDiffService,
     WebReconRequest,
     WebReconService,
     WhoisLookupRequest,
@@ -41,7 +50,6 @@ from olympus.argus.application import (
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
-from olympus.argus.diff import diff_snapshots
 from olympus.argus.dns_records import (
     RECORD_TYPES,
     DnsRecordError,
@@ -53,11 +61,8 @@ from olympus.argus.email_osint import (
     export_email_intel,
 )
 from olympus.argus.enrichment import (
-    EnrichmentError,
     HudsonRockBreachClient,
-    MessagingPresence,
     NumverifyClient,
-    PhoneEnrichment,
     RapidApiMessagingClient,
 )
 from olympus.argus.fronting import (
@@ -67,47 +72,30 @@ from olympus.argus.fronting import (
 )
 from olympus.argus.graph import EntityType, export_investigation
 from olympus.argus.ip_osint import (
-    IpApiClient,
-    IpGeo,
-    IpGeoError,
-    IpIntel,
     IpParseError,
-    analyze_ip,
-    build_ip_asset,
-    build_ip_findings,
+    IpWhoisClient,
     export_ip_intel,
 )
 from olympus.argus.ip_scope import (
     IpOutOfScopeError,
     IpScopeError,
-    enforce_ip_scope,
 )
 from olympus.argus.mac import (
-    MacIntel,
     MacParseError,
-    analyze_mac,
-    build_mac_asset,
-    build_mac_findings,
     export_mac_intel,
-    lookup_vendor,
 )
-from olympus.argus.myip import MyIpError, discover, export_myip
+from olympus.argus.mac_scope import MacOutOfScopeError, MacScopeError
+from olympus.argus.myip import MyIpError, export_myip
 from olympus.argus.phone import (
-    PhoneIntel,
     PhoneParseError,
-    analyze_phone,
-    build_phone_asset,
-    build_phone_findings,
     export_phone_intel,
 )
 from olympus.argus.phone_scope import (
     PhoneOutOfScopeError,
     PhoneScopeError,
-    enforce_phone_scope,
 )
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError
-from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.argus.web import (
     WebReconError,
     export_web_intel,
@@ -137,6 +125,9 @@ DEFAULT_ACCOUNT_BLOCK_LOG_PATH = Path("examples/output/argus-accounts-blocked.lo
 
 DEFAULT_IP_SCOPE_PATH = Path("examples/input/argus-ip-scope.json")
 DEFAULT_IP_BLOCK_LOG_PATH = Path("examples/output/argus-ip-blocked.log")
+
+DEFAULT_MAC_SCOPE_PATH = Path("examples/input/argus-mac-scope.json")
+DEFAULT_MAC_BLOCK_LOG_PATH = Path("examples/output/argus-mac-blocked.log")
 
 _IP_DISCLAIMER = (
     "AUTHORIZED USE ONLY — --geo queries a third-party geolocation service about the target "
@@ -244,98 +235,17 @@ def fronting(
 def diff_command(before: Path, after: Path) -> None:
     """Compare two Argus asset snapshots without performing network activity."""
     try:
-        result = diff_snapshots(before, after)
+        result = SnapshotDiffService().run(before, after)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         typer.echo(f"argus: diff error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     typer.echo(json.dumps(result.__dict__, indent=2, sort_keys=True))
 
 
-
-
-def _collect_enrichment(e164: str, *, enrich: bool, breach: bool) -> PhoneEnrichment | None:
-    """Run the opt-in carrier/breach lookups and merge them into one result."""
-    if not (enrich or breach):
-        return None
-    client = UrllibHttpClient()
-    carrier_name, line_type, breach_count = "", "", 0
-    breach_sources: tuple[str, ...] = ()
-
-    if enrich:
-        numverify = NumverifyClient.from_env(client)
-        if numverify is None:
-            typer.echo(
-                "argus: warning: --enrich skipped (set OLYMPUS_NUMVERIFY_KEY to enable)", err=True
-            )
-        else:
-            try:
-                result = numverify.enrich(e164)
-                carrier_name, line_type = result.carrier, result.line_type
-            except EnrichmentError as exc:
-                typer.echo(f"argus: warning: carrier enrichment failed: {exc}", err=True)
-
-    if breach:
-        try:
-            breach_result = HudsonRockBreachClient(client).enrich(e164)
-            breach_count = breach_result.breach_count
-            breach_sources = breach_result.breach_sources
-        except EnrichmentError as exc:
-            typer.echo(f"argus: warning: breach lookup failed: {exc}", err=True)
-
-    return PhoneEnrichment(
-        carrier=carrier_name,
-        line_type=line_type,
-        breach_count=breach_count,
-        breach_sources=breach_sources,
-    )
-
-
-def _collect_messaging(e164: str, *, messaging: bool) -> MessagingPresence | None:
-    """Run the opt-in messaging-presence lookup, if requested and configured."""
-    if not messaging:
-        return None
-    client = UrllibHttpClient()
-    messaging_client = RapidApiMessagingClient.from_env(client)
-    if messaging_client is None:
-        typer.echo(
-            "argus: warning: --messaging skipped (set OLYMPUS_RAPIDAPI_KEY to enable)", err=True
-        )
-        return None
-    try:
-        return messaging_client.lookup(e164)
-    except EnrichmentError as exc:
-        typer.echo(f"argus: warning: messaging lookup failed: {exc}", err=True)
-        return None
-
-
 def _read_targets(path: Path) -> list[str]:
     """Read one target per line, skipping blanks and ``#`` comments."""
     lines = path.read_text(encoding="utf-8").splitlines()
     return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
-
-
-def _profile_number(
-    number: str,
-    region: str | None,
-    scope: Path,
-    log: Path,
-    *,
-    wants_real: bool,
-    enrich: bool,
-    breach: bool,
-    messaging: bool,
-) -> PhoneIntel:
-    """Profile one number: parse, enforce scope, and (optionally) enrich."""
-    report = analyze_phone(number, region)
-    enforce_phone_scope(report.e164 or number, scope, log)
-    enrichment_result: PhoneEnrichment | None = None
-    messaging_result: MessagingPresence | None = None
-    if wants_real and report.e164 is not None:
-        enrichment_result = _collect_enrichment(report.e164, enrich=enrich, breach=breach)
-        messaging_result = _collect_messaging(report.e164, messaging=messaging)
-    asset = build_phone_asset(report)
-    findings = build_phone_findings(asset.asset_id, report, enrichment_result, messaging_result)
-    return PhoneIntel(report=report, asset=asset, findings=findings)
 
 
 @app.command()
@@ -352,9 +262,7 @@ def phone(
     scope: Path = typer.Option(
         DEFAULT_PHONE_SCOPE_PATH, "--scope", help="JSON scope file of authorized E.164 prefixes."
     ),
-    log: Path = typer.Option(
-        DEFAULT_PHONE_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."
-    ),
+    log: Path = typer.Option(DEFAULT_PHONE_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."),
     enrich: bool = typer.Option(
         False, "--enrich", help="Carrier/line-type via Numverify (needs OLYMPUS_NUMVERIFY_KEY)."
     ),
@@ -379,64 +287,62 @@ def phone(
         typer.echo("argus: provide exactly one of --number or --input", err=True)
         raise typer.Exit(code=2)
 
-    wants_real = enrich or breach or messaging
-    if wants_real and not i_am_authorized:
+    http = UrllibHttpClient.from_config()
+    service = PhoneProfileService(
+        carrier_client=NumverifyClient.from_env(http) if enrich else None,
+        breach_client=HudsonRockBreachClient(http) if breach else None,
+        messaging_client=RapidApiMessagingClient.from_env(http) if messaging else None,
+    )
+
+    def request_for(target: str) -> PhoneProfileRequest:
+        return PhoneProfileRequest(
+            number=target,
+            region=region,
+            scope_path=scope,
+            audit_log_path=log,
+            enrich=enrich,
+            breach=breach,
+            messaging=messaging,
+            authorized=i_am_authorized,
+        )
+
+    try:
+        if number is not None:
+            outcome = service.run(request_for(number))
+            for warning in outcome.warnings:
+                typer.echo(f"argus: warning: {warning}", err=True)
+            typer.echo(json.dumps(outcome.intel.to_dict(), indent=2, sort_keys=True))
+            if output is not None:
+                export_phone_intel(outcome.intel, output)
+                typer.echo(f"argus: wrote phone intel to {output}", err=True)
+            return
+
+        assert input_file is not None  # noqa: S101 (guaranteed by exactly-one check)
+        batch = service.run_many(tuple(request_for(target) for target in _read_targets(input_file)))
+    except AuthorizationRequiredError as exc:
         typer.echo(f"argus: {_AUTH_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
+        raise typer.Exit(code=4) from exc
+    except PhoneParseError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except PhoneScopeError as exc:
+        typer.echo(f"argus: phone scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except PhoneOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: could not read phone input: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
-    if number is not None:
-        try:
-            intel = _profile_number(
-                number, region, scope, log,
-                wants_real=wants_real, enrich=enrich, breach=breach, messaging=messaging,
-            )
-        except PhoneParseError as exc:
-            typer.echo(f"argus: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except PhoneScopeError as exc:
-            typer.echo(f"argus: phone scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except PhoneOutOfScopeError as exc:
-            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-            raise typer.Exit(code=3) from exc
-        typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
-        if output is not None:
-            export_phone_intel(intel, output)
-            typer.echo(f"argus: wrote phone intel to {output}", err=True)
-        return
-
-    # Batch mode: skip unparseable / out-of-scope numbers, never abort the run.
-    assert input_file is not None  # noqa: S101 (guaranteed by the exactly-one check above)
-    intels: list[PhoneIntel] = []
-    for target in _read_targets(input_file):
-        try:
-            intels.append(
-                _profile_number(
-                    target, region, scope, log,
-                    wants_real=wants_real, enrich=enrich, breach=breach, messaging=messaging,
-                )
-            )
-        except PhoneParseError:
-            typer.echo(f"argus: skipping unparseable number {target!r}", err=True)
-        except PhoneScopeError as exc:
-            typer.echo(f"argus: phone scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except PhoneOutOfScopeError:
-            typer.echo(f"argus: skipping out-of-scope number {target!r} (logged)", err=True)
-
-    payload = [intel.to_dict() for intel in intels]
+    for warning in batch.warnings:
+        typer.echo(f"argus: {warning}", err=True)
+    payload = [intel.to_dict() for intel in batch.intels]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    typer.echo(f"argus: profiled {len(intels)} number(s)", err=True)
-
-
-def _build_account_intel(result: AccountScanResult) -> AccountIntel:
-    """Turn a raw scan into assets + a summary finding bundle."""
-    assets = build_account_assets(result)
-    finding = build_account_finding(assets[0].asset_id, result) if assets else None
-    return AccountIntel(result=result, assets=assets, findings=[finding] if finding else [])
+    typer.echo(f"argus: profiled {len(batch.intels)} number(s)", err=True)
 
 
 @app.command()
@@ -453,9 +359,7 @@ def accounts(
     log: Path = typer.Option(
         DEFAULT_ACCOUNT_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."
     ),
-    sites: Path = typer.Option(
-        DEFAULT_SITES_PATH, "--sites", help="JSON site registry to check."
-    ),
+    sites: Path = typer.Option(DEFAULT_SITES_PATH, "--sites", help="JSON site registry to check."),
     metadata: bool = typer.Option(
         False, "--metadata", help="Also extract public profile metadata (needs --i-am-authorized)."
     ),
@@ -480,37 +384,57 @@ def accounts(
         typer.echo("argus: provide exactly one of --username or --input", err=True)
         raise typer.Exit(code=2)
 
-    if metadata and not i_am_authorized:
-        typer.echo(f"argus: {_METADATA_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
-
     try:
         specs = load_site_registry(sites)
-    except SiteRegistryError as exc:
+        client = UrllibHttpClient.from_config(
+            min_interval=rate if rate > 0.0 else None,
+            redirect_validator=validate_public_site_url,
+        )
+        service = AccountEnumerationService(tuple(specs), client)
+
+        def request_for(handle: str) -> AccountEnumerationRequest:
+            return AccountEnumerationRequest(
+                handle=handle,
+                scope_path=scope,
+                audit_log_path=log,
+                metadata=metadata,
+                authorized=i_am_authorized,
+                concurrency=concurrency,
+            )
+
+        intels: tuple[AccountIntel, ...]
+        if username is not None:
+            outcome = service.run(request_for(username))
+            intels = (outcome.intel,)
+        else:
+            assert input_file is not None  # noqa: S101 (guaranteed by exactly-one check)
+            batch = service.run_many(
+                tuple(request_for(handle) for handle in _read_targets(input_file))
+            )
+            intels = batch.intels
+            for warning in batch.warnings:
+                typer.echo(f"argus: {warning}", err=True)
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_METADATA_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    except (SiteRegistryError, ValueError) as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
+    except AccountScopeError as exc:
+        typer.echo(f"argus: account scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except AccountOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: could not read account input: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
-    client = UrllibHttpClient.from_config(min_interval=rate if rate > 0.0 else None)
-    handles = [username] if username is not None else _read_targets(input_file)  # type: ignore[arg-type]
-    intels: list[AccountIntel] = []
-    for handle in handles:
-        try:
-            enforce_account_scope(handle, scope, log)
-        except AccountScopeError as exc:
-            typer.echo(f"argus: account scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except AccountOutOfScopeError as exc:
-            if username is not None:
-                typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-                raise typer.Exit(code=3) from exc
-            typer.echo(f"argus: skipping out-of-scope handle {handle!r} (logged)", err=True)
-            continue
-        result = enumerate_accounts(
-            handle, specs, client, want_metadata=metadata, concurrency=concurrency
-        )
-        intels.append(_build_account_intel(result))
+    for intel in intels:
         typer.echo(
-            f"argus: '{handle}' found on {len(result.existing())}/{len(specs)} site(s)", err=True
+            f"argus: '{intel.result.handle}' found on "
+            f"{len(intel.result.existing())}/{len(specs)} site(s)",
+            err=True,
         )
 
     if username is not None:
@@ -524,21 +448,6 @@ def accounts(
         typer.echo(f"argus: wrote account intel to {output}", err=True)
 
 
-def _profile_ip(ip: str, scope: Path, log: Path, *, geo: bool) -> IpIntel:
-    """Profile one IP: classify offline, enforce scope, and optionally geolocate."""
-    report = analyze_ip(ip)
-    enforce_ip_scope(report.ip, scope, log)
-    geo_result: IpGeo | None = None
-    if geo:
-        try:
-            geo_result = IpApiClient(UrllibHttpClient()).geolocate(report.ip)
-        except IpGeoError as exc:
-            typer.echo(f"argus: warning: geolocation failed for {report.ip}: {exc}", err=True)
-    asset = build_ip_asset(report, geo_result)
-    findings = build_ip_findings(asset.asset_id, report, geo_result)
-    return IpIntel(report=report, asset=asset, findings=findings)
-
-
 @app.command()
 def ip(
     ip_address: str | None = typer.Option(None, "--ip", help="IPv4/IPv6 address to profile."),
@@ -550,7 +459,7 @@ def ip(
     ),
     log: Path = typer.Option(DEFAULT_IP_BLOCK_LOG_PATH, "--log", help="Out-of-scope audit log."),
     geo: bool = typer.Option(
-        False, "--geo", help="Geolocation/ASN via ip-api.com (third-party, keyless)."
+        False, "--geo", help="Geolocation/ASN via encrypted ipwho.is (third-party, keyless)."
     ),
     i_am_authorized: bool = typer.Option(
         False, "--i-am-authorized", help="Confirm authorization for the third-party geo lookup."
@@ -566,47 +475,55 @@ def ip(
     if (ip_address is None) == (input_file is None):
         typer.echo("argus: provide exactly one of --ip or --input", err=True)
         raise typer.Exit(code=2)
-    if geo and not i_am_authorized:
+    http = UrllibHttpClient.from_config()
+    service = IpProfileService(IpWhoisClient(http) if geo else None)
+
+    def request_for(target: str) -> IpProfileRequest:
+        return IpProfileRequest(
+            ip_address=target,
+            scope_path=scope,
+            audit_log_path=log,
+            geolocate=geo,
+            authorized=i_am_authorized,
+        )
+
+    try:
+        if ip_address is not None:
+            outcome = service.run(request_for(ip_address))
+            for warning in outcome.warnings:
+                typer.echo(f"argus: warning: {warning}", err=True)
+            typer.echo(json.dumps(outcome.intel.to_dict(), indent=2, sort_keys=True))
+            if output is not None:
+                export_ip_intel(outcome.intel, output)
+                typer.echo(f"argus: wrote IP intel to {output}", err=True)
+            return
+
+        assert input_file is not None  # noqa: S101 (guaranteed by exactly-one check)
+        batch = service.run_many(tuple(request_for(target) for target in _read_targets(input_file)))
+    except AuthorizationRequiredError as exc:
         typer.echo(f"argus: {_IP_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
+        raise typer.Exit(code=4) from exc
+    except IpParseError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except IpScopeError as exc:
+        typer.echo(f"argus: IP scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except IpOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: could not read IP input: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
-    if ip_address is not None:
-        try:
-            intel = _profile_ip(ip_address, scope, log, geo=geo)
-        except IpParseError as exc:
-            typer.echo(f"argus: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except IpScopeError as exc:
-            typer.echo(f"argus: IP scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except IpOutOfScopeError as exc:
-            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-            raise typer.Exit(code=3) from exc
-        typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
-        if output is not None:
-            export_ip_intel(intel, output)
-            typer.echo(f"argus: wrote IP intel to {output}", err=True)
-        return
-
-    assert input_file is not None  # noqa: S101 (guaranteed by the exactly-one check above)
-    intels: list[IpIntel] = []
-    for target in _read_targets(input_file):
-        try:
-            intels.append(_profile_ip(target, scope, log, geo=geo))
-        except IpParseError:
-            typer.echo(f"argus: skipping invalid IP {target!r}", err=True)
-        except IpScopeError as exc:
-            typer.echo(f"argus: IP scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except IpOutOfScopeError:
-            typer.echo(f"argus: skipping out-of-scope IP {target!r} (logged)", err=True)
-
-    payload = [intel.to_dict() for intel in intels]
+    for warning in batch.warnings:
+        typer.echo(f"argus: {warning}", err=True)
+    payload = [intel.to_dict() for intel in batch.intels]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    typer.echo(f"argus: profiled {len(intels)} IP(s)", err=True)
+    typer.echo(f"argus: profiled {len(batch.intels)} IP(s)", err=True)
 
 
 _INVESTIGATE_DISCLAIMER = (
@@ -615,19 +532,6 @@ _INVESTIGATE_DISCLAIMER = (
     "--i-am-authorized to confirm."
 )
 DEFAULT_INVESTIGATION_LOG = Path("examples/output/argus-investigate.log")
-
-
-def _log_investigation(name: str, seed_type: str, seed_value: str, log: Path) -> None:
-    entry = {
-        "timestamp": datetime.now(UTC).isoformat(),
-        "investigation": name,
-        "seed_type": seed_type,
-        "seed_value": seed_value,
-        "action": "investigation_started",
-    }
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
 
 @app.command()
@@ -641,6 +545,21 @@ def investigate(
     sites: Path = typer.Option(
         DEFAULT_SITES_PATH, "--sites", help="Site registry for username transforms."
     ),
+    domain_scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH,
+        "--domain-scope",
+        help="JSON scope for domain/host DNS and Certificate Transparency pivots.",
+    ),
+    ip_scope: Path = typer.Option(
+        DEFAULT_IP_SCOPE_PATH,
+        "--ip-scope",
+        help="JSON CIDR scope for optional IP geolocation pivots.",
+    ),
+    account_scope: Path = typer.Option(
+        DEFAULT_ACCOUNT_SCOPE_PATH,
+        "--account-scope",
+        help="JSON handle scope for public-account pivots.",
+    ),
     geo: bool = typer.Option(False, "--geo", help="Enable IP geolocation/ASN (third-party)."),
     log: Path = typer.Option(DEFAULT_INVESTIGATION_LOG, "--log", help="Investigation audit log."),
     i_am_authorized: bool = typer.Option(
@@ -652,33 +571,50 @@ def investigate(
     mermaid: Path | None = typer.Option(
         None, "--mermaid", help="If set, also write a Mermaid diagram of the graph."
     ),
-    dot: Path | None = typer.Option(
-        None, "--dot", help="If set, also write a Graphviz DOT graph."
-    ),
+    dot: Path | None = typer.Option(None, "--dot", help="If set, also write a Graphviz DOT graph."),
     graphml: Path | None = typer.Option(
         None, "--graphml", help="If set, also write a GraphML graph (Gephi/Neo4j/yEd)."
     ),
 ) -> None:
     """Build an OSINT investigation graph by pivoting from a seed entity (flowsint-style)."""
-    if not i_am_authorized:
-        typer.echo(f"argus: {_INVESTIGATE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4)
-
     try:
         site_specs = load_site_registry(sites)
-    except SiteRegistryError as exc:
-        typer.echo(f"argus: {exc}", err=True)
+        service = InvestigationService(
+            resolver=DnspythonResolver(),
+            ct_client=CrtShClient(),
+            http=UrllibHttpClient.from_config(redirect_validator=validate_public_site_url),
+            site_specs=tuple(site_specs),
+        )
+        outcome = service.run(
+            InvestigationRequest(
+                name=name,
+                seed_type=seed_type,
+                seed_value=seed_value,
+                depth=depth,
+                domain_scope_path=domain_scope,
+                ip_scope_path=ip_scope,
+                account_scope_path=account_scope,
+                audit_log_path=log,
+                geolocate=geo,
+                authorized=i_am_authorized,
+            )
+        )
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_INVESTIGATE_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    except (SiteRegistryError, ScopeError, IpScopeError, AccountScopeError, ValueError) as exc:
+        typer.echo(f"argus: investigation configuration error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except (OutOfScopeError, IpOutOfScopeError, AccountOutOfScopeError) as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except OSError as exc:
+        typer.echo(f"argus: investigation I/O failed: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    _log_investigation(name, seed_type.value, seed_value, log)
-    ctx = TransformContext(
-        resolver=DnspythonResolver(),
-        ct_client=CrtShClient(),
-        http=UrllibHttpClient.from_config(),
-        site_specs=site_specs,
-        geolocate=geo,
-    )
-    graph = run_investigation(name, seed_type, seed_value, ctx, depth=depth)
+    graph = outcome.graph
+    for warning in outcome.warnings:
+        typer.echo(f"argus: {warning}", err=True)
 
     typer.echo(json.dumps(graph.to_dict(), indent=2, sort_keys=True))
     export_investigation(graph, output)
@@ -708,6 +644,12 @@ _EMAIL_DISCLAIMER = (
     "consent. Re-run with --i-am-authorized to confirm."
 )
 
+_MAC_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — --vendor sends the target's OUI to macvendors.com. "
+    "Run it only within a documented engagement. Re-run with --i-am-authorized "
+    "and an OUI scope file to confirm."
+)
+
 
 @app.command()
 def email(
@@ -730,9 +672,7 @@ def email(
 ) -> None:
     """Analyze an email address offline; optionally run passive live enrichment."""
     try:
-        intel = EmailAnalysisService(
-            DnspythonResolver(), UrllibHttpClient.from_config()
-        ).run(
+        intel = EmailAnalysisService(DnspythonResolver(), UrllibHttpClient.from_config()).run(
             EmailAnalysisRequest(
                 address=address,
                 enrich=enrich,
@@ -765,21 +705,48 @@ def mac(
     vendor: bool = typer.Option(
         False, "--vendor", help="Resolve the OUI to a vendor via macvendors.com (network)."
     ),
+    scope: Path = typer.Option(
+        DEFAULT_MAC_SCOPE_PATH,
+        "--scope",
+        help="JSON scope file whose OUI allowlist authorizes the vendor lookup.",
+    ),
+    log: Path = typer.Option(
+        DEFAULT_MAC_BLOCK_LOG_PATH,
+        "--log",
+        help="Path to the out-of-scope MAC audit log.",
+    ),
+    i_am_authorized: bool = typer.Option(
+        False,
+        "--i-am-authorized",
+        help="Confirm documented authorization for the live vendor lookup.",
+    ),
     output: Path | None = typer.Option(
         None, "--output", help="If set, export the MAC-intel bundle as JSON to this path."
     ),
 ) -> None:
     """Classify a MAC address offline; optionally resolve its vendor from the OUI registry."""
     try:
-        report = analyze_mac(address)
+        intel = MacAnalysisService(UrllibHttpClient.from_config()).run(
+            MacAnalysisRequest(
+                address=address,
+                vendor=vendor,
+                authorized=i_am_authorized,
+                scope_path=scope,
+                audit_log_path=log,
+            )
+        )
     except MacParseError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-
-    vendor_name = lookup_vendor(report, UrllibHttpClient.from_config()) if vendor else None
-    asset = build_mac_asset(report, vendor_name)
-    findings = build_mac_findings(asset.asset_id, report)
-    intel = MacIntel(report=report, asset=asset, vendor=vendor_name, findings=findings)
+    except MacScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except MacOutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_MAC_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
     typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
     if output is not None:
         export_mac_intel(intel, output)
@@ -797,7 +764,8 @@ def myip(
 ) -> None:
     """Discover this machine's own public IP address (and optionally geolocate it)."""
     try:
-        result = discover(UrllibHttpClient.from_config(), geolocate=geo)
+        http = UrllibHttpClient.from_config()
+        result = MyIpDiscoveryService(http, http).run(MyIpDiscoveryRequest(geolocate=geo))
     except MyIpError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
@@ -936,12 +904,5 @@ def whois(
 @app.command()
 def doctor() -> None:
     """Diagnose Argus: required libraries and optional enrichment API keys."""
-    from olympus.integrations.diagnostics import Report, check_env_set, check_python_module
-
-    report = Report("argus doctor")
-    for module in ("dns", "phonenumbers"):
-        report.add(check_python_module(module, optional=False))
-    # Optional third-party enrichment keys (presence only, never the value).
-    for key in ("OLYMPUS_NUMVERIFY_KEY", "OLYMPUS_RAPIDAPI_KEY"):
-        report.add(check_env_set(key, optional=True, secret=True))
+    report = ArgusDiagnosticsService().run()
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))

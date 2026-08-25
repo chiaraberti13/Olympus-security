@@ -7,6 +7,9 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from olympus.core.execution import StructuredAuditRecord, append_structured_audit
 
 
 class ScopeError(ValueError):
@@ -31,7 +34,15 @@ def enforce_scope(
         raise ScopeError(f"invalid scope or target: {exc}") from exc
     if any(address in network for network in networks):
         return address
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as audit:
-        audit.write(f"{datetime.now(UTC).isoformat()} BLOCK target={address}\n")
+    append_structured_audit(
+        log_path,
+        StructuredAuditRecord(
+            timestamp=datetime.now(UTC).isoformat(),
+            execution_id=str(uuid4()),
+            action="helios.scope",
+            outcome="blocked",
+            target=str(address),
+            metadata={"reason": "address_not_allowed"},
+        ),
+    )
     raise OutOfScopeError(str(address))

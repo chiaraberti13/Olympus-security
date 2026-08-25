@@ -236,38 +236,38 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus argus scan --domain <d>` | passive DNS/MX/SPF/DMARC recon on an authorized domain |
 | `olympus argus fronting --domain <d>` | checks whether the domain sits behind a known CDN/WAF and whether a public subdomain leaks its origin IP |
 | `olympus argus diff <a> <b>` | compares two Argus asset snapshots, no network |
-| `olympus argus phone --number <n>` | profiles a phone number (offline + optional real enrichment) |
-| `olympus argus accounts --username <u>` | checks the handle's presence across a curated list of public sites |
-| `olympus argus ip --ip <ip>` | profiles an IP address (offline classification + optional geolocation) |
-| `olympus argus investigate --name <n>` | builds an OSINT investigation graph by pivoting from a seed entity (flowsint-style) |
+| `olympus argus phone --number <n>` | profiles an in-scope number offline; opt-in authorized enrichment is returned explicitly in `enrichment` / `messaging` and never runs without `--i-am-authorized` |
+| `olympus argus accounts --username <u>` | checks an in-scope handle through a validated HTTPS-only public-site registry; metadata requires explicit authorization |
+| `olympus argus ip --ip <ip>` | profiles an in-scope IP offline; authorized optional geolocation uses the encrypted `ipwho.is` endpoint and is returned explicitly in `geo` |
+| `olympus argus investigate --name <n>` | builds an authorized OSINT graph; every networked domain, IP, or username pivot is checked against its dedicated scope before lookup |
 | **Helios** — 🔴 network attack-surface mapping | |
-| `olympus helios scan <target>` | bounded, non-destructive TCP discovery, only after scope authorization |
+| `olympus helios scan <target>` | bounded, non-destructive TCP discovery; requires `--i-am-authorized` and CIDR scope before any connection |
 | **Artemis** — 🔴 web recon | |
-| `olympus artemis fetch --url <u>` | one scope-safe GET, prints metadata only |
-| `olympus artemis fingerprint --url <u>` | identifies the technology stack from one passive GET |
-| `olympus artemis content --url <u>` | real content/directory discovery on an authorized base URL |
-| `olympus artemis xss --url <u>` | non-destructive reflected-XSS test (marker reflection only) |
-| `olympus artemis metabase --url <u>` | non-exploitative check for CVE-2026-72898 exposure |
+| `olympus artemis fetch --url <u>` | one bounded scope-safe GET; requires `--i-am-authorized` and prints metadata only |
+| `olympus artemis fingerprint --url <u>` | identifies the technology stack from one authorized passive GET |
+| `olympus artemis content --url <u>` | real, authorized and rate/deadline-bounded content discovery |
+| `olympus artemis xss --url <u>` | authorized non-destructive reflected-XSS test (marker reflection only) |
+| `olympus artemis metabase --url <u>` | authorized non-exploitative check for CVE-2026-72898 exposure |
 | `olympus artemis check-scope --url <u>` | validates URL authorization without making any request |
 | **Proteus** — 🔴 authorized phishing simulation | |
-| `olympus proteus campaign --targets <f>` | builds a simulation campaign (unique token per in-scope target) |
+| `olympus proteus campaign --targets <f>` | requires confirmation; validates engagement, sender/recipient domains and HTTPS training origin, then writes owner-only versioned tokens |
 | `olympus proteus page --engagement <e>` | renders the training page a clicker lands on (captures nothing) |
 | `olympus proteus email --campaign <f> --token <t>` | renders the simulated lure email for one token |
 | `olympus proteus report --campaign <f>` | summarizes campaign click-through (a training metric, never secrets) |
 | **Hermes** — 🔵 secret & config scanner | |
-| `olympus hermes scan <path>` | scans a path (and optionally its Git history), emits masked SARIF |
+| `olympus hermes scan <path>` | bounded regular-text/Git-history scan with stable baselines and masked SARIF; missing, symlink and partial inputs never report clean |
 | **Apollo** — 🔵 detection engineering | |
-| `olympus apollo test <rule> <event>` | evaluates one rule against one event |
-| `olympus apollo run --rules <dir> --events <f>` | evaluates a whole rule set against an event stream (NDJSON) |
-| `olympus apollo rules --rules <dir>` | loads, validates and lists every rule in a directory |
+| `olympus apollo test <rule> <event>` | evaluates one versioned exact-match rule against one normalized event with bounded input/deadline |
+| `olympus apollo run --rules <dir> --events <f>` | streams versioned NDJSON through bounded rule/event/evaluation/alert limits; malformed records are reported as partial failure |
+| `olympus apollo rules --rules <dir>` | loads, bounds and validates a non-empty rule directory with unique IDs |
 | **Minerva** — 🔵 incident response & DFIR | |
-| `olympus minerva triage <alerts> --title <t>` | creates a normalized Incident from an Apollo alert export |
-| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | appends a custody event, after verifying the whole existing chain |
-| `olympus minerva verify <ledger>` | verifies every link of a custody chain |
-| `olympus minerva timeline <ledger>` | prints the chronological timeline of a verified chain |
+| `olympus minerva triage <alerts> --title <t>` | creates a stable Incident from a strict bounded Apollo export |
+| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | locks, verifies and appends a private custody 2.0 entry anchored to the evidence SHA-256 |
+| `olympus minerva verify <ledger>` | verifies hashes, digest identity, transitions and timestamps; missing chains fail |
+| `olympus minerva timeline <ledger>` | prints a verified chronological timeline including evidence digests |
 | **Vulcan** — 🟣 aggregation & reporting | |
-| `olympus vulcan rank --findings <f>` | loads, deduplicates and prints findings ranked by severity |
-| `olympus vulcan report --assets/--findings/--alerts <f>` | aggregates everything into one consolidated report (JSON + optional Markdown/HTML) |
+| `olympus vulcan rank --findings <f>` | bounded strict loading, exact-ID deduplication and severity ranking |
+| `olympus vulcan report --assets/--findings/--alerts <f>` | validates complete producer envelopes and renders one canonical report as atomic JSON plus optional safe Markdown/HTML |
 
 ### Legend of the main options
 
@@ -580,38 +580,38 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus argus scan --domain <d>` | ricognizione passiva DNS/MX/SPF/DMARC su un dominio autorizzato |
 | `olympus argus fronting --domain <d>` | verifica se il dominio è dietro un CDN/WAF noto e se un sottodominio pubblico ne espone l'IP d'origine |
 | `olympus argus diff <a> <b>` | confronta due snapshot di asset Argus, senza rete |
-| `olympus argus phone --number <n>` | profila un numero di telefono (offline + arricchimenti reali opzionali) |
-| `olympus argus accounts --username <u>` | verifica la presenza dell'handle su una lista curata di siti pubblici |
-| `olympus argus ip --ip <ip>` | profila un indirizzo IP (classificazione offline + geolocalizzazione opzionale) |
-| `olympus argus investigate --name <n>` | costruisce un grafo d'indagine OSINT pivotando da un'entità seed (stile flowsint) |
+| `olympus argus phone --number <n>` | profila offline un numero in scope; gli arricchimenti autorizzati opzionali sono restituiti esplicitamente in `enrichment` / `messaging` e non partono senza `--i-am-authorized` |
+| `olympus argus accounts --username <u>` | verifica un handle in scope tramite un registro validato di siti pubblici solo HTTPS; i metadati richiedono autorizzazione esplicita |
+| `olympus argus ip --ip <ip>` | profila offline un IP in scope; la geolocalizzazione opzionale autorizzata usa l'endpoint cifrato `ipwho.is` ed è restituita esplicitamente in `geo` |
+| `olympus argus investigate --name <n>` | costruisce un grafo OSINT autorizzato; ogni pivot di rete su dominio, IP o username viene verificato nel relativo scope prima del lookup |
 | **Helios** — 🔴 mappatura della superficie di rete | |
-| `olympus helios scan <target>` | discovery TCP non distruttiva e limitata, solo dopo autorizzazione di scope |
+| `olympus helios scan <target>` | discovery TCP non distruttiva e limitata; richiede `--i-am-authorized` e scope CIDR prima di ogni connessione |
 | **Artemis** — 🔴 web recon | |
-| `olympus artemis fetch --url <u>` | una singola GET scope-safe, stampa solo i metadati |
-| `olympus artemis fingerprint --url <u>` | identifica lo stack tecnologico da una GET passiva |
-| `olympus artemis content --url <u>` | content/directory discovery reale su una base URL autorizzata |
-| `olympus artemis xss --url <u>` | test non distruttivo di reflected XSS (solo riflessione di un marker) |
-| `olympus artemis metabase --url <u>` | verifica non distruttiva dell'esposizione a CVE-2026-72898 |
+| `olympus artemis fetch --url <u>` | una GET scope-safe e limitata; richiede `--i-am-authorized` e stampa solo i metadati |
+| `olympus artemis fingerprint --url <u>` | identifica lo stack da una GET passiva autorizzata |
+| `olympus artemis content --url <u>` | content discovery reale, autorizzata e limitata da rate/deadline |
+| `olympus artemis xss --url <u>` | test autorizzato non distruttivo di reflected XSS (solo marker) |
+| `olympus artemis metabase --url <u>` | verifica autorizzata e non distruttiva dell'esposizione a CVE-2026-72898 |
 | `olympus artemis check-scope --url <u>` | valida l'autorizzazione dell'URL senza fare alcuna richiesta |
 | **Proteus** — 🔴 simulazione phishing autorizzata | |
-| `olympus proteus campaign --targets <f>` | costruisce una campagna di simulazione (token unico per target, tutti in scope) |
+| `olympus proteus campaign --targets <f>` | richiede conferma; valida ingaggio, domini mittente/destinatari e origine HTTPS di training, poi salva token versionati con permessi solo proprietario |
 | `olympus proteus page --engagement <e>` | genera la pagina di training che vede chi clicca (non cattura nulla) |
 | `olympus proteus email --campaign <f> --token <t>` | genera l'email-esca simulata per un token |
 | `olympus proteus report --campaign <f>` | riassume il click-through della campagna (metrica di training, mai segreti) |
 | **Hermes** — 🔵 secret & config scanner | |
-| `olympus hermes scan <path>` | scansiona un percorso (e opzionalmente la cronologia Git), emette SARIF mascherato |
+| `olympus hermes scan <path>` | scansione limitata di testo regolare/history Git con baseline stabili e SARIF mascherato; input mancanti, symlink o parziali non risultano puliti |
 | **Apollo** — 🔵 detection engineering | |
-| `olympus apollo test <rule> <event>` | valuta una regola contro un singolo evento |
-| `olympus apollo run --rules <dir> --events <f>` | valuta un intero rule-set contro uno stream di eventi (NDJSON) |
-| `olympus apollo rules --rules <dir>` | carica, valida ed elenca ogni regola di una cartella |
+| `olympus apollo test <rule> <event>` | valuta una regola versionata a confronto esatto contro un evento normalizzato, con input/deadline limitati |
+| `olympus apollo run --rules <dir> --events <f>` | elabora NDJSON versionato con limiti su regole/eventi/valutazioni/alert; i record malformati causano un fallimento parziale esplicito |
+| `olympus apollo rules --rules <dir>` | carica, limita e valida una cartella non vuota con ID di regola univoci |
 | **Minerva** — 🔵 incident response & DFIR | |
-| `olympus minerva triage <alerts> --title <t>` | crea un Incident normalizzato da un export di alert Apollo |
-| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | aggiunge un evento alla catena di custodia, verificando prima l'intera catena esistente |
-| `olympus minerva verify <ledger>` | verifica ogni anello di una catena di custodia |
-| `olympus minerva timeline <ledger>` | stampa la timeline cronologica di una catena verificata |
+| `olympus minerva triage <alerts> --title <t>` | crea un Incident stabile da un export Apollo rigoroso e limitato |
+| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | blocca, verifica e aggiunge una voce privata custody 2.0 ancorata allo SHA-256 del reperto |
+| `olympus minerva verify <ledger>` | verifica hash, identità del digest, transizioni e timestamp; una catena mancante fallisce |
+| `olympus minerva timeline <ledger>` | stampa una timeline verificata che include i digest dei reperti |
 | **Vulcan** — 🟣 aggregazione & report | |
-| `olympus vulcan rank --findings <f>` | carica, deduplica e stampa i finding ordinati per severità |
-| `olympus vulcan report --assets/--findings/--alerts <f>` | aggrega tutto in un report consolidato (JSON + Markdown/HTML opzionali) |
+| `olympus vulcan rank --findings <f>` | caricamento rigoroso e limitato, deduplicazione per ID esatto e ranking per severità |
+| `olympus vulcan report --assets/--findings/--alerts <f>` | valida gli envelope completi e genera un report canonico come JSON atomico più Markdown/HTML sicuri opzionali |
 
 ### Legenda delle opzioni principali
 

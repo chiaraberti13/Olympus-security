@@ -15,7 +15,13 @@ from olympus.athena.domain.assessment import (
     derive_terminal_state,
 )
 from olympus.athena.domain.audit import AuditEvent, AuditRedactionError
-from olympus.athena.domain.contracts import PlanValidationError, load_plan
+from olympus.athena.domain.contracts import (
+    AssessmentResult,
+    PlanValidationError,
+    ResultValidationError,
+    load_plan,
+    load_result,
+)
 from olympus.athena.scope import (
     SsrfBlockedError,
     TargetOutOfScopeError,
@@ -51,6 +57,17 @@ def test_load_plan_valid() -> None:
     assert len(plan.scope_digest()) == 64
     # Digest is stable for identical content.
     assert plan.digest() == load_plan(_plan_dict()).digest()
+    assert plan.schema_version == "1.0.0"
+
+
+def test_load_plan_migrates_explicit_legacy_integer_version() -> None:
+    plan = load_plan(_plan_dict(schema_name="olympus.athena.plan", schema_version=1))
+    assert plan.schema_version == "1.0.0"
+
+
+def test_load_plan_rejects_incompatible_contract_header() -> None:
+    with pytest.raises(PlanValidationError, match="unsupported"):
+        load_plan(_plan_dict(schema_name="olympus.athena.plan", schema_version="2.0.0"))
 
 
 def test_load_plan_rejects_non_dict() -> None:
@@ -108,6 +125,25 @@ def test_job_transitions() -> None:
     with pytest.raises(TransitionError):
         advance_job(job, JobState.SUCCEEDED)  # cannot skip running
 
+    contract = done.to_contract("ASM-1")
+    assert contract.schema_name == "olympus.scan-job"
+    assert contract.state == "succeeded"
+
+
+def test_assessment_result_round_trip_and_identity_validation() -> None:
+    job = Job(
+        job_id="J1",
+        adapter="dns",
+        target_kind="domain",
+        target_value="example.com",
+        state=JobState.SUCCEEDED,
+    )
+    result = AssessmentResult(assessment_id="ASM-1", job=job.to_contract("ASM-1"))
+
+    assert load_result(result.model_dump(mode="json")) == result
+    with pytest.raises(ResultValidationError):
+        load_result({**result.model_dump(mode="json"), "schema_version": "2.0.0"})
+
 
 def test_assessment_transitions() -> None:
     assessment = Assessment(assessment_id="A1", plan_id="P1")
@@ -152,6 +188,20 @@ def test_audit_event_redaction() -> None:
         metadata={"adapter": "dns"},
     )
     assert event.to_dict()["metadata"] == {"adapter": "dns"}
+
+
+def test_audit_event_redacts_sensitive_query_values_in_allowed_target() -> None:
+    event = AuditEvent(
+        assessment_id="A1",
+        sequence=0,
+        timestamp="2026-01-01T00:00:00Z",
+        action="job_failed",
+        outcome="failed",
+        metadata={"target": "https://api.example/?token=secret&item=1"},
+    )
+    target = event.metadata["target"]
+    assert "secret" not in target
+    assert "item=1" in target
     with pytest.raises(AuditRedactionError):
         AuditEvent(
             assessment_id="A1",

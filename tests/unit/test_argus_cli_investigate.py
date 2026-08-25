@@ -1,4 +1,5 @@
 """CLI-level tests for `olympus argus investigate`."""
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,9 @@ class _CtClient:
 
 class _Http:
     @classmethod
-    def from_config(cls, *, min_interval: object = None) -> _Http:
+    def from_config(
+        cls, *, min_interval: object = None, redirect_validator: object = None
+    ) -> _Http:
         return cls()
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
@@ -39,6 +42,15 @@ def _patch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(argus_cli, "UrllibHttpClient", _Http)
 
 
+def _domain_scope(tmp_path: Path, *domains: str) -> Path:
+    path = tmp_path / "domain-scope.json"
+    path.write_text(
+        json.dumps({"engagement": "test", "allowed_domains": list(domains)}),
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_investigate_requires_authorization() -> None:
     result = runner.invoke(
         app, ["argus", "investigate", "--seed-type", "email", "--seed-value", "a@b.example"]
@@ -47,18 +59,30 @@ def test_investigate_requires_authorization() -> None:
     assert "AUTHORIZED USE ONLY" in result.output
 
 
-def test_investigate_domain_builds_graph(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_investigate_domain_builds_graph(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch(monkeypatch)
     out = tmp_path / "graph.json"
     mmd = tmp_path / "graph.mmd"
     result = runner.invoke(
         app,
         [
-            "argus", "investigate", "--seed-type", "domain", "--seed-value", "x.example",
-            "--i-am-authorized", "--depth", "1", "--output", str(out), "--mermaid", str(mmd),
-            "--log", str(tmp_path / "log"),
+            "argus",
+            "investigate",
+            "--seed-type",
+            "domain",
+            "--seed-value",
+            "x.example",
+            "--i-am-authorized",
+            "--depth",
+            "1",
+            "--output",
+            str(out),
+            "--mermaid",
+            str(mmd),
+            "--domain-scope",
+            str(_domain_scope(tmp_path, "x.example")),
+            "--log",
+            str(tmp_path / "log"),
         ],
     )
     assert result.exit_code == 0, result.output
@@ -71,14 +95,51 @@ def test_investigate_domain_builds_graph(
     assert (tmp_path / "log").exists()  # audit log written
 
 
+def test_investigate_blocks_out_of_scope_seed_before_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(monkeypatch)
+    log = tmp_path / "audit.log"
+
+    result = runner.invoke(
+        app,
+        [
+            "argus",
+            "investigate",
+            "--seed-type",
+            "domain",
+            "--seed-value",
+            "outside.example",
+            "--i-am-authorized",
+            "--domain-scope",
+            str(_domain_scope(tmp_path, "inside.example")),
+            "--log",
+            str(log),
+        ],
+    )
+
+    assert result.exit_code == 3
+    assert "blocked, out of scope" in result.output
+    assert "blocked_out_of_scope" in log.read_text(encoding="utf-8")
+
+
 def test_investigate_writes_audit_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch(monkeypatch)
     log = tmp_path / "audit.log"
     runner.invoke(
         app,
         [
-            "argus", "investigate", "--seed-type", "phone", "--seed-value", "+16505550123",
-            "--i-am-authorized", "--output", str(tmp_path / "g.json"), "--log", str(log),
+            "argus",
+            "investigate",
+            "--seed-type",
+            "phone",
+            "--seed-value",
+            "+16505550123",
+            "--i-am-authorized",
+            "--output",
+            str(tmp_path / "g.json"),
+            "--log",
+            str(log),
         ],
     )
     entry = json.loads(log.read_text(encoding="utf-8").strip())
