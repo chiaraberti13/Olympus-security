@@ -35,7 +35,7 @@ modules, vendored complete tools, and the integration layer._
 | ARGUS (complete) | vendored | Full standalone ARGUS OSINT CLI | `olympus argus-native` | ✅ | parity + smoke | basic execution verified (offline cmds) |
 | AEGIS (complete) | vendored | Full Vulnerability Assessment Platform | `olympus aegis` | ✅ | parity + wiring | startup verified (web app booted, migrations ran) |
 
-Total automated tests collected: **618** (all passing; optional, non-blocking).
+Total automated tests collected: **629** (all passing; optional, non-blocking).
 
 ## 3. Per-tool detail
 
@@ -56,8 +56,8 @@ commands.
 | proteus | campaign, email, page, report | core policy/contracts | none | none | recipient/sender/landing scope JSON | protected versioned campaign JSON, report JSON, training HTML | n/a |
 | hermes | scan | core policy/contracts | Git (optional history) | none | paths, versioned baseline, resource limits | masked SARIF, private baseline | n/a |
 | apollo | rules, run, test | core policy/contracts, pydantic | none | none | versioned YAML rules, versioned NDJSON events, strict resource limits | versioned atomic alert JSON with rule/MITRE trace | n/a |
-| minerva | record, timeline, triage, verify | pydantic | none | none | evidence JSON | incident/custody JSON | n/a |
-| vulcan | rank, report | pydantic | none | none | asset/finding/alert JSON | JSON/Markdown/HTML report | n/a |
+| minerva | record, timeline, triage, verify | core policy/contracts | none | private locked custody file | strict Apollo/evidence contracts, file/item/deadline limits | stable private incident JSON; custody 2.0 anchored to evidence digest | n/a |
+| vulcan | rank, report | core policy/contracts | none | none | strict producer envelopes, aggregate byte/item/deadline limits | one canonical report; atomic JSON/safe Markdown/self-contained HTML | n/a |
 
 ### ARGUS (complete, vendored) — `olympus argus-native`
 

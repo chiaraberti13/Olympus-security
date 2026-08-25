@@ -17,6 +17,7 @@ producer, CLI, worker, database adapter, API, and report consumer.
 | Apollo rule | `olympus.apollo-rule` | `1.0.0` | Apollo rule loader, test and streaming evaluator |
 | Alert | `olympus.alert` | `1.0.0` | Apollo producer; Minerva and Vulcan consumers |
 | Incident | `olympus.incident` | `1.0.0` | Minerva triage producer; report consumers |
+| Custody ledger | `olympus.custody` | `2.0.0` | Minerva record/verify/timeline; evidence digest anchors |
 | Security report | `olympus.security-report` | `1.0.0` | Vulcan and Athena report adapter; CLI/API/report readers |
 
 Apollo alerts carry the source `rule_id` and validated `mitre_attack` techniques;
@@ -58,6 +59,10 @@ olympus core export-schemas ./schemas
   Legacy events likewise require both headers to be absent and all five identity
   fields to be present; no event ID or timestamp is synthesized. Partial headers,
   catch-all rules, duplicate rule IDs, and conflicting duplicate event IDs fail.
+- Minerva verifies custody `1.0.0` through a named read-only adapter. That format
+  links event metadata but not the evidence SHA-256, so verify/timeline warn with
+  exit 1 and append is refused. New `2.0.0` entries hash the evidence digest;
+  converting old history would invent unavailable provenance and is not allowed.
 - Vulcan still accepts the original bare arrays or single shared objects as an
   input compatibility path. Versioned Argus, Helios, Apollo, and security-report
   envelopes are validated before their arrays are consumed.

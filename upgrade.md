@@ -116,6 +116,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
     account scope gates, audit records, explicit warnings, and injected network ports.
   - [x] Remaining Argus commands: `diff` validates versioned shared assets through an application
     service; `doctor` uses a secret-safe read-only diagnostic service.
+  - [x] HELIOS, ARTEMIS, PROTEUS, HERMES, APOLLO, MINERVA, and VULCAN CLI handlers delegate
+    bounded workflows to application/domain services (Cycles 27–31).
 - [x] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
   - All current contracts use strict `schema_name` plus SemVer `1.0.0`; compatibility negotiation,
@@ -135,7 +137,9 @@ only the **security**, **functional**, and **licence** items are actual requirem
     masked SARIF and versioned private baseline adoption (Cycle 29).
   - [x] APOLLO versioned rule/event handling, deadline/cancellation, file/stream/evaluation/alert
     bounds, strict partial coverage, deterministic traceable alerts, and atomic output (Cycle 30).
-  - [ ] Adopt the shared policy across Minerva, Vulcan, AEGIS, native integrations,
+  - [x] MINERVA and VULCAN bounded no-follow inputs, deadline/cancellation, strict nested contracts,
+    digest-anchored custody, exact provenance retention, and atomic safe reports (Cycle 31).
+  - [ ] Adopt the shared policy across AEGIS, native integrations,
     and any API/worker paths that execute equivalent work.
 - [ ] Add adapters for network, persistence, and third-party services so domain tests remain offline
   and deterministic.
@@ -1047,3 +1051,69 @@ only the **security**, **functional**, and **licence** items are actual requirem
   unsafe report rendering, Typer-domain coupling, cancellation/deadline gaps, and cross-module
   provenance loss; then implement their common application/policy boundary and real Apollo-to-report
   proof.
+
+### Cycle 31 — anchor Minerva custody and make Vulcan aggregation lossless and bounded
+
+- **Status:** `DONE` for MINERVA and VULCAN application/policy adoption; the repository-wide policy
+  parent remains `IN PROGRESS` for AEGIS and native/API/worker integrations.
+- **Objective:** eliminate false verification of missing custody ledgers, bind custody history to the
+  actual evidence digest, prevent concurrent lost updates and invalid state transitions, bound all
+  incident/report inputs, stop lossy semantic deduplication, validate full producer envelopes, and
+  preserve Apollo rule/MITRE provenance in every report view.
+- **Component:** shared local file I/O, MINERVA triage/custody/application/CLI and example ledger,
+  VULCAN aggregation/report/application/CLI, cross-module alert/report flow, contracts, execution
+  policy, command reference, ecosystem inventory, dedicated docs, and tests.
+- **Dependencies:** shared `ExecutionPolicy`/cancellation and strict SemVer contracts, Pydantic nested
+  validation, no-follow regular-file descriptors, SHA-256, POSIX advisory locking with a process-local
+  fallback, owner-only unique fsynced atomic files, and HTML/Markdown escaping.
+- **Completion criteria:** a missing/symlink/non-regular/oversized ledger or input never verifies or
+  reports clean; triage accepts only a bounded strict Apollo collection, rejects conflicting IDs and
+  produces stable incidents; new custody entries anchor the evidence digest, validate sequence/hash/
+  time/state/digest invariants, serialize concurrent appenders and are private/durable; legacy custody
+  is honestly read-only. VULCAN caps file/item/aggregate/output resources, validates complete supported
+  producer envelopes and nested objects, rejects incompatible/unknown contracts, deduplicates only
+  exact stable IDs while rejecting conflicts, checks asset references when inventory is present,
+  renders all assets/findings/alerts safely from one canonical model, and protects every output path.
+- **Implementation:** added shared `read_regular_bytes`/`read_regular_text` and unique fsynced atomic
+  write adapters. `MinervaApplicationService` now owns triage, evidence loading, record and inspection
+  deadlines/cancellation/output conflicts. Triage validates exact collection fields, caps bytes/count,
+  rejects conflicting duplicate IDs and derives stable incident identity/times from alerts. Custody
+  `2.0.0` hashes lowercase `evidence_sha256` into every entry, enforces per-evidence transitions and
+  digest immutability, locks a private stable sibling before re-verification/append, caps chain bytes/
+  entries, writes mode `0600`, and makes `1.0.0` verifiable but read-only with exit 1. Missing chains
+  exit 2. `VulcanApplicationService` preflights aggregate/file/output paths and limits, validates strict
+  Argus fronting/assets, Athena result, Helios result/findings, Apollo alerts and security-report
+  envelopes plus every nested contract, retains only exact duplicates, rejects conflicting IDs and
+  orphan finding references, and renders JSON/Markdown/HTML from one `SecurityReport`. Markdown
+  metacharacters and all HTML values are escaped; HTML now includes assets and alert provenance.
+- **Files modified:** `src/olympus/core/fileio.py`, `src/olympus/minerva/application.py`,
+  `src/olympus/minerva/cli.py`, `src/olympus/minerva/custody.py`,
+  `src/olympus/minerva/triage.py`, `src/olympus/vulcan/application.py`,
+  `src/olympus/vulcan/aggregate.py`, `src/olympus/vulcan/cli.py`,
+  `src/olympus/vulcan/report.py`, `examples/output/minerva-custody.json`,
+  `tests/unit/test_minerva_custody.py`, `tests/unit/test_minerva_triage.py`,
+  `tests/unit/test_vulcan.py`, `docs/minerva.md`, `docs/vulcan.md`, `docs/contracts.md`,
+  `docs/execution-policy.md`, `docs/reference.md`, `docs/ecosystem-audit.md`, and `upgrade.md`.
+- **Tests executed:** focused MINERVA/VULCAN plus Apollo/Athena downstream suite: `68 passed`;
+  complete offline suite: `629 passed`; Ruff: clean; strict mypy: clean across 123 source files with a
+  fresh generated cache directory.
+- **Real execution evidence:** installed `olympus minerva record` appended collected/analyzed events
+  for the versioned example evidence; installed verify/timeline both exited 0. The resulting custody
+  file was `2.0.0`, contained two entries with the expected 64-hex evidence digest, and had POSIX mode
+  `0600`. Installed verify against a missing sibling exited 2 with a precise nonexistence failure.
+  Installed triage consumed the Cycle 30 Apollo export and emitted stable incident
+  `INC-5253A3432671E76148986D0C` linked to `ALT-A533997F698B4F6BA4EE7B28`. Installed Vulcan consumed
+  that same versioned export and wrote JSON, Markdown, and self-contained HTML with one shared
+  generation time, one alert, `APL-DEMO-PWSH`, and `T1059.001`; every command exited 0.
+- **Residual limitations:** an unkeyed hash chain detects changes only while a trusted terminal hash
+  exists outside an attacker's rewrite boundary; authentic non-repudiation requires externally
+  anchoring/signing that head in a separately controlled case system. POSIX file locking/mode/no-follow
+  semantics require equivalent ACL/locking controls on other platforms. JSON/Markdown/HTML are each
+  atomic, but a filesystem failure between their separate replacements cannot create a cross-file
+  transaction; canonical JSON is the machine source of truth. Bare arrays/single objects remain an
+  explicit legacy VULCAN read adapter until their producers are migrated to versioned envelopes.
+- **Next activity:** audit the Olympus-native AEGIS execution layer, the vendored FastAPI/Celery
+  boundary, scanner registry/adapters and web/API/worker/database/report paths for authorization and
+  scope drift, simulated-result leakage, unsafe subprocess/environment handling, unbounded results,
+  contract mismatch, dependency/service truthfulness, and parity gaps; then implement the next
+  independent real-adapter/policy slice and verify it without requiring unavailable external engines.

@@ -76,6 +76,12 @@ uses the same URL redactor before SQLite persistence.
   shared deadline/cancellation checks while independently bounding rule/event files, stream
   bytes, physical records, evaluations and alerts; malformed records produce partial failure
   instead of silent loss, and symlink/non-regular inputs fail closed.
-- Minerva, Vulcan, and AEGIS adoption is tracked in
+- Minerva: bounded no-follow alert/evidence/ledger reads and deadline/cancellation checks sit below
+  Typer. Custody verification caps entries/bytes, rejects missing or partial chains, locks concurrent
+  appenders and persists private digest-anchored entries atomically.
+- Vulcan: all input files, aggregate bytes/items, output bytes and report/rank deadlines are bounded;
+  complete producer envelopes are validated, cancellation is checked between records/renderers, and
+  every output is preflighted then written with a unique fsynced atomic replacement.
+- AEGIS adoption is tracked in
   `upgrade.md`; offline-only work uses the same validation/redaction pieces where
   applicable but does not invent network authorization requirements.

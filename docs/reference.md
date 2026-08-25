@@ -261,13 +261,13 @@ every module; for a single command's full details (every option, with defaults) 
 | `olympus apollo run --rules <dir> --events <f>` | streams versioned NDJSON through bounded rule/event/evaluation/alert limits; malformed records are reported as partial failure |
 | `olympus apollo rules --rules <dir>` | loads, bounds and validates a non-empty rule directory with unique IDs |
 | **Minerva** — 🔵 incident response & DFIR | |
-| `olympus minerva triage <alerts> --title <t>` | creates a normalized Incident from an Apollo alert export |
-| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | appends a custody event, after verifying the whole existing chain |
-| `olympus minerva verify <ledger>` | verifies every link of a custody chain |
-| `olympus minerva timeline <ledger>` | prints the chronological timeline of a verified chain |
+| `olympus minerva triage <alerts> --title <t>` | creates a stable Incident from a strict bounded Apollo export |
+| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | locks, verifies and appends a private custody 2.0 entry anchored to the evidence SHA-256 |
+| `olympus minerva verify <ledger>` | verifies hashes, digest identity, transitions and timestamps; missing chains fail |
+| `olympus minerva timeline <ledger>` | prints a verified chronological timeline including evidence digests |
 | **Vulcan** — 🟣 aggregation & reporting | |
-| `olympus vulcan rank --findings <f>` | loads, deduplicates and prints findings ranked by severity |
-| `olympus vulcan report --assets/--findings/--alerts <f>` | aggregates everything into one consolidated report (JSON + optional Markdown/HTML) |
+| `olympus vulcan rank --findings <f>` | bounded strict loading, exact-ID deduplication and severity ranking |
+| `olympus vulcan report --assets/--findings/--alerts <f>` | validates complete producer envelopes and renders one canonical report as atomic JSON plus optional safe Markdown/HTML |
 
 ### Legend of the main options
 
@@ -605,13 +605,13 @@ sempre `--help`, es. `olympus argus scan --help`.
 | `olympus apollo run --rules <dir> --events <f>` | elabora NDJSON versionato con limiti su regole/eventi/valutazioni/alert; i record malformati causano un fallimento parziale esplicito |
 | `olympus apollo rules --rules <dir>` | carica, limita e valida una cartella non vuota con ID di regola univoci |
 | **Minerva** — 🔵 incident response & DFIR | |
-| `olympus minerva triage <alerts> --title <t>` | crea un Incident normalizzato da un export di alert Apollo |
-| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | aggiunge un evento alla catena di custodia, verificando prima l'intera catena esistente |
-| `olympus minerva verify <ledger>` | verifica ogni anello di una catena di custodia |
-| `olympus minerva timeline <ledger>` | stampa la timeline cronologica di una catena verificata |
+| `olympus minerva triage <alerts> --title <t>` | crea un Incident stabile da un export Apollo rigoroso e limitato |
+| `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | blocca, verifica e aggiunge una voce privata custody 2.0 ancorata allo SHA-256 del reperto |
+| `olympus minerva verify <ledger>` | verifica hash, identità del digest, transizioni e timestamp; una catena mancante fallisce |
+| `olympus minerva timeline <ledger>` | stampa una timeline verificata che include i digest dei reperti |
 | **Vulcan** — 🟣 aggregazione & report | |
-| `olympus vulcan rank --findings <f>` | carica, deduplica e stampa i finding ordinati per severità |
-| `olympus vulcan report --assets/--findings/--alerts <f>` | aggrega tutto in un report consolidato (JSON + Markdown/HTML opzionali) |
+| `olympus vulcan rank --findings <f>` | caricamento rigoroso e limitato, deduplicazione per ID esatto e ranking per severità |
+| `olympus vulcan report --assets/--findings/--alerts <f>` | valida gli envelope completi e genera un report canonico come JSON atomico più Markdown/HTML sicuri opzionali |
 
 ### Legenda delle opzioni principali
 
