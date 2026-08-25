@@ -8,12 +8,17 @@ from pathlib import Path
 import pytest
 
 from olympus.argus.application import (
+    DnsLookupRequest,
+    DnsLookupService,
     DomainScanRequest,
     DomainScanService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
+    WhoisLookupRequest,
+    WhoisLookupService,
 )
 from olympus.argus.scope import OutOfScopeError
+from olympus.core.http import HttpResponse
 
 DOMAIN = "olympusdemocorp.example"
 
@@ -40,6 +45,31 @@ class RecordingCtClient:
     def discover(self, domain: str) -> list[str]:
         self.calls.append(domain)
         return [f"portal.{domain}"]
+
+
+class RecordingHttpClient:
+    """Offline HTTP port returning a deterministic DoH response."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
+        return HttpResponse(status_code=200, body='{"Answer":[{"data":"203.0.113.20"}]}')
+
+
+class RecordingRdapClient:
+    """Offline HTTP port returning a deterministic RDAP response."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self.calls.append(url)
+        return HttpResponse(
+            status_code=200,
+            body=json.dumps({"ldhName": DOMAIN.upper(), "status": ["active"]}),
+        )
 
 
 def _scope(path: Path) -> Path:
@@ -133,3 +163,79 @@ def test_fronting_service_rejects_invalid_limit_before_network(tmp_path: Path) -
 
     assert resolver.calls == []
     assert ct_client.calls == []
+
+
+def test_dns_lookup_service_runs_without_cli_dependency(tmp_path: Path) -> None:
+    http = RecordingHttpClient()
+
+    result = DnsLookupService(http).run(
+        DnsLookupRequest(
+            DOMAIN,
+            _scope(tmp_path / "scope.json"),
+            tmp_path / "audit.log",
+            record_types=("a",),
+        )
+    )
+
+    assert result.records == {"A": ["203.0.113.20"]}
+    assert len(http.calls) == 1
+    assert "type=A" in http.calls[0]
+
+
+def test_dns_lookup_service_blocks_before_http(tmp_path: Path) -> None:
+    http = RecordingHttpClient()
+    audit_log = tmp_path / "audit.log"
+
+    with pytest.raises(OutOfScopeError):
+        DnsLookupService(http).run(
+            DnsLookupRequest(
+                "outside.example",
+                _scope(tmp_path / "scope.json"),
+                audit_log,
+                record_types=("A",),
+            )
+        )
+
+    assert http.calls == []
+    assert "outside.example" in audit_log.read_text(encoding="utf-8")
+
+
+def test_dns_lookup_service_rejects_empty_types_before_http(tmp_path: Path) -> None:
+    http = RecordingHttpClient()
+
+    with pytest.raises(ValueError, match="record_types"):
+        DnsLookupService(http).run(
+            DnsLookupRequest(
+                DOMAIN,
+                _scope(tmp_path / "scope.json"),
+                tmp_path / "audit.log",
+                record_types=(),
+            )
+        )
+
+    assert http.calls == []
+
+
+def test_whois_lookup_service_runs_without_cli_dependency(tmp_path: Path) -> None:
+    http = RecordingRdapClient()
+
+    result = WhoisLookupService(http).run(
+        WhoisLookupRequest(DOMAIN, _scope(tmp_path / "scope.json"), tmp_path / "audit.log")
+    )
+
+    assert result.domain == DOMAIN.upper()
+    assert result.status == ["active"]
+    assert http.calls == [f"https://rdap.org/domain/{DOMAIN}"]
+
+
+def test_whois_lookup_service_blocks_before_http(tmp_path: Path) -> None:
+    http = RecordingRdapClient()
+    audit_log = tmp_path / "audit.log"
+
+    with pytest.raises(OutOfScopeError):
+        WhoisLookupService(http).run(
+            WhoisLookupRequest("outside.example", _scope(tmp_path / "scope.json"), audit_log)
+        )
+
+    assert http.calls == []
+    assert "outside.example" in audit_log.read_text(encoding="utf-8")
