@@ -11,6 +11,13 @@ from pathlib import Path
 
 from olympus.argus.ct import CertificateTransparencyClient
 from olympus.argus.dns_records import RECORD_TYPES, DnsRecordReport, resolve_records
+from olympus.argus.email_osint import (
+    EmailIntel,
+    analyze_email,
+    build_email_asset,
+    build_email_findings,
+    enrich_email,
+)
 from olympus.argus.fronting import FrontingReport, assess_fronting
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
@@ -25,6 +32,10 @@ from olympus.argus.web import (
 )
 from olympus.argus.whois import WhoisReport, lookup_domain
 from olympus.core.http import HttpClient
+
+
+class AuthorizationRequiredError(PermissionError):
+    """Raised when a privacy-sensitive use case lacks explicit authorization."""
 
 
 @dataclass(frozen=True)
@@ -47,6 +58,46 @@ class DomainScanService:
         """Enforce scope before invoking either network-capable dependency."""
         enforce_scope(request.domain, request.scope_path, request.audit_log_path)
         return scan_domain(request.domain, self.resolver, self.ct_client)
+
+
+@dataclass(frozen=True)
+class EmailAnalysisRequest:
+    """Command-independent input for offline analysis and optional enrichment."""
+
+    address: str
+    enrich: bool = False
+    authorized: bool = False
+    scope_path: Path | None = None
+    audit_log_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class EmailAnalysisService:
+    """Analyze email locally and safely coordinate opt-in network enrichment."""
+
+    resolver: DnsResolver
+    http: HttpClient
+
+    def run(self, request: EmailAnalysisRequest) -> EmailIntel:
+        """Build shared contracts, authorizing scope before network access."""
+        report = analyze_email(request.address)
+        enrichment = None
+        if request.enrich:
+            if not request.authorized:
+                raise AuthorizationRequiredError(
+                    "email enrichment requires explicit documented authorization"
+                )
+            if request.scope_path is None or request.audit_log_path is None:
+                raise ValueError("scope_path and audit_log_path are required for email enrichment")
+            enforce_scope(report.domain, request.scope_path, request.audit_log_path)
+            enrichment = enrich_email(report, self.resolver, self.http)
+        asset = build_email_asset(report, enrichment)
+        return EmailIntel(
+            report=report,
+            asset=asset,
+            enrichment=enrichment,
+            findings=build_email_findings(asset.asset_id, report, enrichment),
+        )
 
 
 @dataclass(frozen=True)

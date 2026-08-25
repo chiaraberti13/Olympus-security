@@ -23,10 +23,13 @@ from olympus.argus.accounts_scope import (
     enforce_account_scope,
 )
 from olympus.argus.application import (
+    AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
     DomainScanRequest,
     DomainScanService,
+    EmailAnalysisRequest,
+    EmailAnalysisService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
@@ -46,13 +49,7 @@ from olympus.argus.dns_records import (
     export_dns_report,
 )
 from olympus.argus.email_osint import (
-    EmailEnrichment,
-    EmailIntel,
     EmailParseError,
-    analyze_email,
-    build_email_asset,
-    build_email_findings,
-    enrich_email,
     export_email_intel,
 )
 from olympus.argus.enrichment import (
@@ -109,7 +106,7 @@ from olympus.argus.phone_scope import (
     enforce_phone_scope,
 )
 from olympus.argus.resolver import DnspythonResolver
-from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
+from olympus.argus.scope import OutOfScopeError, ScopeError
 from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.argus.web import (
     WebReconError,
@@ -733,29 +730,29 @@ def email(
 ) -> None:
     """Analyze an email address offline; optionally run passive live enrichment."""
     try:
-        report = analyze_email(address)
+        intel = EmailAnalysisService(
+            DnspythonResolver(), UrllibHttpClient.from_config()
+        ).run(
+            EmailAnalysisRequest(
+                address=address,
+                enrich=enrich,
+                authorized=i_am_authorized,
+                scope_path=scope,
+                audit_log_path=log,
+            )
+        )
     except EmailParseError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-
-    enrichment: EmailEnrichment | None = None
-    if enrich:
-        if not i_am_authorized:
-            typer.echo(f"argus: {_EMAIL_DISCLAIMER}", err=True)
-            raise typer.Exit(code=4)
-        try:
-            enforce_scope(report.domain, scope, log)
-        except ScopeError as exc:
-            typer.echo(f"argus: scope error: {exc}", err=True)
-            raise typer.Exit(code=2) from exc
-        except OutOfScopeError as exc:
-            typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
-            raise typer.Exit(code=3) from exc
-        enrichment = enrich_email(report, DnspythonResolver(), UrllibHttpClient.from_config())
-
-    asset = build_email_asset(report, enrichment)
-    findings = build_email_findings(asset.asset_id, report, enrichment)
-    intel = EmailIntel(report=report, asset=asset, enrichment=enrichment, findings=findings)
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_EMAIL_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    except ScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
     typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
     if output is not None:
         export_email_intel(intel, output)
