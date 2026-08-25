@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from olympus.core.execution import CancellationToken, ExecutionPolicy, ExecutionPolicyError
 from olympus.core.http import (
     USER_AGENT,
     HttpRequestError,
@@ -193,3 +194,33 @@ def test_rate_limit_sleeps_between_requests(monkeypatch: pytest.MonkeyPatch) -> 
     client.get("https://olympusdemocorp.example/a")
     client.get("https://olympusdemocorp.example/b")
     assert any(s > 0 for s in slept)  # throttled the second request
+
+
+def test_http_client_builds_from_shared_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: dict[str, float] = {}
+
+    def _capture(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        observed["timeout"] = timeout
+        return _FakeHttpResponse(200, {}, b"ok")
+
+    monkeypatch.setattr("urllib.request.urlopen", _capture)
+    policy = ExecutionPolicy(
+        authorized=True,
+        timeout_seconds=3.0,
+        deadline_seconds=10.0,
+        retries=1,
+    )
+
+    UrllibHttpClient.from_policy(policy).get("https://olympusdemocorp.example/")
+
+    assert observed["timeout"] == 3.0
+
+
+def test_http_client_refuses_invalid_limits_and_observes_cancellation() -> None:
+    with pytest.raises(ExecutionPolicyError):
+        UrllibHttpClient(timeout=0)
+
+    token = CancellationToken()
+    token.cancel()
+    with pytest.raises(HttpRequestError, match="cancelled"):
+        UrllibHttpClient(cancellation=token).get("https://olympusdemocorp.example/")

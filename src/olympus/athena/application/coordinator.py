@@ -34,16 +34,17 @@ from olympus.athena.ports import (
     ToolResult,
     ToolRunner,
 )
+from olympus.core.execution import (
+    CancellationRequested,
+    CancellationToken,
+    ExecutionPolicy,
+)
 from olympus.core.models import Finding
 
 AdapterResolver = Callable[[tuple[str, ...]], dict[str, ToolRunner]]
 
 
-class _NeverCancelled:
-    """Cancellation token that is never triggered during a synchronous run."""
-
-    def is_cancelled(self) -> bool:
-        return False
+_RETRYABLE_TOOL_ERRORS = frozenset({"lookup_failed", "timeout", "unreachable"})
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,15 @@ class Coordinator:
     # -- execution --------------------------------------------------------- #
     def run(self, plan: AssessmentPlan) -> RunOutcome:
         """Persist and execute ``plan``, returning the terminal outcome."""
+        policy = ExecutionPolicy(
+            authorized=plan.authorization.confirmed,
+            approval_reference=plan.authorization.approval_reference,
+            timeout_seconds=float(plan.limits.per_job_timeout_seconds),
+            deadline_seconds=float(plan.limits.overall_deadline_seconds),
+            max_concurrency=plan.limits.concurrency,
+            retries=plan.limits.max_retries,
+        )
+        policy.require_authorization("Athena assessment")
         runners = self._resolver(plan.adapters)  # UnknownAdapterError bubbles to the caller
         plan_id = self._repo.save_plan(plan)
         assessment_id = self._ids.new_id("assessment")
@@ -130,9 +140,8 @@ class Coordinator:
 
         findings: list[Finding] = []
         terminal_jobs: list[Job] = []
-        deadline = self._clock.monotonic() + plan.limits.overall_deadline_seconds
-        concurrency = plan.limits.concurrency
-        timeout = float(plan.limits.per_job_timeout_seconds)
+        deadline = self._clock.monotonic() + policy.deadline_seconds
+        concurrency = policy.max_concurrency
         allowed = plan.scope.allowed_domains
 
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -143,7 +152,7 @@ class Coordinator:
                     terminal_jobs.extend(self._cancel_batch(assessment_id, batch, "deadline"))
                     continue
                 terminal_jobs.extend(
-                    self._run_batch(assessment_id, batch, runners, allowed, timeout, findings, pool)
+                    self._run_batch(assessment_id, batch, runners, allowed, policy, findings, pool)
                 )
 
         state = derive_terminal_state(tuple(terminal_jobs))
@@ -171,35 +180,61 @@ class Coordinator:
         batch: tuple[Job, ...],
         runners: dict[str, ToolRunner],
         allowed: tuple[str, ...],
-        timeout: float,
+        policy: ExecutionPolicy,
         findings: list[Finding],
         pool: ThreadPoolExecutor,
     ) -> list[Job]:
         running: list[Job] = [self._repo.transition_job(job, JobState.RUNNING) for job in batch]
+        tokens = {job.job_id: CancellationToken() for job in running}
         futures = {
-            pool.submit(self._invoke, runners[job.adapter], job, allowed, timeout): job
+            pool.submit(
+                self._invoke,
+                runners[job.adapter],
+                job,
+                allowed,
+                policy,
+                tokens[job.job_id],
+            ): job
             for job in running
         }
         results: list[Job] = []
         for future, job in futures.items():
             try:
-                result = future.result(timeout=timeout)
+                result = future.result(timeout=policy.timeout_seconds)
             except FutureTimeout:
+                tokens[job.job_id].cancel()
                 results.append(self._finish_timed_out(assessment_id, job))
                 continue
             results.append(self._finish(assessment_id, job, result, findings))
         return results
 
     def _invoke(
-        self, runner: ToolRunner, job: Job, allowed: tuple[str, ...], timeout: float
+        self,
+        runner: ToolRunner,
+        job: Job,
+        allowed: tuple[str, ...],
+        policy: ExecutionPolicy,
+        cancellation: CancellationToken,
     ) -> ToolResult:
         request = ToolRequest(
             target_kind=job.target_kind,
             target_value=job.target_value,
             allowed_domains=allowed,
-            timeout_seconds=int(timeout),
+            timeout_seconds=int(policy.timeout_seconds),
         )
-        return runner.run(request, _NeverCancelled())
+        for attempt in range(policy.retries + 1):
+            try:
+                policy.check_cancellation(cancellation)
+            except CancellationRequested:
+                return ToolResult(ok=False, error_code="cancelled")
+            result = runner.run(request, cancellation)
+            if (
+                result.ok
+                or result.error_code not in _RETRYABLE_TOOL_ERRORS
+                or attempt == policy.retries
+            ):
+                return result
+        return ToolResult(ok=False, error_code="retry_exhausted")
 
     def _finish(
         self, assessment_id: str, job: Job, result: ToolResult, findings: list[Finding]

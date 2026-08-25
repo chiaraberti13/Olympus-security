@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from olympus.core.execution import redact_mapping
+
 #: Metadata keys an audit event is permitted to carry.
 ALLOWED_METADATA_KEYS = frozenset(
     {"adapter", "target", "state", "error_code", "job_id", "count", "reason"}
@@ -39,6 +41,8 @@ class AuditEvent:
             raise AuditRedactionError(
                 f"audit metadata contains disallowed keys: {sorted(disallowed)}"
             )
+        redacted = redact_mapping(self.metadata)
+        object.__setattr__(self, "metadata", {key: str(value) for key, value in redacted.items()})
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable view of the event."""

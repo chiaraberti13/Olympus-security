@@ -48,6 +48,7 @@ class _Runner:
         self._result = result or ToolResult(ok=True)
         self._block = block
         self._event = threading.Event()
+        self.calls = 0
 
     @property
     def name(self) -> str:
@@ -58,6 +59,7 @@ class _Runner:
         return ("test",)
 
     def run(self, request: ToolRequest, cancellation: Cancellation) -> ToolResult:
+        self.calls += 1
         if self._block:
             self._event.wait(timeout=1.2)
         return self._result
@@ -123,6 +125,17 @@ def test_run_failed(tmp_path: Path) -> None:
     coordinator, repo, _ = _coordinator(tmp_path, {"a": runner})
     outcome = coordinator.run(_plan())
     assert outcome.state is AssessmentState.FAILED
+    repo.close()
+
+
+def test_run_uses_declared_retry_budget_for_transient_failures(tmp_path: Path) -> None:
+    runner = _Runner("a", ToolResult(ok=False, error_code="unreachable"))
+    coordinator, repo, _ = _coordinator(tmp_path, {"a": runner})
+
+    outcome = coordinator.run(_plan(limits={"max_retries": 2}))
+
+    assert outcome.state is AssessmentState.FAILED
+    assert runner.calls == 3
     repo.close()
 
 

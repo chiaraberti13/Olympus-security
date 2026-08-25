@@ -188,6 +188,20 @@ def test_audit_event_redaction() -> None:
         metadata={"adapter": "dns"},
     )
     assert event.to_dict()["metadata"] == {"adapter": "dns"}
+
+
+def test_audit_event_redacts_sensitive_query_values_in_allowed_target() -> None:
+    event = AuditEvent(
+        assessment_id="A1",
+        sequence=0,
+        timestamp="2026-01-01T00:00:00Z",
+        action="job_failed",
+        outcome="failed",
+        metadata={"target": "https://api.example/?token=secret&item=1"},
+    )
+    target = event.metadata["target"]
+    assert "secret" not in target
+    assert "item=1" in target
     with pytest.raises(AuditRedactionError):
         AuditEvent(
             assessment_id="A1",

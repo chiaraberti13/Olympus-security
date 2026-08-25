@@ -79,12 +79,24 @@ from olympus.argus.web import (
     host_of,
 )
 from olympus.argus.whois import WhoisReport, lookup_domain
+from olympus.core.execution import (
+    AuthorizationRequiredError as CoreAuthorizationRequiredError,
+)
+from olympus.core.execution import ExecutionPolicy
 from olympus.core.http import HttpClient
 from olympus.integrations.diagnostics import Report, check_env_set, check_python_module
 
 
-class AuthorizationRequiredError(PermissionError):
-    """Raised when a privacy-sensitive use case lacks explicit authorization."""
+class AuthorizationRequiredError(CoreAuthorizationRequiredError):
+    """Argus compatibility subtype of the shared authorization error."""
+
+
+def _require_authorization(authorized: bool, operation: str) -> None:
+    """Apply the shared authorization policy before a privacy-sensitive adapter."""
+    try:
+        ExecutionPolicy(authorized=authorized).require_authorization(operation)
+    except CoreAuthorizationRequiredError as exc:
+        raise AuthorizationRequiredError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
@@ -211,10 +223,7 @@ class InvestigationService:
 
     def run(self, request: InvestigationRequest) -> InvestigationOutcome:
         """Refuse unauthorized fan-out and gate every direct or discovered network pivot."""
-        if not request.authorized:
-            raise AuthorizationRequiredError(
-                "OSINT investigation fan-out requires explicit documented authorization"
-            )
+        _require_authorization(request.authorized, "OSINT investigation fan-out")
         if not request.name.strip():
             raise ValueError("investigation name must not be empty")
         if not request.seed_value.strip():
@@ -286,19 +295,22 @@ class AccountEnumerationService:
 
     def run(self, request: AccountEnumerationRequest) -> AccountEnumerationOutcome:
         """Enforce policy before any configured site can receive the handle."""
-        if request.metadata and not request.authorized:
-            raise AuthorizationRequiredError(
-                "account metadata extraction requires explicit documented authorization"
-            )
-        if not 1 <= request.concurrency <= 64:
-            raise ValueError("concurrency must be between 1 and 64")
+        policy = ExecutionPolicy(
+            authorized=request.authorized,
+            max_concurrency=request.concurrency,
+        )
+        if request.metadata:
+            try:
+                policy.require_authorization("account metadata extraction")
+            except CoreAuthorizationRequiredError as exc:
+                raise AuthorizationRequiredError(str(exc)) from exc
         enforce_account_scope(request.handle, request.scope_path, request.audit_log_path)
         result = enumerate_accounts(
             request.handle,
             list(self.specs),
             self.http,
             want_metadata=request.metadata,
-            concurrency=request.concurrency,
+            concurrency=policy.max_concurrency,
         )
         assets = build_account_assets(result)
         finding = build_account_finding(assets[0].asset_id, result) if assets else None
@@ -367,10 +379,7 @@ class EmailAnalysisService:
         report = analyze_email(request.address)
         enrichment = None
         if request.enrich:
-            if not request.authorized:
-                raise AuthorizationRequiredError(
-                    "email enrichment requires explicit documented authorization"
-                )
+            _require_authorization(request.authorized, "email enrichment")
             if request.scope_path is None or request.audit_log_path is None:
                 raise ValueError("scope_path and audit_log_path are required for email enrichment")
             enforce_scope(report.domain, request.scope_path, request.audit_log_path)
@@ -406,10 +415,7 @@ class MacAnalysisService:
         report = analyze_mac(request.address)
         vendor_name = None
         if request.vendor:
-            if not request.authorized:
-                raise AuthorizationRequiredError(
-                    "MAC vendor lookup requires explicit documented authorization"
-                )
+            _require_authorization(request.authorized, "MAC vendor lookup")
             if request.scope_path is None or request.audit_log_path is None:
                 raise ValueError("scope_path and audit_log_path are required for vendor lookup")
             enforce_mac_scope(report.mac, request.scope_path, request.audit_log_path)
@@ -483,10 +489,8 @@ class PhoneProfileService:
 
     @staticmethod
     def _require_authorization(request: PhoneProfileRequest) -> None:
-        if (request.enrich or request.breach or request.messaging) and not request.authorized:
-            raise AuthorizationRequiredError(
-                "phone enrichment requires explicit documented authorization"
-            )
+        if request.enrich or request.breach or request.messaging:
+            _require_authorization(request.authorized, "phone enrichment")
 
     def run(self, request: PhoneProfileRequest) -> PhoneProfileOutcome:
         """Profile one number, refusing unauthorized/out-of-scope network activity."""
@@ -605,10 +609,8 @@ class IpProfileService:
 
     def run(self, request: IpProfileRequest) -> IpProfileOutcome:
         """Refuse unauthorized/out-of-scope geo traffic before the adapter call."""
-        if request.geolocate and not request.authorized:
-            raise AuthorizationRequiredError(
-                "IP geolocation requires explicit documented authorization"
-            )
+        if request.geolocate:
+            _require_authorization(request.authorized, "IP geolocation")
         report = analyze_ip(request.ip_address)
         enforce_ip_scope(report.ip, request.scope_path, request.audit_log_path)
 

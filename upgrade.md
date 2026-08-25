@@ -121,11 +121,14 @@ only the **security**, **functional**, and **licence** items are actual requirem
   - All current contracts use strict `schema_name` plus SemVer `1.0.0`; compatibility negotiation,
     legacy Athena-plan migration, generated JSON Schemas, nested validation, and producer/consumer
     adoption are implemented and verified in Cycle 25.
-- [ ] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
+- [~] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
   timeouts, cancellation, retries, and redacted structured logging.
+  - [x] Core policy/limits/cancellation/redaction primitives, shared HTTP adoption, ARGUS
+    authorization/concurrency adoption, and Athena plan/retry/job-token/audit adoption (Cycle 26).
   - [x] Shared HTTP redirect hook validates every destination before following it; Argus `web`
     applies the engagement scope and audit policy to each hop.
-  - [ ] Remaining policy elements and adoption across network-active modules.
+  - [ ] Adopt the shared policy across Helios, Artemis, Proteus, Hermes, Apollo, Minerva, Vulcan,
+    AEGIS, native integrations, and any API/worker paths that execute equivalent work.
 - [ ] Add adapters for network, persistence, and third-party services so domain tests remain offline
   and deterministic.
 - [ ] Define secure configuration precedence and validate it at startup; reject unsafe or ambiguous
@@ -780,3 +783,48 @@ only the **security**, **functional**, and **licence** items are actual requirem
 - **Next activity:** implement the pending shared execution policy for authorization, scope,
   rate/concurrency, timeout/deadline, cancellation, retry, and redacted structured audit, then adopt it
   across network-active modules without weakening their dedicated scope dialects.
+
+### Cycle 26 — establish shared execution policy and adopt it in Core, ARGUS, and Athena
+
+- **Status:** `VERIFIED`; the repository-wide policy item remains `IN PROGRESS` pending adoption by
+  the remaining modules and vendored/native execution surfaces.
+- **Objective:** replace locally interpreted authorization/resource settings with one fail-closed
+  policy, make cancellation and audit redaction reusable, and close Athena's declared-but-unused retry
+  behavior without weakening any dedicated scope checker.
+- **Component:** Core execution and HTTP, ARGUS application services, Athena coordinator/audit,
+  shared documentation, and offline tests.
+- **Dependencies:** module-specific scope gates, injected HTTP/tool ports, Athena plan limits and
+  cancellation protocol, bounded transports, and append-only audit sinks.
+- **Completion criteria:** invalid timeouts/deadlines/concurrency/retries/backoff/rate fail rather than
+  clamp; authorization precedes scope/adapter calls; cancellation is thread-safe and checked before
+  dispatch/retry; HTTP uses shared timeout/retry/rate values; Athena consumes every declared plan
+  limit and retries only explicit transient errors; audit records recursively redact secret-bearing
+  keys and URL query parameters before persistence; adoption gaps remain explicit.
+- **Implementation:** added `ExecutionPolicy`, strict global bounds, shared authorization/cancellation
+  errors, `CancellationToken`, reusable target-authorization ordering, recursive mapping/URL redaction,
+  and deterministic `StructuredAuditRecord`. `UrllibHttpClient` now validates through this policy,
+  supports `from_policy`, and checks cancellation before requests and retry waits. ARGUS privacy
+  operations share the Core authorization contract and account concurrency bound. Athena constructs
+  the policy from its immutable plan, uses per-job cancellation tokens, applies the previously ignored
+  `max_retries` only to `unreachable`/`timeout`/`lookup_failed`, and redacts allowed audit target URLs
+  before any sink stores them.
+- **Files modified:** `src/olympus/core/execution.py`, `src/olympus/core/http.py`,
+  `src/olympus/core/__init__.py`, `src/olympus/argus/application.py`,
+  `src/olympus/athena/application/coordinator.py`, `src/olympus/athena/domain/audit.py`,
+  `docs/execution-policy.md`, `README.md`, `README-IT.md`,
+  `tests/unit/test_core_execution.py`, `tests/unit/test_core_http.py`,
+  `tests/unit/test_athena_engine.py`, `tests/unit/test_athena_contracts.py`, and `upgrade.md`.
+- **Tests executed:** focused Core HTTP/policy, ARGUS application, and Athena contracts/engine/adapters/
+  CLI suite: `121 passed`; complete offline suite: `596 passed`; Ruff: clean; strict mypy: clean
+  across 115 source files (using a fresh cache after the local generated cache database was corrupt).
+- **Real execution evidence:** the installed package constructed a policy with explicit timeout,
+  deadline, concurrency, and retry budget and serialized a structured audit record in which the token
+  query value was replaced while the non-sensitive target remained. The installed ARGUS account CLI
+  still exited 4 before a site request when metadata authorization was absent. Offline coordinator
+  evidence proves a retry budget of 2 performs exactly three attempts and persists the final failure.
+- **Residual limitations:** cooperative cancellation cannot forcibly terminate arbitrary Python
+  threads, so every adapter must retain hard transport/subprocess timeouts. Retry backoff for Athena
+  tool adapters is not yet scheduled through an injected sleeper; remaining modules still use local
+  policy fragments and are not represented as adopted.
+- **Next activity:** migrate Helios and Artemis first because both are network-active, then apply the
+  same policy/redaction/cancellation boundary to the remaining offline and subprocess modules.
