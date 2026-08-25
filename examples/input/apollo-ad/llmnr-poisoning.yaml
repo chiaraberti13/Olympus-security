@@ -1,3 +1,5 @@
+schema_name: olympus.apollo-rule
+schema_version: 1.0.0
 rule_id: APL-AD-LLMNR-POISON
 title: LLMNR/NBT-NS spoofed name resolution response
 event_type: network

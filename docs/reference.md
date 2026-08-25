@@ -257,9 +257,9 @@ every module; for a single command's full details (every option, with defaults) 
 | **Hermes** — 🔵 secret & config scanner | |
 | `olympus hermes scan <path>` | bounded regular-text/Git-history scan with stable baselines and masked SARIF; missing, symlink and partial inputs never report clean |
 | **Apollo** — 🔵 detection engineering | |
-| `olympus apollo test <rule> <event>` | evaluates one rule against one event |
-| `olympus apollo run --rules <dir> --events <f>` | evaluates a whole rule set against an event stream (NDJSON) |
-| `olympus apollo rules --rules <dir>` | loads, validates and lists every rule in a directory |
+| `olympus apollo test <rule> <event>` | evaluates one versioned exact-match rule against one normalized event with bounded input/deadline |
+| `olympus apollo run --rules <dir> --events <f>` | streams versioned NDJSON through bounded rule/event/evaluation/alert limits; malformed records are reported as partial failure |
+| `olympus apollo rules --rules <dir>` | loads, bounds and validates a non-empty rule directory with unique IDs |
 | **Minerva** — 🔵 incident response & DFIR | |
 | `olympus minerva triage <alerts> --title <t>` | creates a normalized Incident from an Apollo alert export |
 | `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | appends a custody event, after verifying the whole existing chain |
@@ -601,9 +601,9 @@ sempre `--help`, es. `olympus argus scan --help`.
 | **Hermes** — 🔵 secret & config scanner | |
 | `olympus hermes scan <path>` | scansione limitata di testo regolare/history Git con baseline stabili e SARIF mascherato; input mancanti, symlink o parziali non risultano puliti |
 | **Apollo** — 🔵 detection engineering | |
-| `olympus apollo test <rule> <event>` | valuta una regola contro un singolo evento |
-| `olympus apollo run --rules <dir> --events <f>` | valuta un intero rule-set contro uno stream di eventi (NDJSON) |
-| `olympus apollo rules --rules <dir>` | carica, valida ed elenca ogni regola di una cartella |
+| `olympus apollo test <rule> <event>` | valuta una regola versionata a confronto esatto contro un evento normalizzato, con input/deadline limitati |
+| `olympus apollo run --rules <dir> --events <f>` | elabora NDJSON versionato con limiti su regole/eventi/valutazioni/alert; i record malformati causano un fallimento parziale esplicito |
+| `olympus apollo rules --rules <dir>` | carica, limita e valida una cartella non vuota con ID di regola univoci |
 | **Minerva** — 🔵 incident response & DFIR | |
 | `olympus minerva triage <alerts> --title <t>` | crea un Incident normalizzato da un export di alert Apollo |
 | `olympus minerva record <evidence> <ledger> --actor <a> --action <act>` | aggiunge un evento alla catena di custodia, verificando prima l'intera catena esistente |

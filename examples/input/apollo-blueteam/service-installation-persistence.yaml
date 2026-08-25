@@ -1,3 +1,5 @@
+schema_name: olympus.apollo-rule
+schema_version: 1.0.0
 rule_id: APL-BT-SERVICE-INSTALL
 title: New service installed from a temporary path (persistence)
 event_type: windows.security

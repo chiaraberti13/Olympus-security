@@ -133,7 +133,9 @@ only the **security**, **functional**, and **licence** items are actual requirem
     and protected versioned token artifact adoption (Cycle 28).
   - [x] HERMES deadline/cancellation, file/traversal/Git process bounds, strict partial coverage,
     masked SARIF and versioned private baseline adoption (Cycle 29).
-  - [ ] Adopt the shared policy across Apollo, Minerva, Vulcan, AEGIS, native integrations,
+  - [x] APOLLO versioned rule/event handling, deadline/cancellation, file/stream/evaluation/alert
+    bounds, strict partial coverage, deterministic traceable alerts, and atomic output (Cycle 30).
+  - [ ] Adopt the shared policy across Minerva, Vulcan, AEGIS, native integrations,
     and any API/worker paths that execute equivalent work.
 - [ ] Add adapters for network, persistence, and third-party services so domain tests remain offline
   and deterministic.
@@ -986,3 +988,62 @@ only the **security**, **functional**, and **licence** items are actual requirem
 - **Next activity:** inspect APOLLO rule/event parsing and Typer orchestration for version drift,
   unbounded streams, unsafe regex/evaluator behavior, false alerts, and missing application/policy
   boundaries; then connect its versioned alerts cleanly to MINERVA and VULCAN.
+
+### Cycle 30 — bound Apollo rule/event evaluation and preserve detection provenance
+
+- **Status:** `DONE` for APOLLO application/policy and versioned detection contracts; the
+  repository-wide policy parent remains `IN PROGRESS` for MINERVA, VULCAN, AEGIS and native
+  integrations.
+- **Objective:** prevent catch-all or ambiguous rules, invented event identity, silently discarded
+  telemetry, unbounded offline evaluation, unstable alert identity, and lost rule/MITRE provenance;
+  keep one domain path behind CLI and downstream consumers.
+- **Component:** APOLLO rule loader, event-stream adapter, detection engine, application service,
+  CLI/output adapter, shared `Alert` contract, example rules, contract/policy/reference/audit docs,
+  and offline integration tests.
+- **Dependencies:** shared `ExecutionPolicy`/cancellation and SemVer compatibility, strict Pydantic
+  contracts, YAML safe loading, no-follow regular-file descriptors, atomic files, SHA-256 stable IDs,
+  and the existing MINERVA/VULCAN shared-alert consumers.
+- **Completion criteria:** rules and events have exact supported schemas or one explicit unambiguous
+  legacy migration; rule sets are non-empty with unique IDs and non-empty exact conditions; no regex,
+  expression or shell evaluation occurs; files, rules, event records/bytes, evaluations, alerts and
+  deadline are bounded below Typer; symlink/non-regular and input/output-conflicting paths fail;
+  malformed/conflicting records are never silently skipped; exact duplicates do not inflate alerts;
+  alerts retain rule/MITRE/time provenance and stable identity; partial streams export available
+  alerts atomically but exit non-clean; MINERVA can consume the produced collection.
+- **Implementation:** introduced `ApolloApplicationService` with typed test/run outcomes, cooperative
+  cancellation and a shared overall deadline. Rule files now carry `olympus.apollo-rule` `1.0.0`,
+  validate exact headers, bounded fields, at least one condition, unique IDs and MITRE identifiers,
+  and use capped UTF-8 no-follow reads; the former headerless shape has one named migration. Event
+  files/NDJSON are capped during physical-line streaming; legacy events require their complete
+  identity instead of receiving invented IDs/timestamps; duplicate IDs require identical data;
+  malformed records become line-numbered partial errors. Evaluation caps rule/event products and
+  alerts, checks cancellation/deadline, and rejects duplicate rule IDs even for library callers.
+  Alert IDs are stable hashes of rule/event IDs and now include `rule_id`, `mitre_attack`, and the
+  observation time. Typer delegates to the service, exposes all resource limits, uses canonical exit
+  codes, and writes unique fsynced atomic output without overwriting inputs.
+- **Files modified:** `src/olympus/apollo/application.py`, `src/olympus/apollo/cli.py`,
+  `src/olympus/apollo/engine.py`, `src/olympus/apollo/export.py`,
+  `src/olympus/apollo/rules.py`, `src/olympus/core/models.py`, all 20 Apollo YAML fixtures under
+  `examples/input`, `tests/unit/test_apollo.py`, `docs/apollo.md`, `docs/contracts.md`,
+  `docs/execution-policy.md`, `docs/reference.md`, `docs/ecosystem-audit.md`, and `upgrade.md`.
+- **Tests executed:** focused APOLLO plus downstream MINERVA/VULCAN suite: `52 passed`; complete
+  offline suite: `618 passed`; Ruff: clean; strict mypy: clean across 120 source files with a fresh
+  generated cache directory.
+- **Real execution evidence:** installed `olympus apollo test` evaluated the versioned example pair,
+  exited 0, and produced one `ALT-A533997F698B4F6BA4EE7B28` alert with
+  `APL-DEMO-PWSH`/`T1059.001`. Installed `apollo run` read two identical physical records, reported
+  one duplicate, emitted the same single deterministic alert and exited 1. A stream containing that
+  valid event plus one identity-incomplete record preserved the alert, named the missing fields on
+  line 2 and exited 2. Installed `olympus minerva triage` consumed the complete Apollo export,
+  retained the identical alert ID in its incident and exited 0.
+- **Residual limitations:** matching deliberately supports only exact scalar attributes on one event;
+  temporal correlation, windows, numeric/range operators and reviewed regex would need a separate
+  bounded operator grammar rather than executable/user-controlled expressions. Cooperative
+  cancellation occurs between bounded file/evaluation operations; `O_NOFOLLOW` requires equivalent
+  platform controls where unavailable. The optional alert provenance fields preserve compatibility
+  with existing `1.0.0` readers; a future required-field transition needs a new major contract.
+- **Next activity:** inspect MINERVA incident/custody and VULCAN aggregation/report paths for
+  unbounded or symlinked inputs, ambiguous legacy contracts, mutable/partially verified evidence,
+  unsafe report rendering, Typer-domain coupling, cancellation/deadline gaps, and cross-module
+  provenance loss; then implement their common application/policy boundary and real Apollo-to-report
+  proof.

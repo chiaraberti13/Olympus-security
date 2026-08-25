@@ -72,6 +72,10 @@ uses the same URL redactor before SQLite persistence.
   timeout/deadline validation and cooperative cancellation. Working-tree enumeration,
   file bytes/counts, Git commits/output, process lifetime and generated artifacts are
   independently bounded; symlinks and non-regular explicit inputs fail closed.
-- Apollo, Minerva, Vulcan, and AEGIS adoption is tracked in
+- Apollo: offline evaluation does not invent authorization. Its application service applies
+  shared deadline/cancellation checks while independently bounding rule/event files, stream
+  bytes, physical records, evaluations and alerts; malformed records produce partial failure
+  instead of silent loss, and symlink/non-regular inputs fail closed.
+- Minerva, Vulcan, and AEGIS adoption is tracked in
   `upgrade.md`; offline-only work uses the same validation/redaction pieces where
   applicable but does not invent network authorization requirements.

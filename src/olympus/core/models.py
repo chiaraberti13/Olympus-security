@@ -8,6 +8,7 @@ format negotiation. Each model declares its ``schema_name`` and
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Literal, Self
 
@@ -120,8 +121,26 @@ class Alert(OlympusModel):
     source: Source
     severity: Severity = Severity.MEDIUM
     status: AlertStatus = AlertStatus.OPEN
+    rule_id: str | None = None
+    mitre_attack: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_utcnow)
+
+    @field_validator("rule_id")
+    @classmethod
+    def _validate_rule_id(cls, value: str | None) -> str | None:
+        if value is not None and re.fullmatch(r"APL-[A-Z0-9-]+", value) is None:
+            raise ValueError("rule_id must match APL-[A-Z0-9-]+")
+        return value
+
+    @field_validator("mitre_attack")
+    @classmethod
+    def _validate_mitre_attack(cls, value: list[str]) -> list[str]:
+        if any(re.fullmatch(r"T\d{4}(?:\.\d{3})?", item) is None for item in value):
+            raise ValueError("mitre_attack IDs must match T#### or T####.###")
+        if len(value) != len(set(value)):
+            raise ValueError("mitre_attack IDs must be unique")
+        return value
 
 
 class Incident(OlympusModel):

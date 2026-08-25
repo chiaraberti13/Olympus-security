@@ -1,6 +1,6 @@
 # Olympus ecosystem audit
 
-_Audit date: 2026-08-24. Scope: every tool in the Olympus repository — native
+_Audit date: 2026-08-25. Scope: every tool in the Olympus repository — native
 modules, vendored complete tools, and the integration layer._
 
 > Method: the CLI tree was introspected live (`typer`/`click`), module sources
@@ -35,7 +35,7 @@ modules, vendored complete tools, and the integration layer._
 | ARGUS (complete) | vendored | Full standalone ARGUS OSINT CLI | `olympus argus-native` | ✅ | parity + smoke | basic execution verified (offline cmds) |
 | AEGIS (complete) | vendored | Full Vulnerability Assessment Platform | `olympus aegis` | ✅ | parity + wiring | startup verified (web app booted, migrations ran) |
 
-Total automated tests collected: **476** (all passing; optional, non-blocking).
+Total automated tests collected: **618** (all passing; optional, non-blocking).
 
 ## 3. Per-tool detail
 
@@ -55,7 +55,7 @@ commands.
 | artemis | check-scope, content, fetch, fingerprint, metabase, xss | pydantic | none | none | scope JSON, wordlists | findings JSON | n/a |
 | proteus | campaign, email, page, report | core policy/contracts | none | none | recipient/sender/landing scope JSON | protected versioned campaign JSON, report JSON, training HTML | n/a |
 | hermes | scan | core policy/contracts | Git (optional history) | none | paths, versioned baseline, resource limits | masked SARIF, private baseline | n/a |
-| apollo | rules, run, test | pydantic | none | none | rules YAML, events | alerts JSON | n/a |
+| apollo | rules, run, test | core policy/contracts, pydantic | none | none | versioned YAML rules, versioned NDJSON events, strict resource limits | versioned atomic alert JSON with rule/MITRE trace | n/a |
 | minerva | record, timeline, triage, verify | pydantic | none | none | evidence JSON | incident/custody JSON | n/a |
 | vulcan | rank, report | pydantic | none | none | asset/finding/alert JSON | JSON/Markdown/HTML report | n/a |
 
