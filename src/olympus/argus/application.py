@@ -10,10 +10,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from olympus.argus.ct import CertificateTransparencyClient
+from olympus.argus.dns_records import RECORD_TYPES, DnsRecordReport, resolve_records
 from olympus.argus.fronting import FrontingReport, assess_fronting
 from olympus.argus.recon import DomainRecon, scan_domain
 from olympus.argus.resolver import DnsResolver
 from olympus.argus.scope import enforce_scope
+from olympus.argus.web import (
+    WebIntel,
+    WebReconError,
+    build_web_asset,
+    build_web_findings,
+    fetch_web,
+    host_of,
+)
+from olympus.argus.whois import WhoisReport, lookup_domain
+from olympus.core.http import HttpClient
 
 
 @dataclass(frozen=True)
@@ -65,4 +76,87 @@ class FrontingAssessmentService:
             self.resolver,
             self.ct_client,
             max_subdomains=request.max_subdomains,
+        )
+
+
+@dataclass(frozen=True)
+class DnsLookupRequest:
+    """Command-independent input for one scoped DNS record lookup."""
+
+    domain: str
+    scope_path: Path
+    audit_log_path: Path
+    record_types: tuple[str, ...] = RECORD_TYPES
+
+
+@dataclass(frozen=True)
+class DnsLookupService:
+    """Authorize and execute DNS-over-HTTPS record enumeration."""
+
+    http: HttpClient
+
+    def run(self, request: DnsLookupRequest) -> DnsRecordReport:
+        """Enforce scope before invoking the injected network transport."""
+        if not request.record_types:
+            raise ValueError("record_types must contain at least one DNS record type")
+        record_types = tuple(record_type.strip().upper() for record_type in request.record_types)
+        if any(not record_type for record_type in record_types):
+            raise ValueError("record_types cannot contain empty values")
+        enforce_scope(request.domain, request.scope_path, request.audit_log_path)
+        return resolve_records(request.domain, self.http, record_types)
+
+
+@dataclass(frozen=True)
+class WhoisLookupRequest:
+    """Command-independent input for one scoped RDAP lookup."""
+
+    domain: str
+    scope_path: Path
+    audit_log_path: Path
+
+
+@dataclass(frozen=True)
+class WhoisLookupService:
+    """Authorize and execute domain-registration intelligence via RDAP."""
+
+    http: HttpClient
+
+    def run(self, request: WhoisLookupRequest) -> WhoisReport:
+        """Enforce scope before invoking the injected network transport."""
+        enforce_scope(request.domain, request.scope_path, request.audit_log_path)
+        return lookup_domain(request.domain, self.http)
+
+
+class InvalidWebTargetError(ValueError):
+    """Raised when a web target cannot be normalized to a scoped hostname."""
+
+
+@dataclass(frozen=True)
+class WebReconRequest:
+    """Command-independent input for one scoped passive HTTP assessment."""
+
+    url: str
+    scope_path: Path
+    audit_log_path: Path
+
+
+@dataclass(frozen=True)
+class WebReconService:
+    """Authorize, fetch, and map passive HTTP posture to shared contracts."""
+
+    http: HttpClient
+
+    def run(self, request: WebReconRequest) -> WebIntel:
+        """Validate and authorize the host before invoking HTTP."""
+        try:
+            host = host_of(request.url)
+        except WebReconError as exc:
+            raise InvalidWebTargetError(str(exc)) from exc
+        enforce_scope(host, request.scope_path, request.audit_log_path)
+        report = fetch_web(request.url, self.http)
+        asset = build_web_asset(report)
+        return WebIntel(
+            report=report,
+            asset=asset,
+            findings=build_web_findings(asset.asset_id, report),
         )
