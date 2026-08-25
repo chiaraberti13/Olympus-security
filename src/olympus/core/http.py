@@ -17,6 +17,7 @@ from __future__ import annotations
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -48,6 +49,19 @@ class HttpRequestError(RuntimeError):
     """Raised when the HTTP request fails (network error, timeout...)."""
 
 
+class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Validate every redirect destination before urllib follows it."""
+
+    def __init__(self, validator: Callable[[str], None]) -> None:
+        self._validator = validator
+
+    def redirect_request(  # type: ignore[no-untyped-def]
+        self, req, fp, code, msg, headers, newurl
+    ):
+        self._validator(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class UrllibHttpClient:
     """Production :class:`HttpClient` backed by ``urllib``.
 
@@ -64,15 +78,26 @@ class UrllibHttpClient:
         retries: int = 2,
         backoff: float = 0.5,
         min_interval: float = 0.0,
+        redirect_validator: Callable[[str], None] | None = None,
     ) -> None:
         self._timeout = timeout
         self._retries = max(retries, 0)
         self._backoff = max(backoff, 0.0)
         self._min_interval = max(min_interval, 0.0)
         self._last_request_at = 0.0
+        self._opener = (
+            urllib.request.build_opener(_ValidatingRedirectHandler(redirect_validator))
+            if redirect_validator is not None
+            else None
+        )
 
     @classmethod
-    def from_config(cls, *, min_interval: float | None = None) -> UrllibHttpClient:
+    def from_config(
+        cls,
+        *,
+        min_interval: float | None = None,
+        redirect_validator: Callable[[str], None] | None = None,
+    ) -> UrllibHttpClient:
         """Build a client using ``[http]`` config defaults (CLI overrides win).
 
         ``min_interval`` from the caller (e.g. a ``--rate`` flag) takes
@@ -87,6 +112,7 @@ class UrllibHttpClient:
             retries=config.get("http", "retries", 2, data),
             backoff=config.get("http", "backoff", 0.5, data),
             min_interval=rate,
+            redirect_validator=redirect_validator,
         )
 
     def _throttle(self) -> None:
@@ -100,9 +126,8 @@ class UrllibHttpClient:
 
     def _perform(self, request: urllib.request.Request, url: str) -> HttpResponse:
         try:
-            with urllib.request.urlopen(  # noqa: S310 (scheme checked by caller)
-                request, timeout=self._timeout
-            ) as response:
+            open_request = self._opener.open if self._opener is not None else urllib.request.urlopen
+            with open_request(request, timeout=self._timeout) as response:
                 body_bytes = response.read()
                 status_code = response.status
                 response_headers = dict(response.headers.items())

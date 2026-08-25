@@ -131,6 +131,15 @@ class InvalidWebTargetError(ValueError):
     """Raised when a web target cannot be normalized to a scoped hostname."""
 
 
+def authorize_web_url(url: str, scope_path: Path, audit_log_path: Path) -> None:
+    """Validate and authorize a web URL, including redirect destinations."""
+    try:
+        host = host_of(url)
+    except WebReconError as exc:
+        raise InvalidWebTargetError(str(exc)) from exc
+    enforce_scope(host, scope_path, audit_log_path)
+
+
 @dataclass(frozen=True)
 class WebReconRequest:
     """Command-independent input for one scoped passive HTTP assessment."""
@@ -148,11 +157,7 @@ class WebReconService:
 
     def run(self, request: WebReconRequest) -> WebIntel:
         """Validate and authorize the host before invoking HTTP."""
-        try:
-            host = host_of(request.url)
-        except WebReconError as exc:
-            raise InvalidWebTargetError(str(exc)) from exc
-        enforce_scope(host, request.scope_path, request.audit_log_path)
+        authorize_web_url(request.url, request.scope_path, request.audit_log_path)
         report = fetch_web(request.url, self.http)
         asset = build_web_asset(report)
         return WebIntel(

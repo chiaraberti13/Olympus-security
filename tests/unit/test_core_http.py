@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import io
+import urllib.request
 from typing import Any
 
 import pytest
 
-from olympus.core.http import USER_AGENT, HttpRequestError, UrllibHttpClient
+from olympus.core.http import (
+    USER_AGENT,
+    HttpRequestError,
+    UrllibHttpClient,
+    _ValidatingRedirectHandler,
+)
 
 
 class _FakeHttpResponse:
@@ -24,6 +30,39 @@ class _FakeHttpResponse:
 
     def __exit__(self, *exc_info: object) -> None:
         return None
+
+
+def test_redirect_handler_validates_destination_before_following() -> None:
+    checked: list[str] = []
+    handler = _ValidatingRedirectHandler(checked.append)
+    request = handler.redirect_request(
+        urllib.request.Request("https://allowed.example/start"),
+        None,
+        302,
+        "Found",
+        {},
+        "https://redirected.example/path",
+    )
+
+    assert checked == ["https://redirected.example/path"]
+    assert request is not None
+
+
+def test_redirect_handler_does_not_follow_rejected_destination() -> None:
+    def reject(url: str) -> None:
+        raise PermissionError(f"blocked: {url}")
+
+    handler = _ValidatingRedirectHandler(reject)
+
+    with pytest.raises(PermissionError, match="blocked"):
+        handler.redirect_request(
+            urllib.request.Request("https://allowed.example/start"),
+            None,
+            302,
+            "Found",
+            {},
+            "http://127.0.0.1/admin",
+        )
 
 
 def test_request_sends_honest_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:

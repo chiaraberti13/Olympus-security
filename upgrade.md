@@ -98,6 +98,9 @@ only the **security**, **functional**, and **licence** items are actual requirem
   evidence, and reports; document compatibility rules.
 - [ ] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
   timeouts, cancellation, retries, and redacted structured logging.
+  - [x] Shared HTTP redirect hook validates every destination before following it; Argus `web`
+    applies the engagement scope and audit policy to each hop.
+  - [ ] Remaining policy elements and adoption across network-active modules.
 - [ ] Add adapters for network, persistence, and third-party services so domain tests remain offline
   and deterministic.
 - [ ] Define secure configuration precedence and validate it at startup; reject unsafe or ambiguous
@@ -400,5 +403,19 @@ only the **security**, **functional**, and **licence** items are actual requirem
   (exit 2), scope denial (exit 3), network failure (exit 4), and findings (exit 1).
 - **Known limitation:** redirect destinations are followed by the shared urllib transport and are
   not re-authorized after each hop because its response contract does not expose redirect history.
-  Redirect-aware transport hardening is tracked under the shared execution-policy task.
-- **Scope intentionally deferred:** remaining Argus extractions and redirect hardening stay open.
+  Redirect-aware transport hardening was tracked under the shared execution-policy task and resolved
+  in Cycle 16.
+- **Scope intentionally deferred:** remaining Argus extractions stay open.
+
+### Cycle 16 — enforce scope before every HTTP redirect
+
+- **Task:** close the redirect authorization gap identified in Cycle 15.
+- **Result:** completed on 2026-08-25. The shared urllib adapter accepts an optional redirect
+  validator and invokes it before following every hop. Argus `web` supplies its URL validation,
+  engagement-scope, and audit policy, so an out-of-scope or loopback redirect is refused before the
+  redirected request is sent while preserving initial-target validation in the application service.
+- **Verification:** offline transport tests prove validation precedes redirect construction and that
+  validator errors stop the hop. A CLI integration test proves a scoped public target redirecting to
+  loopback exits with scope denial and writes the blocked destination to the audit log.
+- **Scope intentionally deferred:** generalized DNS rebinding protection and remaining shared
+  execution-policy elements stay open; no broader policy-completeness claim is made.

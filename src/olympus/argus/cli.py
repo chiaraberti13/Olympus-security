@@ -34,6 +34,7 @@ from olympus.argus.application import (
     WebReconService,
     WhoisLookupRequest,
     WhoisLookupService,
+    authorize_web_url,
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
@@ -824,7 +825,10 @@ def web(
 ) -> None:
     """Fetch an in-scope URL once and report its passive HTTP security posture."""
     try:
-        intel = WebReconService(UrllibHttpClient.from_config()).run(
+        http = UrllibHttpClient.from_config(
+            redirect_validator=lambda redirect_url: authorize_web_url(redirect_url, scope, log)
+        )
+        intel = WebReconService(http).run(
             WebReconRequest(url=url, scope_path=scope, audit_log_path=log)
         )
     except InvalidWebTargetError as exc:
