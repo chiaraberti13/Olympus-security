@@ -93,6 +93,8 @@ only the **security**, **functional**, and **licence** items are actual requirem
   - [x] Argus `dns`: scoped application service with an injected HTTP port.
   - [x] Argus `whois`: scoped RDAP application service with an injected HTTP port.
   - [x] Argus `web`: scoped passive-HTTP application service with an injected HTTP port.
+  - [x] Argus `email`: offline analysis and authorized, scoped enrichment service with injected DNS
+    and HTTP ports.
   - [ ] Remaining Argus commands and affected modules.
 - [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
@@ -419,3 +421,31 @@ only the **security**, **functional**, and **licence** items are actual requirem
   loopback exits with scope denial and writes the blocked destination to the audit log.
 - **Scope intentionally deferred:** generalized DNS rebinding protection and remaining shared
   execution-policy elements stay open; no broader policy-completeness claim is made.
+
+### Cycle 17 — separate Argus email analysis and enrichment from Typer
+
+- **Status:** `VERIFIED` (the parent repository-wide separation activity remains `IN PROGRESS`).
+- **Objective:** move the complete `argus email` use case behind a command-independent application
+  service without weakening its privacy and engagement controls.
+- **Component:** ARGUS native Olympus integration; CLI and shared asset/finding contracts.
+- **Dependencies:** injected `DnsResolver` and `HttpClient` ports, domain scope policy, and the existing
+  offline email-analysis primitives.
+- **Completion criteria:** offline analysis performs no network access; enrichment requires explicit
+  authorization and valid scope; rejected targets never reach either network port; CLI exit and
+  export behavior remains compatible.
+- **Implementation:** added `EmailAnalysisService`, `EmailAnalysisRequest`, and a typed
+  `AuthorizationRequiredError`; the service now owns parsing, authorization, scope enforcement,
+  enrichment orchestration, and contract mapping. Typer only creates adapters, translates errors,
+  presents results, and exports them.
+- **Files modified:** `src/olympus/argus/application.py`, `src/olympus/argus/cli.py`,
+  `tests/unit/test_argus_application.py`, and `upgrade.md`.
+- **Tests executed:** focused application and email CLI/unit tests plus the complete offline suite;
+  exact commands and outcomes are recorded in the commit/PR verification report.
+- **Real execution evidence:** direct service tests execute offline analysis and prove empty port-call
+  logs; authorization and out-of-scope tests prove refusal before DNS/HTTP. Existing CLI tests cover
+  JSON/export success and exit codes 2, 3, and 4.
+- **Residual limitations:** live enrichment still depends on an authorized target and reachable DNS
+  and Gravatar services; this environment-independent fact is not represented as verified live
+  execution.
+- **Next activity:** extract the Argus `mac` analysis/vendor lookup use case, adding an explicit
+  authorization and scope policy before its optional third-party network request.

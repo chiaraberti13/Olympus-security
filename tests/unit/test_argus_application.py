@@ -8,10 +8,13 @@ from pathlib import Path
 import pytest
 
 from olympus.argus.application import (
+    AuthorizationRequiredError,
     DnsLookupRequest,
     DnsLookupService,
     DomainScanRequest,
     DomainScanService,
+    EmailAnalysisRequest,
+    EmailAnalysisService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
     InvalidWebTargetError,
@@ -108,6 +111,59 @@ def test_domain_scan_service_returns_recon_without_cli_dependency(tmp_path: Path
     assert result.subdomains == [f"portal.{DOMAIN}"]
     assert resolver.calls
     assert ct_client.calls == [DOMAIN]
+
+
+def test_email_service_offline_does_not_call_network() -> None:
+    resolver = RecordingResolver()
+    http = RecordingHttpClient()
+
+    intel = EmailAnalysisService(resolver, http).run(
+        EmailAnalysisRequest(f"alice@{DOMAIN}")
+    )
+
+    assert intel.report.email == f"alice@{DOMAIN}"
+    assert intel.enrichment is None
+    assert resolver.calls == []
+    assert http.calls == []
+
+
+def test_email_service_requires_authorization_before_network(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    http = RecordingHttpClient()
+
+    with pytest.raises(AuthorizationRequiredError):
+        EmailAnalysisService(resolver, http).run(
+            EmailAnalysisRequest(
+                f"alice@{DOMAIN}",
+                enrich=True,
+                scope_path=_scope(tmp_path / "scope.json"),
+                audit_log_path=tmp_path / "audit.log",
+            )
+        )
+
+    assert resolver.calls == []
+    assert http.calls == []
+
+
+def test_email_service_blocks_out_of_scope_before_network(tmp_path: Path) -> None:
+    resolver = RecordingResolver()
+    http = RecordingHttpClient()
+    audit_log = tmp_path / "audit.log"
+
+    with pytest.raises(OutOfScopeError):
+        EmailAnalysisService(resolver, http).run(
+            EmailAnalysisRequest(
+                "alice@outside.example",
+                enrich=True,
+                authorized=True,
+                scope_path=_scope(tmp_path / "scope.json"),
+                audit_log_path=audit_log,
+            )
+        )
+
+    assert resolver.calls == []
+    assert http.calls == []
+    assert "outside.example" in audit_log.read_text(encoding="utf-8")
 
 
 def test_domain_scan_service_blocks_before_network_dependencies(tmp_path: Path) -> None:
