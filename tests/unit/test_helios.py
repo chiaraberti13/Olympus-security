@@ -7,9 +7,9 @@ import pytest
 from typer.testing import CliRunner
 
 from olympus.cli import app
-from olympus.core.models import Finding
+from olympus.core.models import Finding, Observation
 from olympus.helios import cli as helios_cli
-from olympus.helios.export import export_findings, to_findings
+from olympus.helios.export import export_findings, to_findings, to_observations
 from olympus.helios.scanner import OpenPort, discover
 from olympus.helios.scope import OutOfScopeError, enforce_scope
 
@@ -89,9 +89,34 @@ def test_cli_scan_enforces_scope_and_exports(
 
     result = runner.invoke(
         app,
-        ["helios", "scan", "192.0.2.10", "--ports", "80,443", "--scope", str(scope),
-         "--output", str(output), "--log", str(tmp_path / "blocked.log")],
+        [
+            "helios",
+            "scan",
+            "192.0.2.10",
+            "--ports",
+            "80,443",
+            "--scope",
+            str(scope),
+            "--output",
+            str(output),
+            "--log",
+            str(tmp_path / "blocked.log"),
+        ],
     )
 
     assert result.exit_code == 0
     assert output.exists()
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["schema_name"] == "olympus.helios-result"
+    observations = [Observation.model_validate(item) for item in payload["observations"]]
+    assert observations[0].attributes == {
+        "host": "192.0.2.10",
+        "port": "443",
+        "service": "https",
+    }
+
+
+def test_open_ports_map_to_versioned_observations() -> None:
+    observations = to_observations("AST-2026-00001", [OpenPort("192.0.2.10", 443, "https")])
+    assert observations[0].schema_name == "olympus.observation"
+    assert observations[0].observation_type == "tcp.open-port"

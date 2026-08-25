@@ -66,8 +66,9 @@ useful and never blocks a change.
 
 ## Domain contracts
 
-All persisted contracts carry `schema_name` and integer `schema_version`, reject unknown fields, and
-serialize timestamps as UTC ISO 8601. IDs use the existing core ID conventions.
+All persisted contracts carry `schema_name` and a Semantic Versioning `schema_version` string,
+reject unknown fields, and serialize timestamps as UTC ISO 8601. Compatibility and migration follow
+[`docs/contracts.md`](../contracts.md); IDs use the existing core ID conventions.
 
 ### AssessmentPlan
 

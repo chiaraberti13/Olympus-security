@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from olympus.core.models import Alert, Asset, Finding
+from olympus.core.models import Alert, Asset, Finding, ReportSummary, SecurityReport
 from olympus.vulcan.aggregate import rank_findings, severity_breakdown
 
 
@@ -16,19 +16,19 @@ def build_report(
 ) -> dict[str, object]:
     """Assemble a JSON-serializable consolidated report."""
     ranked = rank_findings(findings)
-    return {
-        "engagement": engagement,
-        "generated_at": datetime.now(UTC).isoformat(),
-        "summary": {
-            "assets": len(assets),
-            "findings": len(findings),
-            "alerts": len(alerts),
-            "severity_breakdown": severity_breakdown(findings),
-        },
-        "assets": [json.loads(a.model_dump_json()) for a in assets],
-        "findings": [json.loads(f.model_dump_json()) for f in ranked],
-        "alerts": [json.loads(a.model_dump_json()) for a in alerts],
-    }
+    report = SecurityReport(
+        engagement=engagement,
+        summary=ReportSummary(
+            assets=len(assets),
+            findings=len(findings),
+            alerts=len(alerts),
+            severity_breakdown=severity_breakdown(findings),
+        ),
+        assets=assets,
+        findings=ranked,
+        alerts=alerts,
+    )
+    return report.model_dump(mode="json")
 
 
 def render_markdown(

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from olympus.helios.export import export_findings, to_findings
+from olympus.helios.export import export_scan_result, to_findings, to_observations
 from olympus.helios.scanner import SocketConnector, discover
 from olympus.helios.scope import OutOfScopeError, ScopeError, enforce_scope
 
@@ -42,5 +42,8 @@ def scan(
         typer.echo(f"helios: invalid ports: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     findings = to_findings(asset_id, observations)
-    export_findings(findings, output)
-    typer.echo(f"helios: exported {len(findings)} finding(s) to {output}")
+    export_scan_result(to_observations(asset_id, observations), findings, output)
+    typer.echo(
+        f"helios: exported {len(observations)} observation(s) and "
+        f"{len(findings)} finding(s) to {output}"
+    )

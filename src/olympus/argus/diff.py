@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from olympus.core.contracts import ContractCompatibilityError, validate_contract_header
 from olympus.core.models import Asset
 
 
@@ -29,11 +30,10 @@ def _hostnames(path: Path) -> set[str]:
     payload: Any = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("assets"), list):
         raise SnapshotValidationError(f"invalid Argus asset snapshot: {path}")
-    if payload.get("schema_name") != "olympus.argus-assets":
-        raise SnapshotValidationError(f"unexpected snapshot schema in {path}")
-    version = payload.get("schema_version")
-    if not isinstance(version, str) or version.split(".", 1)[0] != "1":
-        raise SnapshotValidationError(f"unsupported snapshot schema version in {path}: {version!r}")
+    try:
+        validate_contract_header(payload, schema_name="olympus.argus-assets")
+    except ContractCompatibilityError as exc:
+        raise SnapshotValidationError(f"incompatible snapshot {path}: {exc}") from exc
 
     hostnames: set[str] = set()
     for index, item in enumerate(payload["assets"]):
@@ -43,10 +43,6 @@ def _hostnames(path: Path) -> set[str]:
             raise SnapshotValidationError(
                 f"invalid asset at index {index} in snapshot {path}: {exc}"
             ) from exc
-        if asset.schema_name != "olympus.asset" or asset.schema_version.split(".", 1)[0] != "1":
-            raise SnapshotValidationError(
-                f"incompatible asset contract at index {index} in snapshot {path}"
-            )
         if asset.hostname:
             hostnames.add(asset.hostname.strip().lower().rstrip("."))
     return hostnames

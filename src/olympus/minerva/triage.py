@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from olympus.core.contracts import validate_contract_header
 from olympus.core.enums import IncidentStatus, Severity, Source
 from olympus.core.models import Alert, Incident
 
@@ -49,8 +50,7 @@ def export_incident(incident: Incident, output: Path) -> None:
 def load_alerts(path: Path) -> list[Alert]:
     """Load alerts from an Apollo export and validate every shared object."""
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema_name") != "olympus.apollo-alerts":
-        raise ValueError("input must be an olympus.apollo-alerts document")
+    validate_contract_header(payload, schema_name="olympus.apollo-alerts")
     raw_alerts = payload.get("alerts")
     if not isinstance(raw_alerts, list):
         raise ValueError("alerts must be a JSON array")

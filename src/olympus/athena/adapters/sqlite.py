@@ -26,7 +26,7 @@ from olympus.athena.domain.assessment import (
     advance_assessment,
     advance_job,
 )
-from olympus.athena.domain.contracts import AssessmentPlan, load_plan
+from olympus.athena.domain.contracts import AssessmentPlan, load_plan, load_result
 
 #: Maximum bytes accepted for a single stored result document.
 MAX_RESULT_BYTES = 1_000_000
@@ -212,13 +212,23 @@ class SqliteAssessmentRepository:
             raise ResultTooLargeError(
                 f"result document for job {job_id} exceeds {MAX_RESULT_BYTES} bytes"
             )
+        try:
+            result = load_result(json.loads(document))
+        except json.JSONDecodeError as exc:
+            raise ValueError("result document must be valid JSON") from exc
+        if result.assessment_id != assessment_id:
+            raise ValueError("result assessment_id does not match storage key")
+        if result.job.assessment_id != assessment_id or result.job.job_id != job_id:
+            raise ValueError("result job identity does not match storage key")
+        canonical = result.canonical_json()
+        encoded = canonical.encode("utf-8")
         sha256 = hashlib.sha256(encoded).hexdigest()
         result_id = f"RES-{sha256[:16]}-{job_id}"
         with self._conn:
             self._conn.execute(
                 "INSERT OR REPLACE INTO results(result_id, assessment_id, job_id, document, "
                 "sha256, length) VALUES (?, ?, ?, ?, ?, ?)",
-                (result_id, assessment_id, job_id, document, sha256, len(encoded)),
+                (result_id, assessment_id, job_id, canonical, sha256, len(encoded)),
             )
         return result_id
 
@@ -226,7 +236,13 @@ class SqliteAssessmentRepository:
         row = self._conn.execute(
             "SELECT document FROM results WHERE result_id = ?", (result_id,)
         ).fetchone()
-        return row["document"] if row is not None else None
+        if row is None:
+            return None
+        document = str(row["document"])
+        try:
+            return load_result(json.loads(document)).canonical_json()
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"stored result {result_id} is not valid JSON") from exc
 
     # -- recovery ---------------------------------------------------------- #
     def running_jobs(self) -> list[tuple[str, Job]]:

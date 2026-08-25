@@ -21,7 +21,7 @@ from olympus.athena.application.registry import (
     resolve_adapters,
 )
 from olympus.athena.domain.assessment import Assessment, Job
-from olympus.athena.domain.contracts import load_plan
+from olympus.athena.domain.contracts import AssessmentResult, load_plan
 from olympus.athena.ports import ToolRequest
 from olympus.core.enums import Severity, Source
 from olympus.core.http import HttpRequestError, HttpResponse
@@ -173,8 +173,14 @@ def test_sqlite_result_cap(tmp_path: Path) -> None:
     plan_id = repo.save_plan(plan)
     job = Job(job_id="J1", adapter="dns", target_kind="domain", target_value="example.com")
     repo.save_assessment(Assessment(assessment_id="A1", plan_id=plan_id, jobs=(job,)))
-    rid = repo.save_result("A1", "J1", json.dumps({"ok": True}))
-    assert repo.load_result(rid) is not None
+    document = AssessmentResult(
+        assessment_id="A1",
+        job=job.to_contract("A1").model_copy(update={"state": "succeeded"}),
+    ).canonical_json()
+    rid = repo.save_result("A1", "J1", document)
+    loaded = repo.load_result(rid)
+    assert loaded is not None
+    assert json.loads(loaded)["schema_name"] == "olympus.athena.result"
     assert repo.load_result("RES-missing") is None
     with pytest.raises(ResultTooLargeError):
         repo.save_result("A1", "J1", "x" * 2_000_000)

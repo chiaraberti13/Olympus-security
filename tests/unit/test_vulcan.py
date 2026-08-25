@@ -26,9 +26,7 @@ def _finding(title: str, severity: Severity, asset_id: str = "AST-1") -> Finding
 
 
 def _write(path: Path, models: list[Finding]) -> Path:
-    path.write_text(
-        json.dumps([json.loads(m.model_dump_json()) for m in models]), encoding="utf-8"
-    )
+    path.write_text(json.dumps([json.loads(m.model_dump_json()) for m in models]), encoding="utf-8")
     return path
 
 
@@ -37,6 +35,40 @@ def test_load_findings_from_array(tmp_path: Path) -> None:
     loaded = load_findings([path])
     assert len(loaded) == 1
     assert loaded[0].title == "a"
+
+
+def test_load_findings_from_versioned_collection(tmp_path: Path) -> None:
+    finding = _finding("wrapped", Severity.MEDIUM)
+    path = tmp_path / "wrapped.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_name": "olympus.helios-findings",
+                "schema_version": "1.0.0",
+                "findings": [finding.model_dump(mode="json")],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_findings([path]) == [finding]
+
+
+def test_load_findings_rejects_incompatible_collection_version(tmp_path: Path) -> None:
+    path = tmp_path / "future.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_name": "olympus.helios-findings",
+                "schema_version": "2.0.0",
+                "findings": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AggregationError, match="incompatible contract"):
+        load_findings([path])
 
 
 def test_load_findings_accepts_single_object(tmp_path: Path) -> None:
@@ -79,6 +111,8 @@ def test_build_report_and_markdown() -> None:
     findings = [_finding("SQLi", Severity.CRITICAL)]
     alerts = [Alert(event_id="EVT-1", title="brute force", source=Source.APOLLO)]
     report = build_report("eng", assets, findings, alerts)
+    assert report["schema_name"] == "olympus.security-report"
+    assert report["schema_version"] == "1.0.0"
     summary = report["summary"]
     assert isinstance(summary, dict)
     assert summary["findings"] == 1
@@ -98,8 +132,16 @@ def test_cli_report_end_to_end(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "vulcan", "report", "--engagement", "demo-eng",
-            "--findings", str(findings_path), "--output", str(out), "--markdown", str(md),
+            "vulcan",
+            "report",
+            "--engagement",
+            "demo-eng",
+            "--findings",
+            str(findings_path),
+            "--output",
+            str(out),
+            "--markdown",
+            str(md),
         ],
     )
     assert result.exit_code == 0, result.output
@@ -155,8 +197,18 @@ def test_cli_report_html_and_min_severity(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "vulcan", "report", "--engagement", "e", "--findings", str(findings_path),
-            "--output", str(out), "--html", str(html_out), "--min-severity", "high",
+            "vulcan",
+            "report",
+            "--engagement",
+            "e",
+            "--findings",
+            str(findings_path),
+            "--output",
+            str(out),
+            "--html",
+            str(html_out),
+            "--min-severity",
+            "high",
         ],
     )
     assert result.exit_code == 0, result.output

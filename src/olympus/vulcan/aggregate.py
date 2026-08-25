@@ -14,6 +14,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
+from olympus.core.contracts import ContractCompatibilityError, validate_contract_header
 from olympus.core.enums import Severity
 from olympus.core.models import Alert, Asset, Finding
 
@@ -24,6 +25,16 @@ _SEVERITY_ORDER: dict[Severity, int] = {
     Severity.MEDIUM: 2,
     Severity.LOW: 3,
     Severity.INFO: 4,
+}
+
+_COLLECTION_SCHEMAS: dict[type[BaseModel], dict[str, str]] = {
+    Asset: {"olympus.argus-assets": "assets", "olympus.security-report": "assets"},
+    Finding: {
+        "olympus.helios-findings": "findings",
+        "olympus.helios-result": "findings",
+        "olympus.security-report": "findings",
+    },
+    Alert: {"olympus.apollo-alerts": "alerts", "olympus.security-report": "alerts"},
 }
 
 
@@ -39,7 +50,26 @@ def _load_array(path: Path, model: type[BaseModel]) -> list[BaseModel]:
         raise AggregationError(f"input file not found: {path}") from exc
     except (OSError, json.JSONDecodeError) as exc:
         raise AggregationError(f"input file could not be read: {path} ({exc})") from exc
-    items = raw if isinstance(raw, list) else [raw]
+    items: object
+    if isinstance(raw, list):
+        # Compatibility path for the original CLI array format. New producers
+        # should emit a versioned collection envelope.
+        items = raw
+    elif isinstance(raw, dict) and isinstance(raw.get("schema_name"), str):
+        schema_name = raw["schema_name"]
+        item_key = _COLLECTION_SCHEMAS.get(model, {}).get(schema_name)
+        if item_key is None:
+            items = [raw]
+        else:
+            try:
+                validate_contract_header(raw, schema_name=schema_name)
+            except ContractCompatibilityError as exc:
+                raise AggregationError(f"{path} has an incompatible contract: {exc}") from exc
+            items = raw.get(item_key)
+    else:
+        items = [raw]
+    if not isinstance(items, list):
+        raise AggregationError(f"{path} collection payload must be a JSON array")
     try:
         return [model.model_validate(item) for item in items]
     except ValidationError as exc:

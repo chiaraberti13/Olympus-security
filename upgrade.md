@@ -116,8 +116,11 @@ only the **security**, **functional**, and **licence** items are actual requirem
     account scope gates, audit records, explicit warnings, and injected network ports.
   - [x] Remaining Argus commands: `diff` validates versioned shared assets through an application
     service; `doctor` uses a secret-safe read-only diagnostic service.
-- [ ] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
+- [x] Define versioned contracts for assessment plans, scan jobs, observations, findings, assets,
   evidence, and reports; document compatibility rules.
+  - All current contracts use strict `schema_name` plus SemVer `1.0.0`; compatibility negotiation,
+    legacy Athena-plan migration, generated JSON Schemas, nested validation, and producer/consumer
+    adoption are implemented and verified in Cycle 25.
 - [ ] Add a shared execution policy for authorization, scope enforcement, rate/concurrency limits,
   timeouts, cancellation, retries, and redacted structured logging.
   - [x] Shared HTTP redirect hook validates every destination before following it; Argus `web`
@@ -724,3 +727,56 @@ only the **security**, **functional**, and **licence** items are actual requirem
   read-only diagnostic. Neither limitation is presented as a missing existing command behavior.
 - **Next activity:** define and enforce the pending versioned assessment-plan, scan-job, observation,
   finding, asset, evidence, and report contracts, then document compatibility rules for every consumer.
+
+### Cycle 25 — enforce shared versioned contracts end to end
+
+- **Status:** `DONE`.
+- **Objective:** give assessment plans, scan jobs, observations, assets, findings, evidence, and reports
+  strict durable identities; define compatibility/migration behavior; and make real producers,
+  persistence adapters, aggregators, CLI schema export, and downstream consumers enforce it.
+- **Component:** Core contracts and IDs, Athena domain/coordinator/SQLite, Helios observation export,
+  Argus snapshot input, Apollo-to-Minerva alert input, Vulcan aggregation/reporting, CLI schema export,
+  examples, architecture/compatibility documentation, and tests.
+- **Dependencies:** Pydantic strict models, Semantic Versioning, existing core IDs/enums, Athena
+  persistence and job lifecycle, and the versioned collection envelopes already emitted by Argus,
+  Helios, and Apollo.
+- **Completion criteria:** every named contract has exact schema identity and SemVer; wrong names,
+  malformed versions, different major versions, newer unsupported minors, unknown/nested-invalid
+  fields, and ambiguous documents fail closed; known legacy inputs have explicit tested adapters;
+  Athena persists versioned result/job contracts; real observations and consolidated reports use the
+  shared models; consumers validate envelopes; JSON Schemas and compatibility rules are published.
+- **Implementation:** added strict `ContractVersion`/`validate_contract_header` negotiation and exact
+  literal identity/version fields on all core models. Added canonical `Observation`, `ScanJob`,
+  `ReportSummary`, and `SecurityReport` contracts plus traceable `OBS-*` IDs. Standardized
+  `AssessmentPlan` on `1.0.0`, retained only the known missing-header/integer-v1 migration, added
+  versioned `AssessmentResult`, mapped Athena jobs to the shared job contract, and validate/canonicalize
+  every SQLite result write/read. Helios now exports actual TCP observations alongside findings;
+  Vulcan validates versioned Argus/Helios/Apollo/report envelopes while retaining its named legacy
+  bare-array path; Minerva and Argus use the shared compatibility gate; Vulcan emits a validated
+  machine report. `core export-schemas` now includes plan, result, observation, job, and report.
+- **Files modified:** `src/olympus/core/contracts.py`, `src/olympus/core/models.py`,
+  `src/olympus/core/ids.py`, `src/olympus/core/__init__.py`, `src/olympus/cli.py`,
+  `src/olympus/athena/domain/contracts.py`, `src/olympus/athena/domain/assessment.py`,
+  `src/olympus/athena/application/coordinator.py`, `src/olympus/athena/adapters/sqlite.py`,
+  `src/olympus/helios/export.py`, `src/olympus/helios/cli.py`,
+  `src/olympus/argus/diff.py`, `src/olympus/minerva/triage.py`,
+  `src/olympus/vulcan/aggregate.py`, `src/olympus/vulcan/report.py`,
+  `examples/input/athena-plan.json`, `docs/contracts.md`,
+  `docs/architecture/adr-002-athena-target-architecture.md`, `README.md`, `README-IT.md`,
+  `tests/unit/test_core_contracts.py`, `tests/unit/test_cli.py`,
+  `tests/unit/test_athena_contracts.py`, `tests/unit/test_athena_adapters.py`,
+  `tests/unit/test_helios.py`, `tests/unit/test_vulcan.py`, and `tests/unit/test_minerva_triage.py`.
+- **Tests executed:** focused contracts/core/CLI/Athena/Helios/Vulcan/Minerva/Argus suite:
+  `103 passed`; complete offline suite: `583 passed`; Ruff: clean; strict mypy: clean across 114
+  source files.
+- **Real execution evidence:** the installed `olympus core export-schemas` wrote the complete schema
+  catalog successfully; the installed `olympus athena plan validate` accepted the now explicitly
+  versioned example and returned stable plan/scope SHA-256 digests. Coordinator/SQLite tests persist
+  and reload canonical `olympus.athena.result` documents with nested `olympus.scan-job`; Helios CLI
+  integration proves its real discovered open port becomes a strict `olympus.observation`.
+- **Residual limitations:** original pre-contract Vulcan bare arrays remain deliberately accepted and
+  documented for compatibility; unversioned Athena results are rejected because their missing job
+  identity cannot be reconstructed safely. Future major versions require an explicit migration.
+- **Next activity:** implement the pending shared execution policy for authorization, scope,
+  rate/concurrency, timeout/deadline, cancellation, retry, and redacted structured audit, then adopt it
+  across network-active modules without weakening their dedicated scope dialects.

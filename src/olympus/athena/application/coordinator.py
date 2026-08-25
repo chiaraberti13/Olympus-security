@@ -11,7 +11,6 @@ distributed execution.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
@@ -25,7 +24,7 @@ from olympus.athena.domain.assessment import (
     derive_terminal_state,
 )
 from olympus.athena.domain.audit import AuditEvent
-from olympus.athena.domain.contracts import AssessmentPlan
+from olympus.athena.domain.contracts import AssessmentPlan, AssessmentResult
 from olympus.athena.ports import (
     AssessmentRepository,
     AuditSink,
@@ -122,8 +121,9 @@ class Coordinator:
         jobs = self._build_jobs(plan)
         assessment = Assessment(assessment_id=assessment_id, plan_id=plan_id, jobs=jobs)
         self._repo.save_assessment(assessment)
-        self._emit(assessment_id, "assessment_created", "planned",
-                   metadata={"count": str(len(jobs))})
+        self._emit(
+            assessment_id, "assessment_created", "planned", metadata={"count": str(len(jobs))}
+        )
 
         self._repo.transition_assessment(assessment_id, AssessmentState.RUNNING)
         self._emit(assessment_id, "assessment_started", "running")
@@ -143,9 +143,7 @@ class Coordinator:
                     terminal_jobs.extend(self._cancel_batch(assessment_id, batch, "deadline"))
                     continue
                 terminal_jobs.extend(
-                    self._run_batch(
-                        assessment_id, batch, runners, allowed, timeout, findings, pool
-                    )
+                    self._run_batch(assessment_id, batch, runners, allowed, timeout, findings, pool)
                 )
 
         state = derive_terminal_state(tuple(terminal_jobs))
@@ -153,14 +151,17 @@ class Coordinator:
         self._emit(assessment_id, "assessment_finished", state.value)
         return RunOutcome(assessment_id=assessment_id, state=state, findings=findings)
 
-    def _cancel_batch(
-        self, assessment_id: str, batch: tuple[Job, ...], reason: str
-    ) -> list[Job]:
+    def _cancel_batch(self, assessment_id: str, batch: tuple[Job, ...], reason: str) -> list[Job]:
         cancelled: list[Job] = []
         for job in batch:
             updated = self._repo.transition_job(job, JobState.CANCELLED, error_code=reason)
-            self._emit(assessment_id, "job_cancelled", reason, job_id=job.job_id,
-                       metadata={"adapter": job.adapter, "reason": reason})
+            self._emit(
+                assessment_id,
+                "job_cancelled",
+                reason,
+                job_id=job.job_id,
+                metadata={"adapter": job.adapter, "reason": reason},
+            )
             cancelled.append(updated)
         return cancelled
 
@@ -174,9 +175,7 @@ class Coordinator:
         findings: list[Finding],
         pool: ThreadPoolExecutor,
     ) -> list[Job]:
-        running: list[Job] = [
-            self._repo.transition_job(job, JobState.RUNNING) for job in batch
-        ]
+        running: list[Job] = [self._repo.transition_job(job, JobState.RUNNING) for job in batch]
         futures = {
             pool.submit(self._invoke, runners[job.adapter], job, allowed, timeout): job
             for job in running
@@ -209,27 +208,41 @@ class Coordinator:
             updated = self._repo.transition_job(
                 job, JobState.FAILED, error_code=result.error_code or "failed"
             )
-            self._emit(assessment_id, "job_failed", result.error_code or "failed",
-                       job_id=job.job_id, metadata={"adapter": job.adapter})
+            self._emit(
+                assessment_id,
+                "job_failed",
+                result.error_code or "failed",
+                job_id=job.job_id,
+                metadata={"adapter": job.adapter},
+            )
             return updated
-        document = json.dumps(
-            {
-                "assets": [json.loads(a.model_dump_json()) for a in result.assets],
-                "findings": [json.loads(f.model_dump_json()) for f in result.findings],
-            },
-            sort_keys=True,
+        document = AssessmentResult(
+            assessment_id=assessment_id,
+            job=job.to_contract(assessment_id).model_copy(update={"state": "succeeded"}),
+            assets=tuple(result.assets),
+            findings=tuple(result.findings),
         )
-        result_id = self._repo.save_result(assessment_id, job.job_id, document)
+        result_id = self._repo.save_result(assessment_id, job.job_id, document.canonical_json())
         findings.extend(result.findings)
         updated = self._repo.transition_job(job, JobState.SUCCEEDED, result_id=result_id)
-        self._emit(assessment_id, "job_succeeded", "succeeded", job_id=job.job_id,
-                   metadata={"adapter": job.adapter, "count": str(len(result.findings))})
+        self._emit(
+            assessment_id,
+            "job_succeeded",
+            "succeeded",
+            job_id=job.job_id,
+            metadata={"adapter": job.adapter, "count": str(len(result.findings))},
+        )
         return updated
 
     def _finish_timed_out(self, assessment_id: str, job: Job) -> Job:
         updated = self._repo.transition_job(job, JobState.TIMED_OUT, error_code="timeout")
-        self._emit(assessment_id, "job_timed_out", "timeout", job_id=job.job_id,
-                   metadata={"adapter": job.adapter})
+        self._emit(
+            assessment_id,
+            "job_timed_out",
+            "timeout",
+            job_id=job.job_id,
+            metadata={"adapter": job.adapter},
+        )
         return updated
 
     # -- lifecycle use cases ---------------------------------------------- #

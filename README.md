@@ -181,6 +181,7 @@ make check     # runs all three, non-blocking — informational only
 ```
 
 See [`docs/architecture/`](docs/architecture) for the accepted design decisions,
+[`docs/contracts.md`](docs/contracts.md) for the versioned wire/storage compatibility rules,
 [`docs/parity/`](docs/parity) for the upstream capability manifests, and
 [`vendor/`](vendor) for the complete, in-repository upstream tools.
 

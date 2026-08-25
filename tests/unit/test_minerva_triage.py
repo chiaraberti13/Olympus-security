@@ -50,11 +50,13 @@ def test_load_alerts_and_cli_export_round_trip(tmp_path: Path) -> None:
     alert = _alert("ALT-2026-00001", Severity.CRITICAL, [])
     source = tmp_path / "alerts.json"
     source.write_text(
-        json.dumps({
-            "schema_name": "olympus.apollo-alerts",
-            "schema_version": "1.0.0",
-            "alerts": [alert.model_dump(mode="json")],
-        }),
+        json.dumps(
+            {
+                "schema_name": "olympus.apollo-alerts",
+                "schema_version": "1.0.0",
+                "alerts": [alert.model_dump(mode="json")],
+            }
+        ),
         encoding="utf-8",
     )
     assert load_alerts(source) == [alert]
@@ -80,9 +82,24 @@ def test_load_alerts_and_cli_export_round_trip(tmp_path: Path) -> None:
 
 
 def test_export_incident_is_atomic_shape(tmp_path: Path) -> None:
-    incident = triage_alerts(
-        [_alert("ALT-2026-00001", Severity.MEDIUM, [])], "Synthetic incident"
-    )
+    incident = triage_alerts([_alert("ALT-2026-00001", Severity.MEDIUM, [])], "Synthetic incident")
     output = tmp_path / "incident.json"
     export_incident(incident, output)
     assert Incident.model_validate_json(output.read_text(encoding="utf-8")) == incident
+
+
+def test_load_alerts_rejects_incompatible_collection_version(tmp_path: Path) -> None:
+    source = tmp_path / "alerts-v2.json"
+    source.write_text(
+        json.dumps(
+            {
+                "schema_name": "olympus.apollo-alerts",
+                "schema_version": "2.0.0",
+                "alerts": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unsupported"):
+        load_alerts(source)

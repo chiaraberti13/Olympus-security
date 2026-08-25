@@ -22,12 +22,17 @@ def test_export_schemas_outputs_valid_json() -> None:
     result = runner.invoke(app, ["core", "export-schemas"])
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
+    assert "olympus.athena.plan" in payload
+    assert "olympus.athena.result" in payload
     assert "olympus.asset" in payload
     assert "olympus.finding" in payload
     assert "olympus.event" in payload
     assert "olympus.evidence" in payload
     assert "olympus.alert" in payload
     assert "olympus.incident" in payload
+    assert "olympus.observation" in payload
+    assert "olympus.scan-job" in payload
+    assert "olympus.security-report" in payload
 
 
 def test_no_module_exposes_a_demo_command() -> None:
@@ -54,7 +59,10 @@ def test_exit_codes_are_canonical() -> None:
     from olympus.core.exit_codes import ExitCode
 
     assert (ExitCode.OK, ExitCode.USAGE, ExitCode.OUT_OF_SCOPE, ExitCode.NOT_AUTHORIZED) == (
-        0, 2, 3, 4
+        0,
+        2,
+        3,
+        4,
     )
 
 

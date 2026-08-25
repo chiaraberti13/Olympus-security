@@ -1,4 +1,6 @@
 {
+  "schema_name": "olympus.athena.plan",
+  "schema_version": "1.0.0",
   "engagement_id": "ENG-DEMO-2026",
   "name": "Demo perimeter assessment",
   "targets": [
