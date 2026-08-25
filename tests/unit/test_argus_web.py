@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,12 @@ class _Http:
         self._raise = raise_error
 
     @classmethod
-    def from_config(cls, *, min_interval: float | None = None) -> _Http:
+    def from_config(
+        cls,
+        *,
+        min_interval: float | None = None,
+        redirect_validator: Callable[[str], None] | None = None,
+    ) -> _Http:
         return cls({"Server": "nginx"})
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
@@ -146,11 +152,59 @@ def test_cli_scope_error(tmp_path: Path) -> None:
 
 class _BrokenHttp:
     @classmethod
-    def from_config(cls, *, min_interval: float | None = None) -> _BrokenHttp:
+    def from_config(
+        cls,
+        *,
+        min_interval: float | None = None,
+        redirect_validator: Callable[[str], None] | None = None,
+    ) -> _BrokenHttp:
         return cls()
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         raise HttpRequestError("unreachable")
+
+
+class _RedirectHttp:
+    def __init__(self, redirect_validator: Callable[[str], None]) -> None:
+        self._redirect_validator = redirect_validator
+
+    @classmethod
+    def from_config(
+        cls,
+        *,
+        min_interval: float | None = None,
+        redirect_validator: Callable[[str], None] | None = None,
+    ) -> _RedirectHttp:
+        assert redirect_validator is not None
+        return cls(redirect_validator)
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        self._redirect_validator("http://127.0.0.1/admin")
+        raise AssertionError("a rejected redirect must not be followed")
+
+
+def test_cli_blocks_and_audits_out_of_scope_redirect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(argus_cli, "UrllibHttpClient", _RedirectHttp)
+    log = tmp_path / "redirect-blocked.log"
+
+    result = runner.invoke(
+        app,
+        [
+            "argus",
+            "web",
+            "--url",
+            "https://example.com",
+            "--scope",
+            str(_scope(tmp_path)),
+            "--log",
+            str(log),
+        ],
+    )
+
+    assert result.exit_code == 3
+    assert "127.0.0.1" in log.read_text(encoding="utf-8")
 
 
 def test_cli_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

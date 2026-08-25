@@ -23,19 +23,27 @@ from olympus.argus.accounts_scope import (
     enforce_account_scope,
 )
 from olympus.argus.application import (
+    DnsLookupRequest,
+    DnsLookupService,
     DomainScanRequest,
     DomainScanService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
+    InvalidWebTargetError,
+    WebReconRequest,
+    WebReconService,
+    WhoisLookupRequest,
+    WhoisLookupService,
+    authorize_web_url,
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
 from olympus.argus.diff import diff_snapshots
 from olympus.argus.dns_records import (
+    RECORD_TYPES,
     DnsRecordError,
     build_dns_asset,
     export_dns_report,
-    resolve_records,
 )
 from olympus.argus.email_osint import (
     EmailEnrichment,
@@ -104,19 +112,13 @@ from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.argus.transforms import TransformContext, run_investigation
 from olympus.argus.web import (
-    WebIntel,
     WebReconError,
-    build_web_asset,
-    build_web_findings,
     export_web_intel,
-    fetch_web,
-    host_of,
 )
 from olympus.argus.whois import (
     WhoisError,
     build_whois_asset,
     export_whois_report,
-    lookup_domain,
 )
 from olympus.core.http import UrllibHttpClient
 
@@ -823,12 +825,15 @@ def web(
 ) -> None:
     """Fetch an in-scope URL once and report its passive HTTP security posture."""
     try:
-        host = host_of(url)
-    except WebReconError as exc:
+        http = UrllibHttpClient.from_config(
+            redirect_validator=lambda redirect_url: authorize_web_url(redirect_url, scope, log)
+        )
+        intel = WebReconService(http).run(
+            WebReconRequest(url=url, scope_path=scope, audit_log_path=log)
+        )
+    except InvalidWebTargetError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    try:
-        enforce_scope(host, scope, log)
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -836,20 +841,15 @@ def web(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    try:
-        report = fetch_web(url, UrllibHttpClient.from_config())
     except WebReconError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
 
-    asset = build_web_asset(report)
-    findings = build_web_findings(asset.asset_id, report)
-    intel = WebIntel(report=report, asset=asset, findings=findings)
     typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
     if output is not None:
         export_web_intel(intel, output)
         typer.echo(f"argus: wrote web intel to {output}", err=True)
-    if findings:
+    if intel.findings:
         raise typer.Exit(code=1)
 
 
@@ -870,8 +870,16 @@ def dns(
     ),
 ) -> None:
     """Enumerate DNS records for an in-scope domain over DNS-over-HTTPS."""
+    record_types = tuple(t.strip() for t in types.split(",") if t.strip()) if types else None
     try:
-        enforce_scope(domain, scope, log)
+        report = DnsLookupService(UrllibHttpClient.from_config()).run(
+            DnsLookupRequest(
+                domain=domain,
+                scope_path=scope,
+                audit_log_path=log,
+                record_types=record_types or RECORD_TYPES,
+            )
+        )
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -879,15 +887,6 @@ def dns(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    record_types = (
-        tuple(t.strip().upper() for t in types.split(",") if t.strip()) if types else None
-    )
-    try:
-        report = (
-            resolve_records(domain, UrllibHttpClient.from_config(), record_types)
-            if record_types
-            else resolve_records(domain, UrllibHttpClient.from_config())
-        )
     except DnsRecordError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
@@ -915,7 +914,9 @@ def whois(
 ) -> None:
     """Query registration data (registrar, dates, name servers) for an in-scope domain via RDAP."""
     try:
-        enforce_scope(domain, scope, log)
+        report = WhoisLookupService(UrllibHttpClient.from_config()).run(
+            WhoisLookupRequest(domain=domain, scope_path=scope, audit_log_path=log)
+        )
     except ScopeError as exc:
         typer.echo(f"argus: scope error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
@@ -923,8 +924,6 @@ def whois(
         typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
 
-    try:
-        report = lookup_domain(domain, UrllibHttpClient.from_config())
     except WhoisError as exc:
         typer.echo(f"argus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
