@@ -68,6 +68,11 @@
       "capabilities": ["offline-phone-analysis", "optional-carrier", "optional-breach-intelligence", "optional-messaging-presence", "batch"],
       "mapping": ["phone.py", "phone_scope.py", "enrichment.py", "application.py"]
     },
+    "pipeline": {
+      "options": ["--preset", "--output", "--audit"],
+      "capabilities": ["offline-event-pipeline", "preset-validation", "recursive-deduplication", "blacklist-and-resource-bounds"],
+      "mapping": ["pipeline.py"]
+    },
     "scan": {
       "options": ["--domain", "--scope", "--log", "--output"],
       "capabilities": ["dns", "mx", "spf", "dmarc", "certificate-transparency"],

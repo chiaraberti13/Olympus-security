@@ -94,6 +94,7 @@ from olympus.argus.phone_scope import (
     PhoneOutOfScopeError,
     PhoneScopeError,
 )
+from olympus.argus.pipeline import BUILTIN_MODULES, EventPipeline, export_pipeline, load_preset
 from olympus.argus.resolver import DnspythonResolver
 from olympus.argus.scope import OutOfScopeError, ScopeError
 from olympus.argus.web import (
@@ -906,3 +907,24 @@ def doctor() -> None:
     """Diagnose Argus: required libraries and optional enrichment API keys."""
     report = ArgusDiagnosticsService().run()
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+
+
+@app.command("pipeline")
+def pipeline_command(
+    preset: Path = typer.Option(..., "--preset", help="Versioned Argus pipeline preset JSON."),
+    output: Path | None = typer.Option(None, "--output", help="Owner-only result JSON path."),
+    audit: Path | None = typer.Option(None, "--audit", help="Owner-only structured audit path."),
+) -> None:
+    """Run the bounded offline event/preset reconnaissance pipeline."""
+    try:
+        configuration = load_preset(preset)
+        document = EventPipeline(BUILTIN_MODULES).run(configuration, audit_path=audit)
+    except (ValueError, OSError) as exc:
+        typer.echo(f"argus: pipeline error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    payload = document.model_dump_json(indent=2)
+    if output is None:
+        typer.echo(payload)
+    else:
+        export_pipeline(document, output)
+        typer.echo(f"argus: wrote pipeline result to {output}", err=True)

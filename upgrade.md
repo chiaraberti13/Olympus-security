@@ -1117,3 +1117,45 @@ only the **security**, **functional**, and **licence** items are actual requirem
   scope drift, simulated-result leakage, unsafe subprocess/environment handling, unbounded results,
   contract mismatch, dependency/service truthfulness, and parity gaps; then implement the next
   independent real-adapter/policy slice and verify it without requiring unavailable external engines.
+
+### Cycle 32 — add native capability routing, CTI cases and bounded recon pipelines
+
+- **Status:** `DONE` for the six requested reference reviews and their independent native
+  implementations. ARGUS and the Vulnerability Assessment Platform remain pinned to their current
+  upstream heads and complete in their vendored standalone boundaries.
+- **Objective:** review useful architecture and workflows from `pentest-ai-agents`, `cti-expert`,
+  `Anthropic-Cybersecurity-Skills`, `Cybersecurity-Projects`, BBOT and GhostTrack, then implement the
+  selected capabilities inside Olympus without runtime links, imports or copied source.
+- **Implementation:** added METIS with a deterministic, explainable 14-capability router, safe
+  non-executing engagement plans, a bounded owner-only SQLite CTI case store, normalized IOC
+  extraction, sourced/confidence-scored findings, correlations, safe private reports and guided
+  native labs. Added the Argus typed-event pipeline with strict presets, recursion, stable event IDs,
+  deduplication, provenance edges, blacklist/depth/event limits, private atomic output and shared
+  authorization plus per-pivot scope enforcement for injected active modules. Existing native Argus
+  IP, phone, username/account and public-IP paths already cover the reviewed GhostTrack concepts with
+  stronger scope and audit controls.
+- **Reference and licence review:** pinned all six reviewed revisions in
+  `docs/parity/reference-implementations.json`. MIT/Apache concepts were independently redesigned;
+  AGPL sources were not copied into the MIT-native package, and GhostTrack was treated as
+  unlicensed (`NOASSERTION`). Corrected the vendored Vulnerability Assessment Platform licence from
+  the previously mislabelled MIT value to its actual `GPL-3.0-only` component licence and added
+  `THIRD_PARTY_NOTICES.md`.
+- **ARGUS/VAP verification:** the vendored ARGUS revision
+  `1c7a8310ee64e005878dfa183ca8a384760706c6` and VAP revision
+  `6c6b395d79f358372e028fe7094cc673374dd88f` are the current repository heads. Contract tests retain
+  every ARGUS module and all 24 VAP scanner integrations, their entrypoints, licences and complete
+  source boundaries. This does not misrepresent the complementary native AEGIS runner: it still has
+  six real local adapters while the complete 24-scanner platform is the vendored web/worker app.
+- **Files added/modified:** `src/olympus/metis/`, `src/olympus/argus/pipeline.py`, their CLI/schema
+  registration, example preset, tests, bilingual README, provenance/parity/licence/audit docs, and
+  the AEGIS audit-redaction fix in `src/olympus/core/execution.py`.
+- **Verification:** the complete 654-test offline suite passes and Ruff is clean across `src` and
+  `tests`. Mypy 2.3.1 initially identified one protocol-comprehension type mismatch, which was fixed;
+  it then aborted with its own internal error because the inherited workspace runs Python 3.11
+  against a broken Python 3.12 virtual environment. No mypy success is claimed.
+- **Residual limitations:** external scanner binaries, commercial engines, Redis workers and a
+  Docker daemon are not available in this workspace, so live 24-scanner execution is not claimed.
+  METIS routing is intentionally deterministic and local; it does not execute autonomous agents or
+  send data to model APIs. Active Argus pipeline extensions must be explicitly injected and gated.
+- **Next activity:** continue the open AEGIS native/API/worker policy work and add authorized opt-in
+  live-network smoke coverage in an environment with the required services and scanner engines.

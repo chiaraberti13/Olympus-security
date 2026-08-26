@@ -34,7 +34,12 @@ acceptance rules.
   `tasks.py`), `templates/`, `static/`, `assets/`, `docs/`, `tests/`, the pinned
   `requirements.txt`, `Dockerfile`, `docker-compose.yml`, `installer.sh`, and
   `LICENSE`, preserved verbatim.
-- Licence: **MIT** (`vendor/vulnerability-assessment-platform/LICENSE`).
+- Licence: **GPL-3.0-only**
+  (`vendor/vulnerability-assessment-platform/LICENSE`). The previous Olympus
+  documentation incorrectly labelled this component MIT; the vendored licence
+  text and upstream repository metadata both identify GNU GPL version 3.
+  Redistribution must preserve the GPL source and notice obligations for this
+  component.
 - Olympus-facing name: **AEGIS** (see `docs/vap-to-aegis-rename.md`). Entry
   points: `olympus aegis serve` (web app), `olympus aegis migrate` (DB
   migrations), `olympus aegis workers` (Celery worker), `olympus aegis scanners
@@ -67,3 +72,11 @@ acceptance rules.
 - Feature-parity tests (`tests/unit/test_vendored_integration.py`) assert that
   every ARGUS module and all 24 VAP scanners are present, so the standalone
   repositories can be deleted without losing functionality.
+
+## Repository licence scope
+
+Olympus-owned files under `src/olympus/` are offered under the root MIT
+`LICENSE`, as is vendored ARGUS under its own MIT notice. The vendored
+Vulnerability Assessment Platform remains GPL-3.0-only. This is therefore a
+multi-licence source distribution; the root MIT licence does not replace or
+weaken any licence stored below `vendor/`.
