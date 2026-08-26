@@ -15,6 +15,7 @@ import typer
 from olympus import __version__
 from olympus.apollo.cli import app as apollo_app
 from olympus.argus.cli import app as argus_app
+from olympus.argus.pipeline import PipelineDocument, PipelinePreset
 from olympus.artemis.cli import app as artemis_app
 from olympus.athena.cli import app as athena_app
 from olympus.athena.domain.contracts import AssessmentPlan, AssessmentResult
@@ -37,6 +38,8 @@ from olympus.integrations.cli import (
     register_doctor,
     register_vap_shim,
 )
+from olympus.metis.cli import app as metis_app
+from olympus.metis.models import EngagementPlan, IntelCaseDocument
 from olympus.minerva.cli import app as minerva_app
 from olympus.proteus.cli import app as proteus_app
 from olympus.vulcan.cli import app as vulcan_app
@@ -81,6 +84,10 @@ def export_schemas(
     schemas = {
         "olympus.athena.plan": AssessmentPlan.model_json_schema(),
         "olympus.athena.result": AssessmentResult.model_json_schema(),
+        "olympus.argus-pipeline-preset": PipelinePreset.model_json_schema(),
+        "olympus.argus-pipeline": PipelineDocument.model_json_schema(),
+        "olympus.metis-plan": EngagementPlan.model_json_schema(),
+        "olympus.metis-case": IntelCaseDocument.model_json_schema(),
         "olympus.asset": Asset.model_json_schema(),
         "olympus.finding": Finding.model_json_schema(),
         "olympus.event": Event.model_json_schema(),
@@ -111,6 +118,7 @@ app.add_typer(hermes_app, name="hermes")
 app.add_typer(apollo_app, name="apollo")
 app.add_typer(minerva_app, name="minerva")
 app.add_typer(vulcan_app, name="vulcan")
+app.add_typer(metis_app, name="metis")
 # Complete vendored upstream tools, wired in as first-class subcommands.
 register_argus_native(app)
 app.add_typer(aegis_app, name="aegis")

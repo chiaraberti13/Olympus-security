@@ -19,9 +19,9 @@
 
 <p align="center">
   <a href="https://github.com/chiaraberti13/olympus-security/actions"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue?style=for-the-badge" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License"></a>
+  <a href="THIRD_PARTY_NOTICES.md"><img src="https://img.shields.io/badge/licenze-multiple-green?style=for-the-badge" alt="Licenze"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge" alt="Python 3.11+">
-  <img src="https://img.shields.io/badge/moduli-10-blue?style=for-the-badge" alt="10 moduli">
+  <img src="https://img.shields.io/badge/moduli-11-blue?style=for-the-badge" alt="11 moduli">
 </p>
 
 </div>
@@ -46,7 +46,7 @@
 - **[Sviluppo](#-sviluppo)** — strumenti di qualità opzionali (mai un gate).
 - **[Modello di sicurezza](#-modello-di-sicurezza)** — scope, autorizzazione, SSRF, audit.
 - **[Migrazione](#-migrazione)** — ARGUS e la Vulnerability Assessment Platform.
-- **[Licenza](#-licenza)** — MIT, per l'intero repository.
+- **[Licenze](#-ambito-delle-licenze)** — codice nativo MIT e licenze vendor preservate.
 - **[Uso legale ed etico](#-uso-legale-ed-etico)** — solo autorizzato, in pratica.
 
 ---
@@ -88,6 +88,7 @@ $ olympus athena run plan.json --storage ./.athena
 | **Apollo** | `olympus apollo` | Motore di regole di detection (red/blue) su eventi normalizzati. |
 | **Minerva** | `olympus minerva` | Triage degli incidenti e catena di custodia. |
 | **Vulcan** | `olympus vulcan` | Aggregazione, deduplica, ranking e rendering dei report. |
+| **Metis** | `olympus metis` | Routing deterministico delle competenze, piani d'ingaggio, casi CTI, correlazione IOC, report e laboratori guidati. |
 | **core** | `olympus core` | Utility del contratto dati condiviso (es. `export-schemas`). |
 | **ARGUS (completo)** | `olympus argus-native` | La CLI OSINT ARGUS standalone completa, importata verbatim in `vendor/` — tutti i sottocomandi originali più il menu interattivo. |
 | **AEGIS (completo)** | `olympus aegis` | La Vulnerability Assessment Platform completa, importata verbatim — web app FastAPI, tutti i **24 scanner**, database + migrazioni, report. |
@@ -272,11 +273,13 @@ contratti di capacità e la provenienza sono in [`docs/parity/`](docs/parity) e
 [ADR-002](docs/architecture/adr-002-athena-target-architecture.md). Le procedure
 esaustive sono in [`docs/reference.md`](docs/reference.md).
 
-## 📄 Licenza
+## 📄 Ambito delle licenze
 
-MIT — vedi [LICENSE](LICENSE). La stessa licenza copre l'intero repository,
-incluse le integrazioni in-repository di ARGUS e della Vulnerability Assessment
-Platform.
+Il codice nativo Olympus è MIT — vedi [LICENSE](LICENSE). ARGUS vendorizzato è
+MIT; la Vulnerability Assessment Platform / AEGIS vendorizzata è
+**GPL-3.0-only** e conserva la propria licenza. La licenza MIT root non cambia
+la licenza del codice in `vendor/`. Vedi [note di terze parti](THIRD_PARTY_NOTICES.md)
+e [provenienza](docs/provenance.md).
 
 ## ⚠️ Uso legale ed etico
 

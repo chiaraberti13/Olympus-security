@@ -1,6 +1,6 @@
 # Olympus ecosystem audit
 
-_Audit date: 2026-08-25. Scope: every tool in the Olympus repository — native
+_Audit date: 2026-08-26. Scope: every tool in the Olympus repository — native
 modules, vendored complete tools, and the integration layer._
 
 > Method: the CLI tree was introspected live (`typer`/`click`), module sources
@@ -32,16 +32,17 @@ modules, vendored complete tools, and the integration layer._
 | apollo | native | Detection rules engine (red/blue) | `olympus apollo` | ✅ | 5 files | basic execution verified |
 | minerva | native | Incident triage & chain of custody | `olympus minerva` | ✅ | 2 files | basic execution verified |
 | vulcan | native | Aggregation, dedup, ranking, reporting | `olympus vulcan` | ✅ | 1 file | basic execution verified |
+| metis | native | Capability routing, planning, CTI cases and guided labs | `olympus metis` | ✅ | 1 file | e2e verified (offline) |
 | ARGUS (complete) | vendored | Full standalone ARGUS OSINT CLI | `olympus argus-native` | ✅ | parity + smoke | basic execution verified (offline cmds) |
 | AEGIS (complete) | vendored | Full Vulnerability Assessment Platform | `olympus aegis` | ✅ | parity + wiring | startup verified (web app booted, migrations ran) |
 
-Total automated tests collected: **629** (all passing; optional, non-blocking).
+Total automated tests collected: **654** (all passing; optional, non-blocking).
 
 ## 3. Per-tool detail
 
 ### Native Olympus modules
 
-All ten native modules are real implementations (no TODO/NotImplementedError/
+All eleven native modules are real implementations (no TODO/NotImplementedError/
 placeholder found in `src/olympus`). They share the `core` contract, use
 injected HTTP/DNS ports (offline-testable), and enforce scope on network-active
 commands.
@@ -49,7 +50,7 @@ commands.
 | Module | Subcommands | Key deps | External binaries | Services/DB | Config/env | Outputs | Docker |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | core | export-schemas | pydantic | none | none | OLYMPUS_CONFIG, olympus.toml | JSON schemas | n/a |
-| argus | accounts, diff, dns, doctor, email, fronting, investigate, ip, mac, myip, phone, scan, web, whois | pydantic, dnspython, phonenumbers, rich | none (stdlib HTTP) | none | scope JSONs; OLYMPUS_NUMVERIFY_KEY, OLYMPUS_RAPIDAPI_KEY (optional) | Asset/Finding JSON, NDJSON audit, Mermaid/DOT/GraphML | n/a |
+| argus | accounts, diff, dns, doctor, email, fronting, investigate, ip, mac, myip, phone, pipeline, scan, web, whois | pydantic, dnspython, phonenumbers, rich | none (stdlib HTTP) | none | scope/pipeline JSONs; OLYMPUS_NUMVERIFY_KEY, OLYMPUS_RAPIDAPI_KEY (optional) | Asset/Finding JSON, versioned event graphs, NDJSON audit, Mermaid/DOT/GraphML | n/a |
 | athena | plan validate, run, status, cancel, recover, adapters | pydantic, typer | none | SQLite (local file) | plan JSON, --storage dir | assessment JSON, audit, reports | n/a |
 | helios | scan | pydantic | none | none | scope JSON | findings JSON | n/a |
 | artemis | check-scope, content, fetch, fingerprint, metabase, xss | pydantic | none | none | scope JSON, wordlists | findings JSON | n/a |
@@ -58,6 +59,7 @@ commands.
 | apollo | rules, run, test | core policy/contracts, pydantic | none | none | versioned YAML rules, versioned NDJSON events, strict resource limits | versioned atomic alert JSON with rule/MITRE trace | n/a |
 | minerva | record, timeline, triage, verify | core policy/contracts | none | private locked custody file | strict Apollo/evidence contracts, file/item/deadline limits | stable private incident JSON; custody 2.0 anchored to evidence digest | n/a |
 | vulcan | rank, report | core policy/contracts | none | none | strict producer envelopes, aggregate byte/item/deadline limits | one canonical report; atomic JSON/safe Markdown/self-contained HTML | n/a |
+| metis | capabilities, recommend, plan, labs, case | core file safety, pydantic, SQLite | none | private SQLite case store | strict objectives, scope entries, source/confidence and ingest limits | versioned plans/cases, safe Markdown and JSON reports | n/a |
 
 ### ARGUS (complete, vendored) — `olympus argus-native`
 
@@ -72,11 +74,15 @@ commands.
   real output; `mac` reached the vendor API and reported the sandbox proxy block
   cleanly (graceful failure, not simulated).
 - **Docs:** README (EN/IT), `docs/provenance.md`.
+- **Native event pipeline:** `olympus argus pipeline` adds deterministic typed
+  event expansion, recursive deduplication, blacklist and resource bounds. The
+  built-ins are offline; injected active modules require authorization and a
+  scope gate on every pivot.
 
 ### AEGIS (complete, vendored) — `olympus aegis`
 
 - **Source:** `vendor/vulnerability-assessment-platform/` (upstream rev
-  `6c6b395…`, MIT). Complete FastAPI app (~40 routes), 24 scanners, SQLAlchemy +
+  `6c6b395…`, GPL-3.0-only). Complete FastAPI app (~40 routes), 24 scanners, SQLAlchemy +
   3 Alembic migrations, Celery/Redis, report generator, templates, static,
   assets, tests.
 - **CLI (Olympus-native AEGIS layer):** `serve, migrate, workers, scanners
@@ -142,7 +148,7 @@ See `docs/scanner-matrix.md` for the per-scanner matrix and
 - `olympus argus-native phone +1…` — real offline OSINT output.
 - AEGIS web app booted + migrated + served 3 routes (HTTP 200).
 - `docker compose config` (both files) — valid; daemon absent so no `up`.
-- Full test suite: 476 tests pass (optional, non-blocking).
+- Full test suite: 654 tests pass (optional, non-blocking).
 
 ## 7. Confirmation
 

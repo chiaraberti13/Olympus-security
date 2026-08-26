@@ -8,6 +8,8 @@ and the bounded execution/redaction behavior around those dedicated gates.
 from __future__ import annotations
 
 import json
+import os
+import stat
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -190,12 +192,17 @@ class StructuredAuditRecord:
 
     def to_dict(self) -> dict[str, Any]:
         """Return the redacted serialization; raw metadata is never exposed."""
+        target = redact_url(self.target) if self.target is not None else None
+        # Audit logs are read by operators and policy checks, so keep the
+        # redaction sentinel visible instead of percent-encoding it as URL data.
+        if target is not None:
+            target = target.replace("%5BREDACTED%5D", "[REDACTED]")
         return {
             "timestamp": self.timestamp,
             "execution_id": self.execution_id,
             "action": self.action,
             "outcome": self.outcome,
-            "target": redact_url(self.target) if self.target is not None else None,
+            "target": target,
             "metadata": redact_mapping(self.metadata),
         }
 
@@ -205,7 +212,21 @@ class StructuredAuditRecord:
 
 
 def append_structured_audit(path: Path, record: StructuredAuditRecord) -> None:
-    """Append one already-redacted record without exposing raw fields on disk."""
+    """Append one redacted record through an owner-only no-follow descriptor."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as audit:
-        audit.write(record.to_json() + "\n")
+    content = (record.to_json() + "\n").encode("utf-8")
+    if len(content) > 1_000_000:
+        raise ValueError("structured audit record exceeds the 1000000 byte limit")
+    if path.is_symlink():
+        raise OSError(f"structured audit path must not be a symlink: {path}")
+    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError(f"structured audit path must be a regular file: {path}")
+        written = os.write(descriptor, content)
+        if written != len(content):
+            raise OSError("structured audit append was incomplete")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
