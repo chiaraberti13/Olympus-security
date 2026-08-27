@@ -43,9 +43,9 @@
 - **[Avvio rapido](#-avvio-rapido)** — un percorso verificato recon → assessment → report.
 - **[Configurazione](#-configurazione)** — file di scope, config e segreti.
 - **[Struttura del progetto](#-struttura-del-progetto)** — com'è organizzato il repository.
-- **[Sviluppo](#-sviluppo)** — strumenti di qualità opzionali (mai un gate).
+- **[Sviluppo](#-sviluppo)** — controlli CI obbligatori e comandi locali.
 - **[Modello di sicurezza](#-modello-di-sicurezza)** — scope, autorizzazione, SSRF, audit.
-- **[Migrazione](#-migrazione)** — ARGUS e la Vulnerability Assessment Platform.
+- **[Migrazione](#-migrazione--motori-specialistici)** — ARGUS nativo, AEGIS e motori specialistici.
 - **[Licenze](#-ambito-delle-licenze)** — codice nativo MIT e licenze vendor preservate.
 - **[Uso legale ed etico](#-uso-legale-ed-etico)** — solo autorizzato, in pratica.
 
@@ -88,10 +88,9 @@ $ olympus athena run plan.json --storage ./.athena
 | **Apollo** | `olympus apollo` | Motore di regole di detection (red/blue) su eventi normalizzati. |
 | **Minerva** | `olympus minerva` | Triage degli incidenti e catena di custodia. |
 | **Vulcan** | `olympus vulcan` | Aggregazione, deduplica, ranking e rendering dei report. |
-| **Metis** | `olympus metis` | Routing deterministico delle competenze, piani d'ingaggio, casi CTI, correlazione IOC, report e laboratori guidati. |
+| **Metis** | `olympus metis` | Routing deterministico delle competenze, piani d'ingaggio, casi CTI, correlazione IOC e report operativi. |
 | **core** | `olympus core` | Utility del contratto dati condiviso (es. `export-schemas`). |
-| **ARGUS (completo)** | `olympus argus-native` | La CLI OSINT ARGUS standalone completa, importata verbatim in `vendor/` — tutti i sottocomandi originali più il menu interattivo. |
-| **AEGIS (completo)** | `olympus aegis` | La Vulnerability Assessment Platform completa, importata verbatim — web app FastAPI, tutti i **24 scanner**, database + migrazioni, report. |
+| **AEGIS** | `olympus aegis` | Orchestrazione scanner con scope, stato capacità, job SQLite persistenti, cancellazione, audit e stati di esecuzione espliciti. |
 
 > [!TIP]
 > Esegui qualsiasi modulo con `--help` per vederne i comandi, oppure
@@ -171,22 +170,22 @@ tests/                # test unitari e di contratto, offline e deterministici
 
 ## 🧪 Sviluppo
 
-Gli strumenti di qualità sono **opzionali** e non bloccano mai il lavoro: lint,
-type checking, test e copertura sono aiuti, non un gate di completamento. Un
-tool è "completo" quando ha parità funzionale al 100% — non quando passa un gate.
+Ruff e l'intera suite pytest sono gate CI obbligatori. Il type checking resta
+un controllo locale aggiuntivo. La prontezza funzionale richiede inoltre prove
+di esecuzione reali: una CI verde, da sola, non viene definita parità.
 
 ```bash
-make lint      # ruff (opzionale)
-make type      # mypy   (opzionale)
-make test      # pytest (opzionale)
-make check     # esegue tutti e tre, non bloccante — solo informativo
+make lint      # Ruff; obbligatorio in CI
+make test      # pytest; obbligatorio in CI
+make type      # mypy; controllo locale aggiuntivo
+make check     # esegue l'intera suite locale
 ```
 
 Vedi [`docs/architecture/`](docs/architecture) per le decisioni di progetto
 accettate, [`docs/contracts.md`](docs/contracts.md) per le regole di compatibilità
 dei contratti versionati, [`docs/execution-policy.md`](docs/execution-policy.md) per autorizzazione
 e limiti di esecuzione condivisi, [`docs/parity/`](docs/parity) per i manifest di capacità upstream e
-[`vendor/`](vendor) per i tool upstream completi, dentro il repository.
+[`docs/professional-platform.md`](docs/professional-platform.md) per la migrazione del control plane professionale.
 
 ## 🔐 Modello di sicurezza
 
@@ -201,22 +200,33 @@ e limiti di esecuzione condivisi, [`docs/parity/`](docs/parity) per i manifest d
 - **Audit trail con redazione**: eventi append-only con soli metadati in
   allowlist — mai credenziali, corpi di risposta o finding grezzi.
 
-## 🔁 Migrazione & tool importati
+## 🔁 Migrazione & motori specialistici
 
-Il toolkit OSINT **ARGUS** e la **Vulnerability Assessment Platform** standalone
-sono implementati **dentro questo repository** — nessun submodule, wrapper o CLI
-esterna a runtime. Il **codice sorgente upstream completo e non modificato** di
-ciascuno è importato sotto [`vendor/`](vendor) e collegato a `olympus` come
-comandi di prima classe, così i repository originali possono essere cancellati
-senza perdere nulla:
+La migrazione di **ARGUS** standalone è completa. L'implementazione mantenuta è
+`src/olympus/argus/`, esposta soltanto come `olympus argus`; il sorgente
+duplicato `vendor/argus` e il passthrough `argus-native` sono stati rimossi.
+
+AEGIS sta migrando dal livello temporaneo di compatibilità con la Vulnerability
+Assessment Platform vendorizzata a un control plane di proprietà Olympus. Il
+percorso nativo gestisce già scope e autorizzazione, adapter degli scanner,
+readiness delle capacità, job SQLite persistenti, cancellazione, audit e stati
+di esecuzione espliciti. La superficie web legacy resta temporaneamente finché
+API, persistenza e report necessari non saranno sostituiti e verificati.
+
+I motori di scansione specialistici sono **integrati e governati, non copiati**.
+Olympus ne rileva versioni e configurazione, li esegue entro lo scope autorizzato,
+normalizza l'output e registra le evidenze; licenze e canali d'installazione dei
+motori restano quelli ufficiali.
 
 ```bash
-bash scripts/setup-vendored-tools.sh      # installa le dipendenze di entrambi
+olympus argus --help                       # superficie OSINT/recon nativa
+olympus argus doctor                       # readiness dipendenze/configurazione
 
-olympus argus-native --help               # la CLI ARGUS completa (verbatim)
-olympus argus-native ip 8.8.8.8
-
-olympus aegis scanners                      # tutti i 24 scanner
+olympus aegis capabilities                 # stati configured/available/ready
+olympus aegis jobs init                    # archivio job locale persistente
+olympus aegis jobs submit nmap --target example.com --scope scope.json --i-am-authorized
+olympus aegis jobs work                    # elabora un job in coda
+olympus aegis scanners                     # catalogo motori specialistici
 olympus aegis migrate                       # applica le migrazioni DB di VAP
 olympus aegis serve --host 127.0.0.1 --port 8000   # avvia la web app VAP completa
 ```
@@ -266,8 +276,9 @@ forniti anche dallo `installer.sh` importato per un setup senza container; uno
 scanner senza binario presente segnala sempre "tool non installato" invece di
 fallire in silenzio.
 
-Olympus offre anche re-implementazioni **native**: `olympus argus …` (OSINT
-scope-first) e `olympus athena …` (orchestrazione degli assessment). I loro
+Olympus offre implementazioni **native**: `olympus argus …` (OSINT scope-first),
+`olympus aegis …` (controllo motori specialistici) e `olympus athena …`
+(orchestrazione degli assessment). I loro
 contratti di capacità e la provenienza sono in [`docs/parity/`](docs/parity) e
 [`docs/provenance.md`](docs/provenance.md); l'architettura di Athena è
 [ADR-002](docs/architecture/adr-002-athena-target-architecture.md). Le procedure
@@ -275,8 +286,8 @@ esaustive sono in [`docs/reference.md`](docs/reference.md).
 
 ## 📄 Ambito delle licenze
 
-Il codice nativo Olympus è MIT — vedi [LICENSE](LICENSE). ARGUS vendorizzato è
-MIT; la Vulnerability Assessment Platform / AEGIS vendorizzata è
+Il codice nativo Olympus, inclusi ARGUS e AEGIS nativi, è MIT — vedi
+[LICENSE](LICENSE). La Vulnerability Assessment Platform temporaneamente vendorizzata è
 **GPL-3.0-only** e conserva la propria licenza. La licenza MIT root non cambia
 la licenza del codice in `vendor/`. Vedi [note di terze parti](THIRD_PARTY_NOTICES.md)
 e [provenienza](docs/provenance.md).

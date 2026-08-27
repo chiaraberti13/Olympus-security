@@ -1,7 +1,7 @@
-"""Locate and load the complete vendored upstream tools.
+"""Locate the temporary legacy Vulnerability Assessment Platform boundary.
 
-The full, unmodified source of ARGUS and the Vulnerability Assessment Platform
-lives under the repository's ``vendor/`` directory. These helpers put a vendored
+The full, unmodified VAP source currently lives under ``vendor/`` while its
+remaining runtime surfaces migrate to native AEGIS. These helpers put the vendored
 tool's root on ``sys.path`` on demand (only when the operator actually runs it)
 so importing ``olympus`` never pulls in the heavy upstream dependency stacks.
 
@@ -16,8 +16,6 @@ import os
 import sys
 from pathlib import Path
 
-#: Directory names of the vendored tools under ``vendor/``.
-ARGUS_DIR = "argus"
 VAP_DIR = "vulnerability-assessment-platform"
 
 

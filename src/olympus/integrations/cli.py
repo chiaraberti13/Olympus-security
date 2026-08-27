@@ -1,6 +1,5 @@
-"""First-class Olympus CLI surface for the complete vendored upstream tools.
+"""Olympus CLI surface for specialist-engine integrations.
 
-* ``olympus argus-native`` runs the complete standalone ARGUS CLI verbatim.
 * ``olympus aegis`` drives the complete vendored Vulnerability Assessment
   Platform (FastAPI web app, database + migrations, Celery workers, and the full
   24-scanner catalogue). AEGIS is the Olympus-facing name for this platform; the
@@ -32,47 +31,13 @@ from olympus.integrations.diagnostics import (
     check_tcp,
     check_writable_dir,
 )
-from olympus.integrations.vendored import ARGUS_DIR, VAP_DIR, ensure_on_path, tool_path
+from olympus.integrations.vendored import VAP_DIR, ensure_on_path, tool_path
 
 
 def _os_environ() -> dict[str, str]:
     import os
 
     return dict(os.environ)
-
-
-# --------------------------------------------------------------------------- #
-# ARGUS (complete standalone CLI, run verbatim)
-# --------------------------------------------------------------------------- #
-def run_argus_native(args: list[str]) -> int:
-    """Forward ``args`` to the complete vendored ARGUS CLI, returning its exit code."""
-    ensure_on_path(ARGUS_DIR)
-    try:
-        from argus.cli import main as argus_main  # type: ignore[import-not-found]
-    except ModuleNotFoundError as exc:
-        typer.echo(
-            "olympus: ARGUS runtime dependencies are not installed "
-            f'({exc.name}). Install them with:  pip install -e ".[argus]"',
-            err=True,
-        )
-        return 2
-    return int(argus_main(args))
-
-
-def register_argus_native(parent: typer.Typer) -> None:
-    """Register ``argus-native`` on ``parent`` as a raw-passthrough command."""
-
-    @parent.command(
-        "argus-native",
-        context_settings={
-            "allow_extra_args": True,
-            "ignore_unknown_options": True,
-            "help_option_names": [],
-        },
-        help="Run the complete vendored ARGUS CLI (all original subcommands, passthrough).",
-    )
-    def _argus_native(ctx: typer.Context) -> None:
-        raise typer.Exit(code=run_argus_native(list(ctx.args)))
 
 
 # --------------------------------------------------------------------------- #
@@ -83,6 +48,12 @@ aegis_app = typer.Typer(
     no_args_is_help=True,
     help="AEGIS — Olympus vulnerability-assessment & scanner-orchestration platform.",
 )
+jobs_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Durable native AEGIS job queue (SQLite, no Redis/Celery required).",
+)
+aegis_app.add_typer(jobs_app, name="jobs")
 
 
 def _emit_report(report: Report) -> None:
@@ -189,6 +160,139 @@ def aegis_capabilities(
     document = inventory_document()
     typer.echo(json.dumps(document, indent=2, sort_keys=True))
     if strict and document["ready"] == 0:
+        raise typer.Exit(code=4)
+
+
+def _emit_job(job: object) -> None:
+    from pydantic import BaseModel
+
+    if not isinstance(job, BaseModel):
+        raise TypeError("AEGIS job output must be a validated contract")
+    typer.echo(job.model_dump_json(indent=2))
+
+
+@jobs_app.command("init")
+def aegis_jobs_init(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Initialize the private native job database."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    store = AegisJobStore(Path(database))
+    store.initialize()
+    typer.echo(json.dumps({"database": str(store.path), "initialized": True}, indent=2))
+
+
+@jobs_app.command("submit")
+def aegis_jobs_submit(
+    scanner: str = typer.Argument(...),
+    target: str = typer.Option(..., "--target"),
+    kind: str = typer.Option("host", "--kind"),
+    scope: str = typer.Option(..., "--scope"),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    i_am_authorized: bool = typer.Option(False, "--i-am-authorized"),
+) -> None:
+    """Persist one authorized scan job without executing it."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    if not i_am_authorized:
+        typer.echo("olympus: queued live work requires --i-am-authorized", err=True)
+        raise typer.Exit(code=4)
+    job = AegisJobStore(Path(database)).submit(
+        scanner=scanner,
+        target=target,
+        target_kind=kind,
+        scope_path=Path(scope),
+        authorized=True,
+    )
+    _emit_job(job)
+
+
+@jobs_app.command("list")
+def aegis_jobs_list(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    state: str | None = typer.Option(None, "--state"),
+    limit: int = typer.Option(100, "--limit", min=1, max=1_000),
+) -> None:
+    """List durable jobs, optionally filtered by lifecycle state."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore, JobState
+
+    try:
+        selected = JobState(state) if state else None
+    except ValueError as exc:
+        typer.echo(f"olympus: invalid job state {state!r}", err=True)
+        raise typer.Exit(code=2) from exc
+    jobs = AegisJobStore(Path(database)).list(limit=limit, state=selected)
+    typer.echo(
+        json.dumps(
+            {
+                "schema_name": "olympus.aegis-job-list",
+                "schema_version": "1.0.0",
+                "count": len(jobs),
+                "jobs": [job.model_dump(mode="json") for job in jobs],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@jobs_app.command("status")
+def aegis_jobs_status(
+    job_id: str = typer.Argument(...),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Return one durable job and its normalized result when complete."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    try:
+        _emit_job(AegisJobStore(Path(database)).get(job_id))
+    except KeyError as exc:
+        typer.echo(f"olympus: {exc.args[0]}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@jobs_app.command("cancel")
+def aegis_jobs_cancel(
+    job_id: str = typer.Argument(...),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Cancel queued work or request cooperative cancellation of running work."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    try:
+        _emit_job(AegisJobStore(Path(database)).cancel(job_id))
+    except KeyError as exc:
+        typer.echo(f"olympus: {exc.args[0]}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@jobs_app.command("work")
+def aegis_jobs_work(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    audit: str = typer.Option(".olympus/aegis-audit.ndjson", "--audit"),
+) -> None:
+    """Claim and execute at most one job; safe for cron/systemd/container loops."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore, AegisWorker
+
+    job = AegisWorker(AegisJobStore(Path(database))).run_next(audit_path=Path(audit))
+    if job is None:
+        typer.echo(json.dumps({"claimed": False, "reason": "queue-empty"}, indent=2))
+        return
+    _emit_job(job)
+    if job.state.value == "failed":
         raise typer.Exit(code=4)
 
 

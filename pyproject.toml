@@ -26,14 +26,6 @@ dev = [
     "mypy>=1.11",
     "pre-commit>=3.7",
 ]
-# Vendored ARGUS (complete upstream tool under vendor/argus). Installs the
-# standalone toolkit's runtime dependencies so `olympus argus-native` runs.
-argus = [
-    "requests>=2.31",
-    "phonenumbers>=8.13",
-    "rich>=13.0",
-    "dnspython>=2.6",
-]
 # AEGIS — the vendored Vulnerability Assessment Platform (complete upstream app
 # under vendor/vulnerability-assessment-platform). See that directory's
 # requirements.txt for the full pinned set; this extra pulls the core web/DB/
