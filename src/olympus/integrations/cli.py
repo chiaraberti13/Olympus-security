@@ -1,11 +1,8 @@
-"""First-class Olympus CLI surface for the complete vendored upstream tools.
+"""Olympus CLI surface for specialist-engine integrations.
 
-* ``olympus argus-native`` runs the complete standalone ARGUS CLI verbatim.
-* ``olympus aegis`` drives the complete vendored Vulnerability Assessment
-  Platform (FastAPI web app, database + migrations, Celery workers, and the full
-  24-scanner catalogue). AEGIS is the Olympus-facing name for this platform; the
-  vendored upstream source under ``vendor/`` is unchanged and keeps its own
-  ``VAP_*`` configuration contract, which the integration layer passes through.
+* ``olympus aegis`` owns native execution, capability readiness, durable jobs
+  and an authenticated API. The older VAP web/worker commands remain a temporary
+  compatibility boundary while their professional contracts migrate.
 * ``olympus vap`` is a deprecated alias that forwards to ``olympus aegis``.
 
 Heavy upstream dependencies are imported lazily; missing dependencies, services,
@@ -22,6 +19,7 @@ import sys
 import typer
 
 from olympus.integrations import scanners as scanner_registry
+from olympus.integrations.capabilities import inventory_document
 from olympus.integrations.diagnostics import (
     Check,
     Report,
@@ -31,7 +29,7 @@ from olympus.integrations.diagnostics import (
     check_tcp,
     check_writable_dir,
 )
-from olympus.integrations.vendored import ARGUS_DIR, VAP_DIR, ensure_on_path, tool_path
+from olympus.integrations.vendored import VAP_DIR, ensure_on_path, tool_path
 
 
 def _os_environ() -> dict[str, str]:
@@ -41,51 +39,90 @@ def _os_environ() -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# ARGUS (complete standalone CLI, run verbatim)
-# --------------------------------------------------------------------------- #
-def run_argus_native(args: list[str]) -> int:
-    """Forward ``args`` to the complete vendored ARGUS CLI, returning its exit code."""
-    ensure_on_path(ARGUS_DIR)
-    try:
-        from argus.cli import main as argus_main  # type: ignore[import-not-found]
-    except ModuleNotFoundError as exc:
-        typer.echo(
-            "olympus: ARGUS runtime dependencies are not installed "
-            f"({exc.name}). Install them with:  pip install -e \".[argus]\"",
-            err=True,
-        )
-        return 2
-    return int(argus_main(args))
-
-
-def register_argus_native(parent: typer.Typer) -> None:
-    """Register ``argus-native`` on ``parent`` as a raw-passthrough command."""
-
-    @parent.command(
-        "argus-native",
-        context_settings={
-            "allow_extra_args": True,
-            "ignore_unknown_options": True,
-            "help_option_names": [],
-        },
-        help="Run the complete vendored ARGUS CLI (all original subcommands, passthrough).",
-    )
-    def _argus_native(ctx: typer.Context) -> None:
-        raise typer.Exit(code=run_argus_native(list(ctx.args)))
-
-
-# --------------------------------------------------------------------------- #
-# AEGIS — the complete vendored Vulnerability Assessment Platform
+# AEGIS — native control plane with temporary VAP compatibility commands
 # --------------------------------------------------------------------------- #
 aegis_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     help="AEGIS — Olympus vulnerability-assessment & scanner-orchestration platform.",
 )
+jobs_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Durable native AEGIS job queue (SQLite, no Redis/Celery required).",
+)
+aegis_app.add_typer(jobs_app, name="jobs")
 
 
 def _emit_report(report: Report) -> None:
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+
+
+@aegis_app.command("api")
+def aegis_api(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    scope_directory: str = typer.Option(".olympus/scopes", "--scope-directory"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8443, "--port", min=1, max=65_535),
+    api_key_env: str = typer.Option("OLYMPUS_AEGIS_API_KEY", "--api-key-env"),
+    ssl_certfile: str = typer.Option("", "--ssl-certfile"),
+    ssl_keyfile: str = typer.Option("", "--ssl-keyfile"),
+) -> None:
+    """Serve the authenticated native AEGIS API.
+
+    Non-loopback binds require both a TLS certificate and key. The API secret is
+    read from an environment variable and is never accepted on the command line.
+    """
+    import ipaddress
+    import os
+    from pathlib import Path
+
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = host.lower() == "localhost"
+    if not loopback and not (ssl_certfile and ssl_keyfile):
+        typer.echo(
+            "olympus: non-loopback AEGIS API binds require TLS certificate and key",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    api_key = os.environ.get(api_key_env, "")
+    if not api_key:
+        typer.echo(
+            f"olympus: required API key environment variable is not set: {api_key_env}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        import uvicorn
+
+        from olympus.aegis.api import ApiSettings, create_app
+
+        application = create_app(
+            ApiSettings(
+                database=Path(database),
+                scope_directory=Path(scope_directory),
+                api_key=api_key,
+            )
+        )
+    except (ImportError, OSError, ValueError) as exc:
+        typer.echo(
+            f'olympus: native API unavailable: {exc}; install with pip install -e ".[api]"',
+            err=True,
+        )
+        raise typer.Exit(code=2) from exc
+
+    uvicorn.run(
+        application,
+        host=host,
+        port=port,
+        ssl_certfile=ssl_certfile or None,
+        ssl_keyfile=ssl_keyfile or None,
+        proxy_headers=False,
+        server_header=False,
+    )
 
 
 @aegis_app.command("serve")
@@ -97,9 +134,7 @@ def aegis_serve(
     path = tool_path(VAP_DIR)
     env = {**_os_environ(), "VAP_HOST": host, "VAP_PORT": str(port)}
     typer.echo(f"olympus: starting AEGIS web app on http://{host}:{port} (from {path})", err=True)
-    completed = subprocess.run(
-        [sys.executable, "app.py"], cwd=str(path), env=env, check=False
-    )
+    completed = subprocess.run([sys.executable, "app.py"], cwd=str(path), env=env, check=False)
     raise typer.Exit(code=completed.returncode)
 
 
@@ -173,6 +208,159 @@ def aegis_scanners(
     )
 
 
+@aegis_app.command("capabilities")
+def aegis_capabilities(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when no scanner integration is ready for a live job.",
+    ),
+) -> None:
+    """Report what AEGIS can actually execute in the current environment.
+
+    Unlike ``scanners``, which is a product catalogue, this command distinguishes
+    registered adapters, installed engines, configured APIs and live readiness.
+    It never contacts a target or treats a catalogue entry as working.
+    """
+    document = inventory_document()
+    typer.echo(json.dumps(document, indent=2, sort_keys=True))
+    if strict and document["ready"] == 0:
+        raise typer.Exit(code=4)
+
+
+def _emit_job(job: object) -> None:
+    from pydantic import BaseModel
+
+    if not isinstance(job, BaseModel):
+        raise TypeError("AEGIS job output must be a validated contract")
+    typer.echo(job.model_dump_json(indent=2))
+
+
+@jobs_app.command("init")
+def aegis_jobs_init(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Initialize the private native job database."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    store = AegisJobStore(Path(database))
+    store.initialize()
+    typer.echo(json.dumps({"database": str(store.path), "initialized": True}, indent=2))
+
+
+@jobs_app.command("submit")
+def aegis_jobs_submit(
+    scanner: str = typer.Argument(...),
+    target: str = typer.Option(..., "--target"),
+    kind: str = typer.Option("host", "--kind"),
+    scope: str = typer.Option(..., "--scope"),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    i_am_authorized: bool = typer.Option(False, "--i-am-authorized"),
+) -> None:
+    """Persist one authorized scan job without executing it."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    if not i_am_authorized:
+        typer.echo("olympus: queued live work requires --i-am-authorized", err=True)
+        raise typer.Exit(code=4)
+    job = AegisJobStore(Path(database)).submit(
+        scanner=scanner,
+        target=target,
+        target_kind=kind,
+        scope_path=Path(scope),
+        authorized=True,
+    )
+    _emit_job(job)
+
+
+@jobs_app.command("list")
+def aegis_jobs_list(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    state: str | None = typer.Option(None, "--state"),
+    limit: int = typer.Option(100, "--limit", min=1, max=1_000),
+) -> None:
+    """List durable jobs, optionally filtered by lifecycle state."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore, JobState
+
+    try:
+        selected = JobState(state) if state else None
+    except ValueError as exc:
+        typer.echo(f"olympus: invalid job state {state!r}", err=True)
+        raise typer.Exit(code=2) from exc
+    jobs = AegisJobStore(Path(database)).list(limit=limit, state=selected)
+    typer.echo(
+        json.dumps(
+            {
+                "schema_name": "olympus.aegis-job-list",
+                "schema_version": "1.0.0",
+                "count": len(jobs),
+                "jobs": [job.model_dump(mode="json") for job in jobs],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@jobs_app.command("status")
+def aegis_jobs_status(
+    job_id: str = typer.Argument(...),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Return one durable job and its normalized result when complete."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    try:
+        _emit_job(AegisJobStore(Path(database)).get(job_id))
+    except KeyError as exc:
+        typer.echo(f"olympus: {exc.args[0]}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@jobs_app.command("cancel")
+def aegis_jobs_cancel(
+    job_id: str = typer.Argument(...),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Cancel queued work or request cooperative cancellation of running work."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    try:
+        _emit_job(AegisJobStore(Path(database)).cancel(job_id))
+    except KeyError as exc:
+        typer.echo(f"olympus: {exc.args[0]}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@jobs_app.command("work")
+def aegis_jobs_work(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    audit: str = typer.Option(".olympus/aegis-audit.ndjson", "--audit"),
+) -> None:
+    """Claim and execute at most one job; safe for cron/systemd/container loops."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore, AegisWorker
+
+    job = AegisWorker(AegisJobStore(Path(database))).run_next(audit_path=Path(audit))
+    if job is None:
+        typer.echo(json.dumps({"claimed": False, "reason": "queue-empty"}, indent=2))
+        return
+    _emit_job(job)
+    if job.state.value == "failed":
+        raise typer.Exit(code=4)
+
+
 @aegis_app.command("deps")
 def aegis_deps() -> None:
     """Report AEGIS runtime dependencies: web stack, services, and scanner binaries."""
@@ -210,29 +398,55 @@ def aegis_info() -> None:
 @aegis_app.command("scan")
 def aegis_scan(
     target: str = typer.Option(..., "--target", help="Authorized target to scan."),
+    scanner: str = typer.Option(..., "--scanner", help="Ready specialist engine."),
+    scope_id: str = typer.Option(..., "--scope-id", help="Server-registered scope identifier."),
+    kind: str = typer.Option("host", "--kind", help="Target kind: host, domain or url."),
     base_url: str = typer.Option(
-        "http://127.0.0.1:8000", "--url", help="Base URL of a running AEGIS server."
+        "http://127.0.0.1:8443", "--url", help="Base URL of the native AEGIS API."
     ),
-    profile: str | None = typer.Option(
-        None, "--profile", help="Scan profile/preset name (server-defined)."
-    ),
+    api_key_env: str = typer.Option("OLYMPUS_AEGIS_API_KEY", "--api-key-env"),
+    i_am_authorized: bool = typer.Option(False, "--i-am-authorized"),
 ) -> None:
-    """Enqueue a scan via a running AEGIS server's API (thin, honest HTTP client).
-
-    This posts to ``<url>/api/v1/scans``; the AEGIS server is the authority on the
-    request schema, authorization, and scope. Requires the server to be running
-    (``olympus aegis serve``) and a worker (``olympus aegis workers``).
-    """
+    """Submit authorized work to the native AEGIS API."""
+    import ipaddress
+    import os
     import urllib.error
     import urllib.request
+    from urllib.parse import urlparse
 
-    body: dict[str, object] = {"target": target}
-    if profile:
-        body["profile"] = profile
+    if not i_am_authorized:
+        typer.echo("olympus: API scan submission requires --i-am-authorized", err=True)
+        raise typer.Exit(code=4)
+    api_key = os.environ.get(api_key_env, "")
+    if not api_key:
+        typer.echo(
+            f"olympus: required API key environment variable is not set: {api_key_env}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        typer.echo("olympus: AEGIS API URL must be an absolute HTTP(S) URL", err=True)
+        raise typer.Exit(code=2)
+    try:
+        loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        loopback = parsed.hostname.lower() == "localhost"
+    if parsed.scheme != "https" and not loopback:
+        typer.echo("olympus: remote AEGIS API connections require HTTPS", err=True)
+        raise typer.Exit(code=2)
+
+    body: dict[str, object] = {
+        "scanner": scanner,
+        "target": target,
+        "target_kind": kind,
+        "scope_id": scope_id,
+        "authorized": True,
+    }
     request = urllib.request.Request(  # noqa: S310 - scheme is operator-provided base URL
-        f"{base_url.rstrip('/')}/api/v1/scans",
+        f"{base_url.rstrip('/')}/api/v1/jobs",
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "X-Olympus-API-Key": api_key},
         method="POST",
     )
     try:
@@ -247,7 +461,7 @@ def aegis_scan(
     except urllib.error.URLError as exc:
         typer.echo(
             f"olympus: could not reach an AEGIS server at {base_url} ({exc.reason}). "
-            "Start it with:  olympus aegis serve",
+            "Start it with: olympus aegis api",
             err=True,
         )
         raise typer.Exit(code=4) from exc
@@ -269,9 +483,7 @@ def aegis_doctor() -> None:
     report.add(check_writable_dir(os.environ.get("VAP_REPORTS_DIR", "reports"), optional=True))
     live = os.environ.get("VAP_ENABLE_LIVE_SCANS", "false").lower() == "true"
     live_detail = (
-        "live scans ENABLED"
-        if live
-        else "live scans disabled (scanners run in simulated mode)"
+        "live scans ENABLED" if live else "live scans disabled (scanners run in simulated mode)"
     )
     report.add(report_flag("config:VAP_ENABLE_LIVE_SCANS", live, live_detail))
     for secret in ("VAP_API_KEY", "VAP_JWT_SECRET", "VAP_CSRF_SECRET"):
@@ -368,29 +580,21 @@ def register_doctor(parent: typer.Typer) -> None:
         _emit_report(report)
 
 
-# --------------------------------------------------------------------------- #
-# AEGIS native scan execution (`olympus aegis run`) — no implicit simulation
-# --------------------------------------------------------------------------- #
-def _load_scope(path: object) -> tuple[str, ...]:
-    import json as _json
-    from pathlib import Path as _Path
-
-    data = _json.loads(_Path(str(path)).read_text(encoding="utf-8"))
-    allowed: list[str] = []
-    for key in ("allowed", "allowed_hosts", "allowed_domains"):
-        values = data.get(key) if isinstance(data, dict) else None
-        if isinstance(values, list):
-            allowed.extend(str(v) for v in values)
-    return tuple(dict.fromkeys(allowed))
-
-
 @aegis_app.command("run")
 def aegis_run(
     scanner: str = typer.Argument(..., help="Scanner name (see 'olympus aegis run --list')."),
     target: str = typer.Option("", "--target", help="Authorized target (host/url/domain)."),
     kind: str = typer.Option("host", "--kind", help="Target kind: host, url, or domain."),
-    scope: str = typer.Option("", "--scope", help="JSON scope file: {'allowed': [hosts/domains]}."),
-    timeout: int = typer.Option(300, "--timeout", help="Per-scan timeout in seconds."),
+    scope: str = typer.Option("", "--scope", help="Versioned AEGIS scope JSON file."),
+    timeout: float = typer.Option(300.0, "--timeout", help="Per-process timeout in seconds."),
+    deadline: float = typer.Option(600.0, "--deadline", help="Overall scan deadline in seconds."),
+    max_scope_bytes: int = typer.Option(1_000_000, "--max-scope-bytes"),
+    max_output_bytes: int = typer.Option(5_000_000, "--max-output-bytes"),
+    max_findings: int = typer.Option(10_000, "--max-findings"),
+    output: str = typer.Option("", "--output", help="Optional private versioned result JSON."),
+    audit: str = typer.Option(
+        "examples/output/aegis-audit.ndjson", "--audit", help="Redacted structured audit log."
+    ),
     i_am_authorized: bool = typer.Option(
         False, "--i-am-authorized", help="Confirm documented authorization for a real scan."
     ),
@@ -404,15 +608,23 @@ def aegis_run(
     """Run a real scanner with explicit execution states (never implicit simulation).
 
     States: live / unavailable / failed / disabled / simulation. Simulation is
-    only ever produced with --simulate (or AEGIS_SIMULATION_MODE=true); a missing
+    only ever produced with --simulate; a missing
     binary yields 'unavailable', and live-disabled yields 'disabled' — never
     fabricated findings.
     """
+    from pathlib import Path
+
     from olympus.aegis import config as aegis_config
-    from olympus.aegis.base import NotAuthorizedError
-    from olympus.aegis.model import ScanRequest
-    from olympus.aegis.registry import UnknownScannerError, get_adapter, implemented
-    from olympus.aegis.scope import OutOfScopeError, SsrfBlockedError, TargetValidationError
+    from olympus.aegis.application import AegisApplicationService, AegisRunRequest
+    from olympus.aegis.config import AegisConfigError
+    from olympus.aegis.registry import UnknownScannerError, implemented
+    from olympus.aegis.scope import (
+        OutOfScopeError,
+        SsrfBlockedError,
+        TargetResolutionError,
+        TargetValidationError,
+    )
+    from olympus.core.execution import AuthorizationRequiredError, CancellationRequested
 
     if list_scanners:
         typer.echo(json.dumps({"implemented": implemented()}, indent=2, sort_keys=True))
@@ -420,35 +632,43 @@ def aegis_run(
     if not target:
         typer.echo("olympus: --target is required (or use --list)", err=True)
         raise typer.Exit(code=2)
+    if not scope:
+        typer.echo("olympus: --scope is required for every real or simulated target", err=True)
+        raise typer.Exit(code=2)
     try:
-        adapter = get_adapter(scanner)
-    except UnknownScannerError as exc:
-        typer.echo(f"olympus: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-
-    allowed = _load_scope(scope) if scope else ()
-    simulate_on = simulate or aegis_config.simulation_mode()
-    request = ScanRequest(
-        scanner=scanner,
-        target=target,
-        target_kind=kind,
-        allowed=allowed,
-        timeout_seconds=timeout,
-        authorized=i_am_authorized,
-        live_enabled=aegis_config.live_enabled(),
-        simulate=simulate_on,
-    )
-    try:
-        result = adapter.run(request)
+        result = AegisApplicationService().run(
+            AegisRunRequest(
+                scanner=scanner,
+                target=target,
+                target_kind=kind,
+                scope_path=Path(scope),
+                authorized=i_am_authorized,
+                live_enabled=aegis_config.live_enabled(),
+                simulate=simulate,
+                output_path=Path(output) if output else None,
+                audit_path=Path(audit) if audit else None,
+                timeout_seconds=timeout,
+                deadline_seconds=deadline,
+                max_scope_bytes=max_scope_bytes,
+                max_output_bytes=max_output_bytes,
+                max_findings=max_findings,
+            )
+        )
     except (OutOfScopeError, SsrfBlockedError) as exc:
         typer.echo(f"olympus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
-    except TargetValidationError as exc:
+    except (TargetResolutionError, TargetValidationError) as exc:
         typer.echo(f"olympus: invalid target: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    except NotAuthorizedError as exc:
+    except AuthorizationRequiredError as exc:
         typer.echo(f"olympus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
+    except UnknownScannerError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except (AegisConfigError, CancellationRequested, OSError, TimeoutError, ValueError) as exc:
+        typer.echo(f"olympus: AEGIS execution error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
     typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
     raise typer.Exit(code=_scan_exit_code(result))
@@ -459,7 +679,9 @@ def _scan_exit_code(result: object) -> int:
 
     state = getattr(result, "state", None)
     findings = getattr(result, "findings", [])
-    if state is ExecutionState.FAILED:
+    if state in {ExecutionState.FAILED, ExecutionState.UNAVAILABLE}:
+        return 2
+    if state is ExecutionState.DISABLED:
         return 4
     if state is ExecutionState.LIVE and findings:
         return 1

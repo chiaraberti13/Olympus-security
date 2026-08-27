@@ -1,8 +1,8 @@
 # Unified installation & operation
 
-Olympus, the complete vendored ARGUS and AEGIS tools, and the 24-scanner
-catalogue, from one checkout. Linux (Debian/Ubuntu shown; adapt the package
-manager for RHEL/Arch).
+Olympus-native ARGUS and AEGIS, the temporary VAP web compatibility layer, and
+the specialist-engine catalogue from one checkout. Linux (Debian/Ubuntu shown;
+adapt the package manager for RHEL/Arch).
 
 ## 1. Base install (Olympus + native modules)
 
@@ -14,16 +14,33 @@ olympus --version
 olympus doctor            # environment diagnostics (binaries, services, deps)
 ```
 
-## 2. Vendored tools (ARGUS + AEGIS Python deps)
+## 2. Native ARGUS and temporary VAP dependencies
 
 ```bash
-bash scripts/setup-vendored-tools.sh      # installs .[argus,aegis,dev] + AEGIS pins
-# or individually:
-pip install -e ".[argus]"                 # ARGUS runtime
-pip install -e ".[aegis]"                 # AEGIS web/DB/worker stack
+olympus argus --help                      # already installed by the base package
+bash scripts/setup-vendored-tools.sh      # installs .[aegis,dev] + temporary VAP pins
+# or:
+pip install -e ".[aegis]"                # temporary VAP web/DB/worker stack
 ```
 
 ## 3. AEGIS — native operation (single host)
+
+The Olympus-owned control plane needs no Redis or Celery:
+
+```bash
+mkdir -p .olympus/scopes
+# Place validated scope documents here as <scope-id>.json
+export OLYMPUS_AEGIS_API_KEY='<at least 32 random characters>'
+olympus aegis api --scope-directory .olympus/scopes       # terminal 1
+olympus aegis jobs work                                  # terminal 2 / supervisor
+olympus aegis scan --scanner nmap --target example.com \
+  --kind domain --scope-id customer-1 --i-am-authorized
+```
+
+Use `--ssl-certfile` and `--ssl-keyfile` to bind the API outside localhost;
+remote plaintext HTTP is rejected by the server and client.
+
+### Temporary VAP compatibility stack
 
 ```bash
 # System services (Debian/Ubuntu):
@@ -74,7 +91,8 @@ The 5 API/commercial engines (zap, openvas, nessus, burp, acunetix) require
 manual install and licence/API configuration via their `VAP_*` settings — see
 `docs/scanner-matrix.md`. Live scanning also requires
 `VAP_ENABLE_LIVE_SCANS=true` and explicit authorization/scope; otherwise
-scanners run in the upstream simulated (educational) mode.
+the native execution path refuses the run or returns an explicit unavailable /
+disabled state. Simulation occurs only when the operator explicitly requests it.
 
 ## 6. Diagnostics
 

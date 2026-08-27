@@ -34,7 +34,6 @@ from olympus.helios.cli import app as helios_app
 from olympus.hermes.cli import app as hermes_app
 from olympus.integrations.cli import (
     aegis_app,
-    register_argus_native,
     register_doctor,
     register_vap_shim,
 )
@@ -119,8 +118,6 @@ app.add_typer(apollo_app, name="apollo")
 app.add_typer(minerva_app, name="minerva")
 app.add_typer(vulcan_app, name="vulcan")
 app.add_typer(metis_app, name="metis")
-# Complete vendored upstream tools, wired in as first-class subcommands.
-register_argus_native(app)
 app.add_typer(aegis_app, name="aegis")
 register_vap_shim(app)  # deprecated 'olympus vap' -> forwards to 'olympus aegis'
 register_doctor(app)  # 'olympus doctor'

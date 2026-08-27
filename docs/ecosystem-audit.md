@@ -1,7 +1,7 @@
 # Olympus ecosystem audit
 
-_Audit date: 2026-08-26. Scope: every tool in the Olympus repository — native
-modules, vendored complete tools, and the integration layer._
+_Audit date: 2026-08-27. Scope: every Olympus-native module, the temporary VAP
+compatibility boundary, and the specialist-engine integration layer._
 
 > Method: the CLI tree was introspected live (`typer`/`click`), module sources
 > and imports were read, the 24 vendored scanners were parsed for their real
@@ -33,10 +33,9 @@ modules, vendored complete tools, and the integration layer._
 | minerva | native | Incident triage & chain of custody | `olympus minerva` | ✅ | 2 files | basic execution verified |
 | vulcan | native | Aggregation, dedup, ranking, reporting | `olympus vulcan` | ✅ | 1 file | basic execution verified |
 | metis | native | Capability routing, planning, CTI cases and guided labs | `olympus metis` | ✅ | 1 file | e2e verified (offline) |
-| ARGUS (complete) | vendored | Full standalone ARGUS OSINT CLI | `olympus argus-native` | ✅ | parity + smoke | basic execution verified (offline cmds) |
-| AEGIS (complete) | vendored | Full Vulnerability Assessment Platform | `olympus aegis` | ✅ | parity + wiring | startup verified (web app booted, migrations ran) |
+| aegis | native + temporary VAP compatibility | Specialist-engine control plane | `olympus aegis` | ✅ | execution/jobs/capability contracts | native jobs e2e verified (offline) |
 
-Total automated tests collected: **654** (all passing; optional, non-blocking).
+Ruff and the complete automated test suite are blocking CI checks.
 
 ## 3. Per-tool detail
 
@@ -61,32 +60,34 @@ commands.
 | vulcan | rank, report | core policy/contracts | none | none | strict producer envelopes, aggregate byte/item/deadline limits | one canonical report; atomic JSON/safe Markdown/self-contained HTML | n/a |
 | metis | capabilities, recommend, plan, labs, case | core file safety, pydantic, SQLite | none | private SQLite case store | strict objectives, scope entries, source/confidence and ingest limits | versioned plans/cases, safe Markdown and JSON reports | n/a |
 
-### ARGUS (complete, vendored) — `olympus argus-native`
+### ARGUS (native migration complete) — `olympus argus`
 
-- **Source:** `vendor/argus/` (upstream rev `1c7a831…`, MIT). All original
-  modules present: ip, phone, username, email, domain, dns, web, mac, myip +
-  config, exporters, ui, updater, utils, banner.
-- **CLI:** verbatim passthrough → subcommands `ip phone username email domain
-  dns web mac myip config update` + interactive menu.
-- **Deps:** `requests, phonenumbers, rich` (+ optional `dnspython`) via
-  `pip install -e ".[argus]"`. **External binaries:** none. **Services:** none.
-- **Verified here:** `--version` (Argus 3.0.0), `--help`, `phone` (offline) →
-  real output; `mac` reached the vendor API and reported the sandbox proxy block
-  cleanly (graceful failure, not simulated).
-- **Docs:** README (EN/IT), `docs/provenance.md`.
-- **Native event pipeline:** `olympus argus pipeline` adds deterministic typed
-  event expansion, recursive deduplication, blacklist and resource bounds. The
-  built-ins are offline; injected active modules require authorization and a
-  scope gate on every pivot.
+- **Source:** `src/olympus/argus/`; last compared standalone revision
+  `1c7a831…`. No duplicated source or runtime passthrough remains under
+  `vendor/`.
+- **CLI:** `accounts, diff, dns, doctor, email, fronting, investigate, ip, mac,
+  myip, phone, pipeline, scan, web, whois`.
+- **Deps:** `phonenumbers, rich` and optional `dnspython`; no standalone ARGUS
+  package, external binary or service is required.
+- **Verified here:** the full suite passes while `vendor/argus` is absent;
+  `tests/unit/test_argus_native_replacement.py` prevents restoration of the
+  removed passthrough and checks the complete native command surface.
+- **Pipeline:** deterministic typed event expansion, recursive deduplication,
+  blacklist and resource bounds. Active pivots require authorization and a
+  scope gate.
 
-### AEGIS (complete, vendored) — `olympus aegis`
+### AEGIS (native control plane + temporary VAP compatibility) — `olympus aegis`
 
 - **Source:** `vendor/vulnerability-assessment-platform/` (upstream rev
   `6c6b395…`, GPL-3.0-only). Complete FastAPI app (~40 routes), 24 scanners, SQLAlchemy +
   3 Alembic migrations, Celery/Redis, report generator, templates, static,
   assets, tests.
-- **CLI (Olympus-native AEGIS layer):** `serve, migrate, workers, scanners
-  [--check], deps, scan, info, doctor`.
+- **Native CLI:** capability readiness, real scanner execution and durable job
+  operations (`init`, `submit`, `list`, `status`, `cancel`, `work`). Every
+  worker job passes through the same scope, authorization, SSRF, bounds and
+  audit application service as synchronous execution.
+- **Temporary compatibility CLI:** `serve, migrate, workers, scan, info` keeps
+  the VAP web surface available while its required API/report contracts migrate.
 - **Deps:** `pip install -e ".[aegis]"` (or the vendored `requirements.txt`).
   **Services:** Redis (broker/result/cache) + Celery worker for queued scans;
   SQLite (default) or Postgres via `VAP_DATABASE_URL`. **DB:** Alembic
@@ -103,7 +104,7 @@ commands.
 
 ## 4. Incomplete, unverified, or simulated components (honest findings)
 
-- **The vendored web app still simulates by default** (upstream behaviour,
+- **The temporary vendored web app still simulates by default** (upstream behaviour,
   preserved verbatim). **Resolved for the Olympus-native path:** `olympus aegis
   run` is a new native execution layer with explicit states
   (`live`/`unavailable`/`failed`/`disabled`/`simulation`) that **never** emits a
@@ -118,9 +119,11 @@ commands.
   daemon**, so **no live scan and no container `up` was executed here.** Scanner
   live execution is therefore "not executable here"; it is reproducible outside
   the sandbox via `docker-compose.scanners.yml` / the vendored `installer.sh`.
-- **`olympus aegis scan`** is a thin HTTP client to a running AEGIS server; it
-  was not exercised end to end here because that needs a running server + worker
-  + Redis.
+- **`olympus aegis scan`** is an authenticated client for the native
+  `/api/v1/jobs` endpoint. It requires an explicit authorization confirmation,
+  a server-registered scope id and HTTPS for non-loopback servers. The API-to-
+  SQLite lifecycle is verified offline; live execution still requires a ready
+  specialist engine.
 - **5 scanners are API/commercial** (zap, openvas, nessus, burp, acunetix) and
   cannot be auto-installed; they retain their integration and require manual
   setup (see `docs/scanner-matrix.md`).
@@ -135,7 +138,7 @@ commands.
 | Scanner binaries (19 OSS) | live AEGIS scans | `docker-compose.scanners.yml` / `installer.sh` / `olympus aegis deps` |
 | Commercial engines (5) | nessus/burp/acunetix/zap/openvas | manual install + licence/API config |
 | Docker daemon | container operation | host Docker Engine (absent in this sandbox) |
-| `.[aegis]` / `.[argus]` extras | native runtime of vendored tools | `bash scripts/setup-vendored-tools.sh` |
+| `.[aegis]` extra | temporary VAP web/worker compatibility | `bash scripts/setup-vendored-tools.sh` |
 
 ## 6. Verification commands run in this environment
 
@@ -145,10 +148,11 @@ See `docs/scanner-matrix.md` for the per-scanner matrix and
 - `python -m olympus.cli --help` / `aegis --help` — CLI tree present.
 - `olympus aegis scanners --check` — all 24 listed with binary availability.
 - `olympus doctor` / `olympus aegis doctor` / `olympus argus doctor` — real diagnostics.
-- `olympus argus-native phone +1…` — real offline OSINT output.
+- `olympus argus phone --number +390212345678` — real offline OSINT output.
+- `olympus aegis jobs submit/list/status/cancel/work` — durable native lifecycle.
 - AEGIS web app booted + migrated + served 3 routes (HTTP 200).
 - `docker compose config` (both files) — valid; daemon absent so no `up`.
-- Full test suite: 654 tests pass (optional, non-blocking).
+- Full test suite and Ruff pass as blocking CI checks.
 
 ## 7. Confirmation
 

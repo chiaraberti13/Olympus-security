@@ -25,14 +25,11 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "pre-commit>=3.7",
+    "httpx>=0.27",
 ]
-# Vendored ARGUS (complete upstream tool under vendor/argus). Installs the
-# standalone toolkit's runtime dependencies so `olympus argus-native` runs.
-argus = [
-    "requests>=2.31",
-    "phonenumbers>=8.13",
-    "rich>=13.0",
-    "dnspython>=2.6",
+api = [
+    "fastapi>=0.109",
+    "uvicorn[standard]>=0.27",
 ]
 # AEGIS — the vendored Vulnerability Assessment Platform (complete upstream app
 # under vendor/vulnerability-assessment-platform). See that directory's
@@ -68,7 +65,7 @@ olympus = "olympus.cli:main"
 packages = ["src/olympus"]
 
 # ---------------------------------------------------------------------------
-# Optional quality tooling (non-blocking — never a gate)
+# Quality tooling
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
@@ -88,9 +85,11 @@ select = ["E", "F", "I", "B", "UP", "S", "C4", "SIM", "PTH", "RUF"]
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
-# Mypy is an OPTIONAL quality tool — it is never a completion gate and never
-# blocks implementation, integration, or calling a tool complete. Vendored
-# upstream tools are excluded; they carry their own tooling.
+[tool.ruff.lint.isort]
+known-first-party = ["olympus"]
+
+# Mypy is an additional local quality tool. Ruff and pytest are blocking CI
+# checks. Vendored upstream tools are excluded; they carry their own tooling.
 [tool.mypy]
 python_version = "3.11"
 strict = true
@@ -105,8 +104,7 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 
-# Tests and coverage are OPTIONAL tools. There is no coverage threshold and no
-# blocking gate: run `pytest` (optionally `pytest --cov=olympus`) as a helper.
+# Pytest is a blocking CI check. Coverage reporting currently has no threshold.
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]

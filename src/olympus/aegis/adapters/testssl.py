@@ -11,8 +11,11 @@ from olympus.core.enums import Severity, Source
 from olympus.core.models import Finding
 
 _SEVERITY = {
-    "CRITICAL": Severity.CRITICAL, "HIGH": Severity.HIGH, "MEDIUM": Severity.MEDIUM,
-    "LOW": Severity.LOW, "WARN": Severity.LOW,
+    "CRITICAL": Severity.CRITICAL,
+    "HIGH": Severity.HIGH,
+    "MEDIUM": Severity.MEDIUM,
+    "LOW": Severity.LOW,
+    "WARN": Severity.LOW,
 }
 
 
@@ -25,8 +28,16 @@ class TestsslAdapter(ScannerAdapter):
     def build_argv(self, host: str, request: ScanRequest) -> list[str]:
         target = request.target if ":" in request.target else f"{host}:443"
         return [
-            self.binary, "--quiet", "--color", "0", "--jsonfile", "/dev/stdout",
-            "--severity", "LOW", "--fast", target,
+            self.binary,
+            "--quiet",
+            "--color",
+            "0",
+            "--jsonfile",
+            "/dev/stdout",
+            "--severity",
+            "LOW",
+            "--fast",
+            target,
         ]
 
     def parse(self, output: CommandOutput, host: str, request: ScanRequest) -> list[Finding]:
@@ -48,13 +59,16 @@ class TestsslAdapter(ScannerAdapter):
                 continue
             fid = str(entry.get("id", "tls"))
             finding_text = str(entry.get("finding", ""))
-            findings.append(
+            self.add_finding(
+                findings,
                 Finding(
-                    asset_id=asset_id, source=Source.AEGIS,
+                    asset_id=asset_id,
+                    source=Source.AEGIS,
                     title=f"TLS issue ({fid}): {finding_text[:100]}",
                     description=finding_text,
                     severity=sev,
                     evidence=[f"id={fid}", f"severity={entry.get('severity')}"],
-                )
+                ),
+                request,
             )
         return findings

@@ -41,7 +41,6 @@ def get_adapter(name: str) -> ScannerAdapter:
     factory = _ADAPTERS.get(name)
     if factory is None:
         raise UnknownScannerError(
-            f"no native execution adapter for {name!r}; "
-            f"implemented: {implemented()}"
+            f"no native execution adapter for {name!r}; implemented: {implemented()}"
         )
     return factory()

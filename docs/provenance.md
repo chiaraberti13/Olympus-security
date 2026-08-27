@@ -1,26 +1,23 @@
 # Provenance and upstream attribution
 
-Both upstream projects are implemented **inside this repository** — there is no
-runtime Git dependency, submodule, wrapper, or external CLI. The **complete,
-unmodified upstream source** of each tool is vendored under `vendor/` and wired
-into the `olympus` CLI as a first-class runnable subcommand. This file records
-the origin and licence of each vendored tool, as required by the project's
-acceptance rules.
+This file records completed source migrations and the one remaining temporary
+vendored compatibility boundary. Olympus does not use runtime Git dependencies
+or submodules.
 
 ## ARGUS (OSINT & reconnaissance toolkit)
 
 - Upstream: <https://github.com/chiaraberti13/ARGUS>
-- Vendored revision: `1c7a8310ee64e005878dfa183ca8a384760706c6`
-- Location: `vendor/argus/` — complete source (the `argus` package and all its
-  modules, `data/`, `docs/`, `scripts/`, `tests/`, `Dockerfile`, `pyproject.toml`,
-  `requirements.txt`, and `LICENSE`), preserved verbatim.
-- Licence: **MIT** (`vendor/argus/LICENSE`), compatible with this repository.
-- Entry point: `olympus argus-native …` forwards every argument to the complete
-  ARGUS CLI (subcommands `ip`, `phone`, `username`, `email`, `domain`, `dns`,
-  `web`, `mac`, `myip`, `config`, `update`, plus the interactive menu).
-- An Olympus-native, scope-first re-implementation of the same passive lookups
-  also exists under `src/olympus/argus/` (`olympus argus …`); it is complementary,
-  not a replacement, and its capability contract is `docs/parity/argus.json`.
+- Last assessed standalone revision: `1c7a8310ee64e005878dfa183ca8a384760706c6`.
+- Migration status: **complete**. The maintained implementation is
+  `src/olympus/argus/` and the only entry point is `olympus argus …`.
+- Native coverage: domain/DNS/RDAP, IP, public IP, phone, email, accounts, MAC,
+  web posture, CDN fronting, investigation graphs, snapshot diff, bounded event
+  pipelines and diagnostics. Configuration is centralized under Olympus;
+  dependency updates are handled by Dependabot rather than a self-updater.
+- Verification: `tests/unit/test_argus_native_replacement.py`, the Argus unit
+  suite and `docs/parity/argus.json` remain the executable migration contract.
+- No standalone ARGUS source is retained below `vendor/` and no `argus-native`
+  passthrough remains.
 
 ## Vulnerability Assessment Platform
 
@@ -40,18 +37,17 @@ acceptance rules.
   text and upstream repository metadata both identify GNU GPL version 3.
   Redistribution must preserve the GPL source and notice obligations for this
   component.
-- Olympus-facing name: **AEGIS** (see `docs/vap-to-aegis-rename.md`). Entry
-  points: `olympus aegis serve` (web app), `olympus aegis migrate` (DB
-  migrations), `olympus aegis workers` (Celery worker), `olympus aegis scanners
-  [--check]`, `olympus aegis deps`, `olympus aegis scan`, `olympus aegis info`,
-  `olympus aegis doctor`. `olympus vap` remains as a deprecated alias. The
-  vendored source and its `VAP_*` configuration contract are unchanged.
+- Olympus-facing name: **AEGIS** (see `docs/vap-to-aegis-rename.md`). Native
+  entry points are `api`, `capabilities`, `jobs`, `run`, `scan`, `scanners` and
+  `doctor`. `scan` submits to the authenticated native job API. The temporary
+  `serve`, `migrate` and `workers` commands retain the legacy VAP web boundary
+  during migration; `olympus vap` remains a deprecated alias.
 
 ## Running the vendored tools
 
-- `bash scripts/setup-vendored-tools.sh` installs both tools' Python
+- `bash scripts/setup-vendored-tools.sh` installs the temporary VAP Python
   dependencies into one checkout.
-- `pip install -e ".[argus]"` / `pip install -e ".[vap]"` install per-tool
+- `pip install -e ".[vap]"` installs the legacy web extra;
   Python extras; the authoritative VAP pin set is its own `requirements.txt`.
 - External scanner **binaries** (nmap, nuclei, sqlmap, wpscan, …) and the full
   runtime (Redis/Celery) are provisioned reproducibly by the vendored
@@ -69,14 +65,13 @@ acceptance rules.
 - No upstream secrets, credentials, or API keys were copied.
 - Vendored code is preserved verbatim and held to its own quality tooling, not
   Olympus's optional helpers.
-- Feature-parity tests (`tests/unit/test_vendored_integration.py`) assert that
-  every ARGUS module and all 24 VAP scanners are present, so the standalone
-  repositories can be deleted without losing functionality.
+- Native replacement tests cover ARGUS. Temporary VAP compatibility tests remain
+  until its API, persistence and report surfaces are fully migrated.
 
 ## Repository licence scope
 
 Olympus-owned files under `src/olympus/` are offered under the root MIT
-`LICENSE`, as is vendored ARGUS under its own MIT notice. The vendored
+`LICENSE`. The vendored
 Vulnerability Assessment Platform remains GPL-3.0-only. This is therefore a
 multi-licence source distribution; the root MIT licence does not replace or
 weaken any licence stored below `vendor/`.

@@ -23,9 +23,16 @@ class NmapAdapter(ScannerAdapter):
         # -Pn: no ping (works on filtered hosts). -sV: service/version. -F: top
         # 100 ports (bounded). -oX -: XML to stdout. --host-timeout caps runtime.
         return [
-            self.binary, "-Pn", "-sV", "--version-light", "-F",
-            "--host-timeout", f"{max(request.timeout_seconds - 5, 30)}s",
-            "-oX", "-", host,
+            self.binary,
+            "-Pn",
+            "-sV",
+            "--version-light",
+            "-F",
+            "--host-timeout",
+            f"{max(request.timeout_seconds - 5, 30)}s",
+            "-oX",
+            "-",
+            host,
         ]
 
     def parse(self, output: CommandOutput, host: str, request: ScanRequest) -> list[Finding]:
@@ -50,7 +57,8 @@ class NmapAdapter(ScannerAdapter):
             evidence = [f"port={portid}/{proto}", f"service={svc_name}"]
             if banner:
                 evidence.append(f"banner={banner}")
-            findings.append(
+            self.add_finding(
+                findings,
                 Finding(
                     asset_id=asset_id,
                     source=Source.AEGIS,
@@ -63,6 +71,7 @@ class NmapAdapter(ScannerAdapter):
                     severity=severity,
                     evidence=evidence,
                     remediation="Confirm the service is intended to be exposed; restrict access.",
-                )
+                ),
+                request,
             )
         return findings
