@@ -22,6 +22,7 @@ import sys
 import typer
 
 from olympus.integrations import scanners as scanner_registry
+from olympus.integrations.capabilities import inventory_document
 from olympus.integrations.diagnostics import (
     Check,
     Report,
@@ -171,6 +172,26 @@ def aegis_scanners(
             sort_keys=True,
         )
     )
+
+
+@aegis_app.command("capabilities")
+def aegis_capabilities(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when no scanner integration is ready for a live job.",
+    ),
+) -> None:
+    """Report what AEGIS can actually execute in the current environment.
+
+    Unlike ``scanners``, which is a product catalogue, this command distinguishes
+    registered adapters, installed engines, configured APIs and live readiness.
+    It never contacts a target or treats a catalogue entry as working.
+    """
+    document = inventory_document()
+    typer.echo(json.dumps(document, indent=2, sort_keys=True))
+    if strict and document["ready"] == 0:
+        raise typer.Exit(code=4)
 
 
 @aegis_app.command("deps")
