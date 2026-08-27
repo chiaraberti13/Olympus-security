@@ -129,6 +129,19 @@ def version() -> None:
     typer.echo(__version__)
 
 
+@app.command("ui")
+def terminal_ui() -> None:
+    """Open the keyboard-first interface for every Olympus tool."""
+    from typer.main import get_command
+
+    from olympus.tui import OlympusTui
+
+    root = get_command(app)
+    if not isinstance(root, typer.core.TyperGroup):
+        raise RuntimeError("Olympus root command is not a command group")
+    OlympusTui(root).run()
+
+
 def main() -> None:  # pragma: no cover
     """Console-script entry point."""
     app()
