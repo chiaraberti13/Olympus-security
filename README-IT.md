@@ -226,6 +226,7 @@ olympus aegis capabilities                 # stati configured/available/ready
 olympus aegis jobs init                    # archivio job locale persistente
 olympus aegis jobs submit nmap --target example.com --scope scope.json --i-am-authorized
 olympus aegis jobs work                    # elabora un job in coda
+OLYMPUS_AEGIS_API_KEY='<32+ caratteri casuali>' olympus aegis api --scope-directory .olympus/scopes
 olympus aegis scanners                     # catalogo motori specialistici
 olympus aegis migrate                       # applica le migrazioni DB di VAP
 olympus aegis serve --host 127.0.0.1 --port 8000   # avvia la web app VAP completa

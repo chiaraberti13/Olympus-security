@@ -225,6 +225,7 @@ olympus aegis capabilities                 # configured/available/ready states
 olympus aegis jobs init                    # durable local job store
 olympus aegis jobs submit nmap --target example.com --scope scope.json --i-am-authorized
 olympus aegis jobs work                    # process one queued job
+OLYMPUS_AEGIS_API_KEY='<32+ random chars>' olympus aegis api --scope-directory .olympus/scopes
 olympus aegis scanners                     # specialist-engine catalogue
 olympus aegis migrate                       # apply the VAP database migrations
 olympus aegis serve --host 127.0.0.1 --port 8000   # serve the full VAP web app

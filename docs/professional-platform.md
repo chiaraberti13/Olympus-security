@@ -39,6 +39,20 @@ Simulation, fixtures and examples never count as live readiness. A missing
 engine, adapter or configuration is an explicit non-ready state, never a
 fabricated successful result.
 
+## Native AEGIS API baseline
+
+`olympus aegis api` exposes health, authenticated readiness/capabilities and a
+durable job lifecycle (`submit`, `list`, `status`, `cancel`). Scope documents
+are registered by identifier in a server-owned directory, so remote callers
+cannot submit arbitrary filesystem paths. The API requires a 32-character
+minimum secret from `OLYMPUS_AEGIS_API_KEY`; non-loopback binds require an
+explicit TLS certificate and key. Request bodies are bounded and operational
+responses carry no-store and browser-hardening headers.
+
+Workers execute the same persisted jobs with `olympus aegis jobs work`, through
+the canonical native application service. API submission cannot bypass scope,
+authorization, SSRF validation, deadlines, output limits or redacted audit.
+
 ## Professional end-to-end workflow
 
 1. Create an engagement and an immutable authorized scope.

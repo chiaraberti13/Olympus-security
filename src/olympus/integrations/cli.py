@@ -1,10 +1,8 @@
 """Olympus CLI surface for specialist-engine integrations.
 
-* ``olympus aegis`` drives the complete vendored Vulnerability Assessment
-  Platform (FastAPI web app, database + migrations, Celery workers, and the full
-  24-scanner catalogue). AEGIS is the Olympus-facing name for this platform; the
-  vendored upstream source under ``vendor/`` is unchanged and keeps its own
-  ``VAP_*`` configuration contract, which the integration layer passes through.
+* ``olympus aegis`` owns native execution, capability readiness, durable jobs
+  and an authenticated API. The older VAP web/worker commands remain a temporary
+  compatibility boundary while their professional contracts migrate.
 * ``olympus vap`` is a deprecated alias that forwards to ``olympus aegis``.
 
 Heavy upstream dependencies are imported lazily; missing dependencies, services,
@@ -41,7 +39,7 @@ def _os_environ() -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# AEGIS — the complete vendored Vulnerability Assessment Platform
+# AEGIS — native control plane with temporary VAP compatibility commands
 # --------------------------------------------------------------------------- #
 aegis_app = typer.Typer(
     add_completion=False,
@@ -58,6 +56,73 @@ aegis_app.add_typer(jobs_app, name="jobs")
 
 def _emit_report(report: Report) -> None:
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+
+
+@aegis_app.command("api")
+def aegis_api(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    scope_directory: str = typer.Option(".olympus/scopes", "--scope-directory"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8443, "--port", min=1, max=65_535),
+    api_key_env: str = typer.Option("OLYMPUS_AEGIS_API_KEY", "--api-key-env"),
+    ssl_certfile: str = typer.Option("", "--ssl-certfile"),
+    ssl_keyfile: str = typer.Option("", "--ssl-keyfile"),
+) -> None:
+    """Serve the authenticated native AEGIS API.
+
+    Non-loopback binds require both a TLS certificate and key. The API secret is
+    read from an environment variable and is never accepted on the command line.
+    """
+    import ipaddress
+    import os
+    from pathlib import Path
+
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = host.lower() == "localhost"
+    if not loopback and not (ssl_certfile and ssl_keyfile):
+        typer.echo(
+            "olympus: non-loopback AEGIS API binds require TLS certificate and key",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    api_key = os.environ.get(api_key_env, "")
+    if not api_key:
+        typer.echo(
+            f"olympus: required API key environment variable is not set: {api_key_env}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        import uvicorn
+
+        from olympus.aegis.api import ApiSettings, create_app
+
+        application = create_app(
+            ApiSettings(
+                database=Path(database),
+                scope_directory=Path(scope_directory),
+                api_key=api_key,
+            )
+        )
+    except (ImportError, OSError, ValueError) as exc:
+        typer.echo(
+            f'olympus: native API unavailable: {exc}; install with pip install -e ".[api]"',
+            err=True,
+        )
+        raise typer.Exit(code=2) from exc
+
+    uvicorn.run(
+        application,
+        host=host,
+        port=port,
+        ssl_certfile=ssl_certfile or None,
+        ssl_keyfile=ssl_keyfile or None,
+        proxy_headers=False,
+        server_header=False,
+    )
 
 
 @aegis_app.command("serve")
