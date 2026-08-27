@@ -88,6 +88,9 @@ select = ["E", "F", "I", "B", "UP", "S", "C4", "SIM", "PTH", "RUF"]
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["olympus"]
+
 # Mypy is an OPTIONAL quality tool — it is never a completion gate and never
 # blocks implementation, integration, or calling a tool complete. Vendored
 # upstream tools are excluded; they carry their own tooling.
