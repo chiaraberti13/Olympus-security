@@ -398,29 +398,55 @@ def aegis_info() -> None:
 @aegis_app.command("scan")
 def aegis_scan(
     target: str = typer.Option(..., "--target", help="Authorized target to scan."),
+    scanner: str = typer.Option(..., "--scanner", help="Ready specialist engine."),
+    scope_id: str = typer.Option(..., "--scope-id", help="Server-registered scope identifier."),
+    kind: str = typer.Option("host", "--kind", help="Target kind: host, domain or url."),
     base_url: str = typer.Option(
-        "http://127.0.0.1:8000", "--url", help="Base URL of a running AEGIS server."
+        "http://127.0.0.1:8443", "--url", help="Base URL of the native AEGIS API."
     ),
-    profile: str | None = typer.Option(
-        None, "--profile", help="Scan profile/preset name (server-defined)."
-    ),
+    api_key_env: str = typer.Option("OLYMPUS_AEGIS_API_KEY", "--api-key-env"),
+    i_am_authorized: bool = typer.Option(False, "--i-am-authorized"),
 ) -> None:
-    """Enqueue a scan via a running AEGIS server's API (thin, honest HTTP client).
-
-    This posts to ``<url>/api/v1/scans``; the AEGIS server is the authority on the
-    request schema, authorization, and scope. Requires the server to be running
-    (``olympus aegis serve``) and a worker (``olympus aegis workers``).
-    """
+    """Submit authorized work to the native AEGIS API."""
+    import ipaddress
+    import os
     import urllib.error
     import urllib.request
+    from urllib.parse import urlparse
 
-    body: dict[str, object] = {"target": target}
-    if profile:
-        body["profile"] = profile
+    if not i_am_authorized:
+        typer.echo("olympus: API scan submission requires --i-am-authorized", err=True)
+        raise typer.Exit(code=4)
+    api_key = os.environ.get(api_key_env, "")
+    if not api_key:
+        typer.echo(
+            f"olympus: required API key environment variable is not set: {api_key_env}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        typer.echo("olympus: AEGIS API URL must be an absolute HTTP(S) URL", err=True)
+        raise typer.Exit(code=2)
+    try:
+        loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        loopback = parsed.hostname.lower() == "localhost"
+    if parsed.scheme != "https" and not loopback:
+        typer.echo("olympus: remote AEGIS API connections require HTTPS", err=True)
+        raise typer.Exit(code=2)
+
+    body: dict[str, object] = {
+        "scanner": scanner,
+        "target": target,
+        "target_kind": kind,
+        "scope_id": scope_id,
+        "authorized": True,
+    }
     request = urllib.request.Request(  # noqa: S310 - scheme is operator-provided base URL
-        f"{base_url.rstrip('/')}/api/v1/scans",
+        f"{base_url.rstrip('/')}/api/v1/jobs",
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "X-Olympus-API-Key": api_key},
         method="POST",
     )
     try:
@@ -435,7 +461,7 @@ def aegis_scan(
     except urllib.error.URLError as exc:
         typer.echo(
             f"olympus: could not reach an AEGIS server at {base_url} ({exc.reason}). "
-            "Start it with:  olympus aegis serve",
+            "Start it with: olympus aegis api",
             err=True,
         )
         raise typer.Exit(code=4) from exc

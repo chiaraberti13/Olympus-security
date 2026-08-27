@@ -58,7 +58,7 @@ olympus aegis migrate                        # alembic upgrade head
 olympus aegis workers   [--queue --loglevel] # run a Celery scan worker
 olympus aegis scanners  [--check]            # list all 24 (+ binary availability)
 olympus aegis deps                           # web stack + scanner binary report
-olympus aegis scan      --target [--url --profile]  # enqueue via a running server
+olympus aegis scan      --scanner --target --scope-id --i-am-authorized  # native API
 olympus aegis info                           # location + stack importability
 olympus aegis doctor                         # runtime diagnostics (secret-safe)
 ```

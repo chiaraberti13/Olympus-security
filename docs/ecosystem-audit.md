@@ -119,9 +119,11 @@ commands.
   daemon**, so **no live scan and no container `up` was executed here.** Scanner
   live execution is therefore "not executable here"; it is reproducible outside
   the sandbox via `docker-compose.scanners.yml` / the vendored `installer.sh`.
-- **`olympus aegis scan`** is a thin HTTP client to a running AEGIS server; it
-  was not exercised end to end here because that needs a running server + worker
-  + Redis.
+- **`olympus aegis scan`** is an authenticated client for the native
+  `/api/v1/jobs` endpoint. It requires an explicit authorization confirmation,
+  a server-registered scope id and HTTPS for non-loopback servers. The API-to-
+  SQLite lifecycle is verified offline; live execution still requires a ready
+  specialist engine.
 - **5 scanners are API/commercial** (zap, openvas, nessus, burp, acunetix) and
   cannot be auto-installed; they retain their integration and require manual
   setup (see `docs/scanner-matrix.md`).

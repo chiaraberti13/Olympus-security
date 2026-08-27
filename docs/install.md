@@ -25,6 +25,23 @@ pip install -e ".[aegis]"                # temporary VAP web/DB/worker stack
 
 ## 3. AEGIS — native operation (single host)
 
+The Olympus-owned control plane needs no Redis or Celery:
+
+```bash
+mkdir -p .olympus/scopes
+# Place validated scope documents here as <scope-id>.json
+export OLYMPUS_AEGIS_API_KEY='<at least 32 random characters>'
+olympus aegis api --scope-directory .olympus/scopes       # terminal 1
+olympus aegis jobs work                                  # terminal 2 / supervisor
+olympus aegis scan --scanner nmap --target example.com \
+  --kind domain --scope-id customer-1 --i-am-authorized
+```
+
+Use `--ssl-certfile` and `--ssl-keyfile` to bind the API outside localhost;
+remote plaintext HTTP is rejected by the server and client.
+
+### Temporary VAP compatibility stack
+
 ```bash
 # System services (Debian/Ubuntu):
 sudo apt-get update && sudo apt-get install -y redis-server

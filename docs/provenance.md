@@ -37,12 +37,11 @@ or submodules.
   text and upstream repository metadata both identify GNU GPL version 3.
   Redistribution must preserve the GPL source and notice obligations for this
   component.
-- Olympus-facing name: **AEGIS** (see `docs/vap-to-aegis-rename.md`). Entry
-  points: `olympus aegis serve` (web app), `olympus aegis migrate` (DB
-  migrations), `olympus aegis workers` (Celery worker), `olympus aegis scanners
-  [--check]`, `olympus aegis deps`, `olympus aegis scan`, `olympus aegis info`,
-  `olympus aegis doctor`. `olympus vap` remains as a deprecated alias. The
-  vendored source and its `VAP_*` configuration contract are unchanged.
+- Olympus-facing name: **AEGIS** (see `docs/vap-to-aegis-rename.md`). Native
+  entry points are `api`, `capabilities`, `jobs`, `run`, `scan`, `scanners` and
+  `doctor`. `scan` submits to the authenticated native job API. The temporary
+  `serve`, `migrate` and `workers` commands retain the legacy VAP web boundary
+  during migration; `olympus vap` remains a deprecated alias.
 
 ## Running the vendored tools
 
