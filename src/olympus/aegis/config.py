@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import os
 
+
+class AegisConfigError(ValueError):
+    """Raised when native and legacy configuration is invalid or ambiguous."""
+
 #: AEGIS_* → legacy VAP_* compatibility mapping.
 COMPAT: dict[str, str] = {
     "AEGIS_ENABLE_LIVE_SCANS": "VAP_ENABLE_LIVE_SCANS",
@@ -26,18 +30,28 @@ COMPAT: dict[str, str] = {
 def get(name: str, default: str = "") -> str:
     """Return ``AEGIS_<name>`` (or its legacy ``VAP_*`` fallback), else ``default``."""
     value = os.environ.get(name)
+    legacy = COMPAT.get(name)
+    legacy_value = os.environ.get(legacy) if legacy is not None else None
+    if value is not None and legacy_value is not None and value.strip() != legacy_value.strip():
+        raise AegisConfigError(
+            f"ambiguous configuration: {name} and {legacy} are both set differently"
+        )
     if value is not None:
         return value
-    legacy = COMPAT.get(name)
-    if legacy is not None:
-        legacy_value = os.environ.get(legacy)
-        if legacy_value is not None:
-            return legacy_value
+    if legacy_value is not None:
+        return legacy_value
     return default
 
 
 def _flag(name: str) -> bool:
-    return get(name, "false").strip().lower() in {"1", "true", "yes", "on"}
+    value = get(name, "false").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise AegisConfigError(
+        f"{name} must be one of true/false, 1/0, yes/no, or on/off; got {value!r}"
+    )
 
 
 def live_enabled() -> bool:

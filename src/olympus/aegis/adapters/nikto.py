@@ -28,9 +28,16 @@ class NiktoAdapter(ScannerAdapter):
         is_https = request.target_kind == "url" and request.target.startswith("https")
         port = "443" if is_https else "80"
         return [
-            self.binary, "-host", host, "-port", port,
-            "-maxtime", f"{max(request.timeout_seconds - 5, 30)}s",
-            "-nointeractive", "-ask", "no",
+            self.binary,
+            "-host",
+            host,
+            "-port",
+            port,
+            "-maxtime",
+            f"{max(request.timeout_seconds - 5, 30)}s",
+            "-nointeractive",
+            "-ask",
+            "no",
         ]
 
     def parse(self, output: CommandOutput, host: str, request: ScanRequest) -> list[Finding]:
@@ -46,7 +53,8 @@ class NiktoAdapter(ScannerAdapter):
             osvdb = re.match(r"^(OSVDB-\d+):", body)
             severity = Severity.MEDIUM if osvdb else Severity.LOW
             title = body if len(body) <= 120 else body[:117] + "..."
-            findings.append(
+            self.add_finding(
+                findings,
                 Finding(
                     asset_id=asset_id,
                     source=Source.AEGIS,
@@ -54,6 +62,7 @@ class NiktoAdapter(ScannerAdapter):
                     description=body,
                     severity=severity,
                     evidence=[f"nikto_line={body}"],
-                )
+                ),
+                request,
             )
         return findings

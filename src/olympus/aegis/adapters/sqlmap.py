@@ -23,16 +23,26 @@ class SqlmapAdapter(ScannerAdapter):
 
     def build_asset(self, host: str, request: ScanRequest) -> Asset:
         return Asset(
-            asset_id=self.asset_id(host), asset_type=AssetType.URL,
-            hostname=host, source=Source.AEGIS, tags=["aegis", self.name],
+            asset_id=self.asset_id(host),
+            asset_type=AssetType.URL,
+            hostname=host,
+            source=Source.AEGIS,
+            tags=["aegis", self.name],
         )
 
     def build_argv(self, host: str, request: ScanRequest) -> list[str]:
         # sqlmap needs a URL with a parameter; require a url target.
         url = request.target if "://" in request.target else f"http://{request.target}"
         return [
-            self.binary, "-u", url, "--batch", "--level=1", "--risk=1",
-            "--technique=B", "--flush-session", "--disable-coloring",
+            self.binary,
+            "-u",
+            url,
+            "--batch",
+            "--level=1",
+            "--risk=1",
+            "--technique=B",
+            "--flush-session",
+            "--disable-coloring",
         ]
 
     def parse(self, output: CommandOutput, host: str, request: ScanRequest) -> list[Finding]:
@@ -40,15 +50,18 @@ class SqlmapAdapter(ScannerAdapter):
         findings: list[Finding] = []
         for match in _VULN.finditer(output.stdout):
             param = match.group(1)
-            findings.append(
+            self.add_finding(
+                findings,
                 Finding(
-                    asset_id=asset_id, source=Source.AEGIS,
+                    asset_id=asset_id,
+                    source=Source.AEGIS,
                     title=f"SQL injection in parameter '{param}'",
                     description=f"sqlmap reports GET/POST parameter '{param}' is injectable.",
                     severity=Severity.CRITICAL,
                     evidence=[f"parameter={param}", "tool=sqlmap"],
                     remediation="Use parameterized queries / prepared statements.",
-                )
+                ),
+                request,
             )
         # No injectable parameter found is a valid 'no findings' outcome (LIVE).
         return findings

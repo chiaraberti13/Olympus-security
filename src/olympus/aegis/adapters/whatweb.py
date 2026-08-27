@@ -12,8 +12,15 @@ from olympus.core.models import Asset, Finding
 
 # Plugins worth surfacing as technology-disclosure findings.
 _INTERESTING = {
-    "HTTPServer", "X-Powered-By", "PHP", "Apache", "nginx", "WordPress",
-    "Microsoft-IIS", "OpenSSL", "Server",
+    "HTTPServer",
+    "X-Powered-By",
+    "PHP",
+    "Apache",
+    "nginx",
+    "WordPress",
+    "Microsoft-IIS",
+    "OpenSSL",
+    "Server",
 }
 _PLUGIN = re.compile(r"([A-Za-z0-9\-]+)(?:\[([^\]]*)\])?")
 
@@ -26,8 +33,11 @@ class WhatwebAdapter(ScannerAdapter):
 
     def build_asset(self, host: str, request: ScanRequest) -> Asset:
         return Asset(
-            asset_id=self.asset_id(host), asset_type=AssetType.WEB_SERVER,
-            hostname=host, source=Source.AEGIS, tags=["aegis", self.name],
+            asset_id=self.asset_id(host),
+            asset_type=AssetType.WEB_SERVER,
+            hostname=host,
+            source=Source.AEGIS,
+            tags=["aegis", self.name],
         )
 
     def build_argv(self, host: str, request: ScanRequest) -> list[str]:
@@ -43,13 +53,16 @@ class WhatwebAdapter(ScannerAdapter):
         for name, detail in _PLUGIN.findall(line):
             if name not in _INTERESTING or not detail:
                 continue
-            findings.append(
+            self.add_finding(
+                findings,
                 Finding(
-                    asset_id=asset_id, source=Source.AEGIS,
+                    asset_id=asset_id,
+                    source=Source.AEGIS,
                     title=f"Technology disclosed: {name} ({detail})",
                     description=f"whatweb fingerprinted {name} = {detail}.",
                     severity=Severity.INFO,
                     evidence=[f"{name}={detail}"],
-                )
+                ),
+                request,
             )
         return findings

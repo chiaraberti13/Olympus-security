@@ -52,7 +52,7 @@ def run_argus_native(args: list[str]) -> int:
     except ModuleNotFoundError as exc:
         typer.echo(
             "olympus: ARGUS runtime dependencies are not installed "
-            f"({exc.name}). Install them with:  pip install -e \".[argus]\"",
+            f'({exc.name}). Install them with:  pip install -e ".[argus]"',
             err=True,
         )
         return 2
@@ -98,9 +98,7 @@ def aegis_serve(
     path = tool_path(VAP_DIR)
     env = {**_os_environ(), "VAP_HOST": host, "VAP_PORT": str(port)}
     typer.echo(f"olympus: starting AEGIS web app on http://{host}:{port} (from {path})", err=True)
-    completed = subprocess.run(
-        [sys.executable, "app.py"], cwd=str(path), env=env, check=False
-    )
+    completed = subprocess.run([sys.executable, "app.py"], cwd=str(path), env=env, check=False)
     raise typer.Exit(code=completed.returncode)
 
 
@@ -290,9 +288,7 @@ def aegis_doctor() -> None:
     report.add(check_writable_dir(os.environ.get("VAP_REPORTS_DIR", "reports"), optional=True))
     live = os.environ.get("VAP_ENABLE_LIVE_SCANS", "false").lower() == "true"
     live_detail = (
-        "live scans ENABLED"
-        if live
-        else "live scans disabled (scanners run in simulated mode)"
+        "live scans ENABLED" if live else "live scans disabled (scanners run in simulated mode)"
     )
     report.add(report_flag("config:VAP_ENABLE_LIVE_SCANS", live, live_detail))
     for secret in ("VAP_API_KEY", "VAP_JWT_SECRET", "VAP_CSRF_SECRET"):
@@ -389,29 +385,21 @@ def register_doctor(parent: typer.Typer) -> None:
         _emit_report(report)
 
 
-# --------------------------------------------------------------------------- #
-# AEGIS native scan execution (`olympus aegis run`) — no implicit simulation
-# --------------------------------------------------------------------------- #
-def _load_scope(path: object) -> tuple[str, ...]:
-    import json as _json
-    from pathlib import Path as _Path
-
-    data = _json.loads(_Path(str(path)).read_text(encoding="utf-8"))
-    allowed: list[str] = []
-    for key in ("allowed", "allowed_hosts", "allowed_domains"):
-        values = data.get(key) if isinstance(data, dict) else None
-        if isinstance(values, list):
-            allowed.extend(str(v) for v in values)
-    return tuple(dict.fromkeys(allowed))
-
-
 @aegis_app.command("run")
 def aegis_run(
     scanner: str = typer.Argument(..., help="Scanner name (see 'olympus aegis run --list')."),
     target: str = typer.Option("", "--target", help="Authorized target (host/url/domain)."),
     kind: str = typer.Option("host", "--kind", help="Target kind: host, url, or domain."),
-    scope: str = typer.Option("", "--scope", help="JSON scope file: {'allowed': [hosts/domains]}."),
-    timeout: int = typer.Option(300, "--timeout", help="Per-scan timeout in seconds."),
+    scope: str = typer.Option("", "--scope", help="Versioned AEGIS scope JSON file."),
+    timeout: float = typer.Option(300.0, "--timeout", help="Per-process timeout in seconds."),
+    deadline: float = typer.Option(600.0, "--deadline", help="Overall scan deadline in seconds."),
+    max_scope_bytes: int = typer.Option(1_000_000, "--max-scope-bytes"),
+    max_output_bytes: int = typer.Option(5_000_000, "--max-output-bytes"),
+    max_findings: int = typer.Option(10_000, "--max-findings"),
+    output: str = typer.Option("", "--output", help="Optional private versioned result JSON."),
+    audit: str = typer.Option(
+        "examples/output/aegis-audit.ndjson", "--audit", help="Redacted structured audit log."
+    ),
     i_am_authorized: bool = typer.Option(
         False, "--i-am-authorized", help="Confirm documented authorization for a real scan."
     ),
@@ -425,15 +413,23 @@ def aegis_run(
     """Run a real scanner with explicit execution states (never implicit simulation).
 
     States: live / unavailable / failed / disabled / simulation. Simulation is
-    only ever produced with --simulate (or AEGIS_SIMULATION_MODE=true); a missing
+    only ever produced with --simulate; a missing
     binary yields 'unavailable', and live-disabled yields 'disabled' — never
     fabricated findings.
     """
+    from pathlib import Path
+
     from olympus.aegis import config as aegis_config
-    from olympus.aegis.base import NotAuthorizedError
-    from olympus.aegis.model import ScanRequest
-    from olympus.aegis.registry import UnknownScannerError, get_adapter, implemented
-    from olympus.aegis.scope import OutOfScopeError, SsrfBlockedError, TargetValidationError
+    from olympus.aegis.application import AegisApplicationService, AegisRunRequest
+    from olympus.aegis.config import AegisConfigError
+    from olympus.aegis.registry import UnknownScannerError, implemented
+    from olympus.aegis.scope import (
+        OutOfScopeError,
+        SsrfBlockedError,
+        TargetResolutionError,
+        TargetValidationError,
+    )
+    from olympus.core.execution import AuthorizationRequiredError, CancellationRequested
 
     if list_scanners:
         typer.echo(json.dumps({"implemented": implemented()}, indent=2, sort_keys=True))
@@ -441,35 +437,43 @@ def aegis_run(
     if not target:
         typer.echo("olympus: --target is required (or use --list)", err=True)
         raise typer.Exit(code=2)
+    if not scope:
+        typer.echo("olympus: --scope is required for every real or simulated target", err=True)
+        raise typer.Exit(code=2)
     try:
-        adapter = get_adapter(scanner)
-    except UnknownScannerError as exc:
-        typer.echo(f"olympus: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-
-    allowed = _load_scope(scope) if scope else ()
-    simulate_on = simulate or aegis_config.simulation_mode()
-    request = ScanRequest(
-        scanner=scanner,
-        target=target,
-        target_kind=kind,
-        allowed=allowed,
-        timeout_seconds=timeout,
-        authorized=i_am_authorized,
-        live_enabled=aegis_config.live_enabled(),
-        simulate=simulate_on,
-    )
-    try:
-        result = adapter.run(request)
+        result = AegisApplicationService().run(
+            AegisRunRequest(
+                scanner=scanner,
+                target=target,
+                target_kind=kind,
+                scope_path=Path(scope),
+                authorized=i_am_authorized,
+                live_enabled=aegis_config.live_enabled(),
+                simulate=simulate,
+                output_path=Path(output) if output else None,
+                audit_path=Path(audit) if audit else None,
+                timeout_seconds=timeout,
+                deadline_seconds=deadline,
+                max_scope_bytes=max_scope_bytes,
+                max_output_bytes=max_output_bytes,
+                max_findings=max_findings,
+            )
+        )
     except (OutOfScopeError, SsrfBlockedError) as exc:
         typer.echo(f"olympus: blocked, out of scope: {exc}", err=True)
         raise typer.Exit(code=3) from exc
-    except TargetValidationError as exc:
+    except (TargetResolutionError, TargetValidationError) as exc:
         typer.echo(f"olympus: invalid target: {exc}", err=True)
         raise typer.Exit(code=2) from exc
-    except NotAuthorizedError as exc:
+    except AuthorizationRequiredError as exc:
         typer.echo(f"olympus: {exc}", err=True)
         raise typer.Exit(code=4) from exc
+    except UnknownScannerError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except (AegisConfigError, CancellationRequested, OSError, TimeoutError, ValueError) as exc:
+        typer.echo(f"olympus: AEGIS execution error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
 
     typer.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
     raise typer.Exit(code=_scan_exit_code(result))
@@ -480,7 +484,9 @@ def _scan_exit_code(result: object) -> int:
 
     state = getattr(result, "state", None)
     findings = getattr(result, "findings", [])
-    if state is ExecutionState.FAILED:
+    if state in {ExecutionState.FAILED, ExecutionState.UNAVAILABLE}:
+        return 2
+    if state is ExecutionState.DISABLED:
         return 4
     if state is ExecutionState.LIVE and findings:
         return 1

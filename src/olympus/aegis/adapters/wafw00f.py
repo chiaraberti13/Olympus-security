@@ -19,8 +19,11 @@ class Wafw00fAdapter(ScannerAdapter):
 
     def build_asset(self, host: str, request: ScanRequest) -> Asset:
         return Asset(
-            asset_id=self.asset_id(host), asset_type=AssetType.WEB_SERVER,
-            hostname=host, source=Source.AEGIS, tags=["aegis", self.name],
+            asset_id=self.asset_id(host),
+            asset_type=AssetType.WEB_SERVER,
+            hostname=host,
+            source=Source.AEGIS,
+            tags=["aegis", self.name],
         )
 
     def build_argv(self, host: str, request: ScanRequest) -> list[str]:
@@ -42,13 +45,16 @@ class Wafw00fAdapter(ScannerAdapter):
             if not isinstance(entry, dict) or not entry.get("detected"):
                 continue
             firewall = str(entry.get("firewall", "unknown"))
-            findings.append(
+            self.add_finding(
+                findings,
                 Finding(
-                    asset_id=asset_id, source=Source.AEGIS,
+                    asset_id=asset_id,
+                    source=Source.AEGIS,
                     title=f"WAF detected: {firewall}",
                     description=f"wafw00f identified a Web Application Firewall ({firewall}).",
                     severity=Severity.INFO,
                     evidence=[f"firewall={firewall}", f"url={entry.get('url')}"],
-                )
+                ),
+                request,
             )
         return findings
