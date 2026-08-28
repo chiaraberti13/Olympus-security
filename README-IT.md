@@ -91,6 +91,7 @@ $ olympus athena run plan.json --storage ./.athena
 | **Metis** | `olympus metis` | Routing deterministico delle competenze, piani d'ingaggio, casi CTI, correlazione IOC e report operativi. |
 | **core** | `olympus core` | Utility del contratto dati condiviso (es. `export-schemas`). |
 | **AEGIS** | `olympus aegis` | Orchestrazione scanner con scope, stato capacità, job SQLite persistenti, cancellazione, audit e stati di esecuzione espliciti. |
+| **TUI unificata** | `olympus ui` | Interfaccia da tastiera su tutti i comandi reali Olympus, con output in streaming e cancellazione del processo. |
 
 > [!TIP]
 > Esegui qualsiasi modulo con `--help` per vederne i comandi, oppure
@@ -105,6 +106,7 @@ git clone https://github.com/chiaraberti13/olympus-security
 cd olympus-security
 python -m pip install -e ".[dev]"      # oppure: make install
 olympus --version
+olympus ui
 ```
 
 ## 🎯 Avvio rapido
@@ -155,6 +157,7 @@ CI e negli script.
 ```text
 src/olympus/
 ├── cli.py            # punto d'ingresso unificato `olympus`
+├── tui/              # interfaccia terminale unificata da tastiera
 ├── core/             # contratto dati condiviso: modelli, enum, http, config, ids
 ├── argus/            # OSINT & recon passivo (incl. integrazione ARGUS)
 ├── athena/           # orchestrazione degli assessment (integrazione VAP)
@@ -167,6 +170,9 @@ docs/                 # architettura (ADR), manifest di parità, reference
 examples/             # file di scope, piani, input/output di esempio
 tests/                # test unitari e di contratto, offline e deterministici
 ```
+
+Vedi la [guida dell'interfaccia terminale](docs/tui.md) per navigazione,
+esecuzione e comportamento di sicurezza.
 
 ## 🧪 Sviluppo
 

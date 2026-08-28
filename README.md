@@ -91,6 +91,7 @@ $ olympus athena run plan.json --storage ./.athena
 | **Metis** | `olympus metis` | Deterministic capability routing, engagement plans, CTI cases, IOC correlation and operational reports. |
 | **core** | `olympus core` | Shared data-contract utilities (e.g. `export-schemas`). |
 | **AEGIS** | `olympus aegis` | Scope-gated scanner orchestration, capability readiness, durable SQLite jobs, cancellation, audit and explicit execution states. |
+| **Unified TUI** | `olympus ui` | Keyboard-first interface over every real Olympus command, with streamed output and process cancellation. |
 
 > [!TIP]
 > Run any module with `--help` to see its commands, or
@@ -105,6 +106,7 @@ git clone https://github.com/chiaraberti13/olympus-security
 cd olympus-security
 python -m pip install -e ".[dev]"      # or: make install
 olympus --version
+olympus ui
 ```
 
 ## 🎯 Quick start
@@ -154,6 +156,7 @@ Athena exits `0` (clean), `1` (findings/partial), `2` (invalid input),
 ```text
 src/olympus/
 ├── cli.py            # unified `olympus` entry point
+├── tui/              # unified keyboard-first terminal interface
 ├── core/             # shared data contract: models, enums, http, config, ids
 ├── argus/            # OSINT & passive recon (incl. ARGUS integration)
 ├── athena/           # assessment orchestration (VAP integration)
@@ -166,6 +169,9 @@ docs/                 # architecture (ADRs), parity manifests, reference
 examples/             # scope files, plans, sample inputs/outputs
 tests/                # offline, deterministic unit & contract tests
 ```
+
+See the [terminal interface guide](docs/tui.md) for navigation, execution and
+security behaviour.
 
 ## 🧪 Development
 
