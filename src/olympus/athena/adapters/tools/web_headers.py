@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
+import socket
+
 from olympus.argus.web import WebReconError, build_web_asset, build_web_findings, fetch_web
 from olympus.athena.adapters.tools.base import guard_target
 from olympus.athena.ports import Cancellation, ToolRequest, ToolResult
+from olympus.athena.scope import (
+    AddressResolver,
+    SsrfBlockedError,
+    TargetResolutionError,
+    ensure_web_target_allowed,
+)
 from olympus.core.http import HttpClient
 
 
 class WebHeadersAdapter:
     """Assess the passive HTTP security-header posture of a target host."""
 
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(
+        self,
+        http: HttpClient,
+        *,
+        resolver: AddressResolver = socket.getaddrinfo,
+    ) -> None:
         self._http = http
+        self._resolver = resolver
 
     @property
     def name(self) -> str:
@@ -26,6 +40,17 @@ class WebHeadersAdapter:
         guarded = guard_target(request, cancellation)
         if isinstance(guarded, ToolResult):
             return guarded
+        try:
+            ensure_web_target_allowed(
+                request.target_kind,
+                request.target_value,
+                request.allowed_domains,
+                resolver=self._resolver,
+            )
+        except SsrfBlockedError:
+            return ToolResult(ok=False, error_code="ssrf_blocked")
+        except TargetResolutionError:
+            return ToolResult(ok=False, error_code="unreachable")
         try:
             report = fetch_web(request.target_value, self._http)
         except WebReconError:

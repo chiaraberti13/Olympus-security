@@ -25,8 +25,10 @@ from olympus.athena.domain.contracts import (
 from olympus.athena.scope import (
     SsrfBlockedError,
     TargetOutOfScopeError,
+    TargetResolutionError,
     TargetValidationError,
     ensure_target_allowed,
+    ensure_web_target_allowed,
     host_of,
 )
 
@@ -236,3 +238,23 @@ def test_ensure_target_blocks_ssrf() -> None:
         ensure_target_allowed("url", "http://127.0.0.1/admin", ("example.com",))
     with pytest.raises(SsrfBlockedError):
         ensure_target_allowed("url", "http://10.0.0.5", ("example.com",))
+
+
+def test_web_target_checks_all_resolved_addresses() -> None:
+    def mixed_answers(host: str, port: object, **kwargs: object) -> list[tuple[object, ...]]:
+        return [
+            (2, 1, 6, "", ("93.184.216.34", 0)),
+            (2, 1, 6, "", ("10.0.0.5", 0)),
+        ]
+
+    with pytest.raises(SsrfBlockedError, match="10.0.0.5"):
+        ensure_web_target_allowed(
+            "url", "https://example.com", ("example.com",), resolver=mixed_answers
+        )
+
+
+def test_web_target_fails_closed_when_dns_returns_nothing() -> None:
+    with pytest.raises(TargetResolutionError, match="no addresses"):
+        ensure_web_target_allowed(
+            "url", "https://example.com", ("example.com",), resolver=lambda *args, **kwargs: []
+        )

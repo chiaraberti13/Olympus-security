@@ -10,10 +10,10 @@ jobs:
     name: ruff · pytest (required)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # full history for secret scan
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install
@@ -25,23 +25,46 @@ jobs:
       - name: Pytest
         run: pytest
 
-  secret-scan:
-    # Advisory secret scan (non-blocking). Committing secrets remains a project
-    # rule, but this analysis never blocks a build or merge — it only reports.
-    name: gitleaks (secret scan, advisory)
+  package-smoke:
+    name: wheel · clean-install · CLI smoke
     runs-on: ubuntu-latest
-    # gitleaks-action reads the PR's commits via the GitHub API; without these
-    # scopes the default token gets a 403 ("Resource not accessible by
-    # integration") and the job fails before scanning anything.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Install wheel in a clean environment
+        run: |
+          python -m venv /tmp/olympus-wheel-smoke
+          /tmp/olympus-wheel-smoke/bin/python -m pip install dist/*.whl
+      - name: Smoke-test installed CLI surfaces
+        run: |
+          OLYMPUS=/tmp/olympus-wheel-smoke/bin/olympus
+          "$OLYMPUS" --help
+          "$OLYMPUS" version
+          for module in core argus athena helios artemis proteus hermes apollo minerva vulcan metis aegis; do
+            "$OLYMPUS" "$module" --help
+          done
+
+  secret-scan:
+    name: gitleaks (blocking working-tree + history scan)
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Gitleaks
-        continue-on-error: true
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Scan checked-out files
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.28.0 \
+            detect --source=/repo --no-git --config=/repo/.gitleaks.toml --redact --exit-code=1
+      - name: Scan complete Git history
+        if: github.event_name != 'pull_request'
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.28.0 \
+            detect --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=1

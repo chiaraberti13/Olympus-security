@@ -23,6 +23,10 @@ from pathlib import Path
 from typing import Any
 
 
+class ConfigError(RuntimeError):
+    """Raised when an explicitly selected or discovered config is invalid."""
+
+
 def _candidate_paths() -> list[Path]:
     paths: list[Path] = []
     env_path = os.environ.get("OLYMPUS_CONFIG", "").strip()
@@ -33,23 +37,63 @@ def _candidate_paths() -> list[Path]:
     return paths
 
 
+def _validate_http_config(data: dict[str, Any], path: Path) -> None:
+    table = data.get("http")
+    if table is None:
+        return
+    if not isinstance(table, dict):
+        raise ConfigError(f"[http] must be a TOML table in {path}")
+
+    numeric_rules: dict[str, tuple[type, float, float]] = {
+        "timeout": (float, 0.001, 3600.0),
+        "retries": (int, 0, 10),
+        "backoff": (float, 0.0, 300.0),
+        "rate": (float, 0.0, 3600.0),
+        "max_response_bytes": (int, 1, 100 * 1024 * 1024),
+    }
+    for key, value in table.items():
+        if key not in numeric_rules:
+            raise ConfigError(f"unknown [http] option {key!r} in {path}")
+        expected, minimum, maximum = numeric_rules[key]
+        valid_type = isinstance(value, expected) and not isinstance(value, bool)
+        if expected is float:
+            valid_type = isinstance(value, int | float) and not isinstance(value, bool)
+        if not valid_type or not minimum <= value <= maximum:
+            raise ConfigError(
+                f"invalid [http].{key} in {path}: expected {expected.__name__} "
+                f"between {minimum:g} and {maximum:g}"
+            )
+
+
+def _validate_config(data: dict[str, Any], path: Path) -> dict[str, Any]:
+    _validate_http_config(data, path)
+    return data
+
+
 def load_config() -> dict[str, Any]:
-    """Load the first existing config file, or ``{}`` when none is present."""
-    for path in _candidate_paths():
+    """Load and validate the first config file; never hide a broken selection."""
+    explicit_path = os.environ.get("OLYMPUS_CONFIG", "").strip()
+    for index, path in enumerate(_candidate_paths()):
         try:
             raw = path.read_bytes()
-        except (FileNotFoundError, OSError):
+        except FileNotFoundError as exc:
+            if explicit_path and index == 0:
+                raise ConfigError(f"explicit config file does not exist: {path}") from exc
             continue
+        except OSError as exc:
+            raise ConfigError(f"cannot read config file {path}: {exc}") from exc
         try:
             parsed = tomllib.loads(raw.decode("utf-8"))
-        except (tomllib.TOMLDecodeError, UnicodeDecodeError):
-            return {}
-        return parsed if isinstance(parsed, dict) else {}
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+            raise ConfigError(f"invalid TOML config {path}: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ConfigError(f"config root must be a TOML table: {path}")
+        return _validate_config(parsed, path)
     return {}
 
 
 def get(section: str, key: str, default: Any, config: dict[str, Any] | None = None) -> Any:
-    """Return ``config[section][key]`` if present and same-typed, else ``default``."""
+    """Return a validated config value, or ``default`` when it is absent."""
     data = load_config() if config is None else config
     table = data.get(section)
     if not isinstance(table, dict) or key not in table:
@@ -60,4 +104,7 @@ def get(section: str, key: str, default: Any, config: dict[str, Any] | None = No
         isinstance(default, float) and isinstance(value, int) and not isinstance(value, bool)
     ):
         return value
-    return default
+    raise ConfigError(
+        f"invalid type for [{section}].{key}: expected {type(default).__name__}, "
+        f"got {type(value).__name__}"
+    )
