@@ -35,6 +35,16 @@ class _FakeHttpResponse:
         return None
 
 
+class _CancelAfterChecks:
+    def __init__(self, allowed_checks: int) -> None:
+        self._allowed_checks = allowed_checks
+        self._checks = 0
+
+    def is_cancelled(self) -> bool:
+        self._checks += 1
+        return self._checks > self._allowed_checks
+
+
 def test_redirect_handler_validates_destination_before_following() -> None:
     checked: list[str] = []
     handler = _ValidatingRedirectHandler(checked.append)
@@ -148,6 +158,69 @@ def test_default_response_limit_is_bounded() -> None:
     assert client._max_response_bytes == DEFAULT_MAX_RESPONSE_BYTES
     with pytest.raises(ValueError, match="max_response_bytes"):
         UrllibHttpClient(max_response_bytes=0)
+
+
+def test_response_body_is_read_in_bounded_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHttpResponse(200, {}, b"abcdefghij")
+    requested: list[int] = []
+    original_read = fake.read
+
+    def _recording_read(amount: int = -1) -> bytes:
+        requested.append(amount)
+        return original_read(min(amount, 3))
+
+    fake.read = _recording_read  # type: ignore[method-assign]
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout=0.0: fake)
+
+    response = UrllibHttpClient(max_response_bytes=16).get(
+        "https://olympusdemocorp.example/"
+    )
+
+    assert response.body == "abcdefghij"
+    assert len(requested) > 1
+    assert max(requested) <= 17
+
+
+def test_cancellation_interrupts_streaming_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHttpResponse(200, {}, b"x" * 32)
+    original_read = fake.read
+
+    def _small_read(amount: int = -1) -> bytes:
+        return original_read(min(amount, 4))
+
+    fake.read = _small_read  # type: ignore[method-assign]
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout=0.0: fake)
+    cancellation = _CancelAfterChecks(2)
+
+    with pytest.raises(HttpRequestError, match="cancelled"):
+        UrllibHttpClient(max_response_bytes=64, cancellation=cancellation).get(
+            "https://olympusdemocorp.example/"
+        )
+
+
+def test_cancellation_interrupts_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    calls = {"requests": 0, "sleeps": 0}
+
+    def _fail(request: Any, timeout: float = 0.0) -> Any:
+        calls["requests"] += 1
+        raise urllib.error.URLError("temporary")
+
+    monkeypatch.setattr("urllib.request.urlopen", _fail)
+    monkeypatch.setattr(
+        "time.sleep", lambda seconds: calls.__setitem__("sleeps", calls["sleeps"] + 1)
+    )
+
+    with pytest.raises(HttpRequestError, match="cancelled"):
+        UrllibHttpClient(
+            retries=3,
+            backoff=1.0,
+            cancellation=_CancelAfterChecks(2),
+        ).get("https://olympusdemocorp.example/")
+
+    assert calls["requests"] == 1
+    assert calls["sleeps"] <= 1
 
 
 def test_network_error_is_wrapped(monkeypatch: pytest.MonkeyPatch) -> None:

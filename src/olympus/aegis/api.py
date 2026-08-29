@@ -86,11 +86,23 @@ def create_app(settings: ApiSettings) -> FastAPI:
         content_length = request.headers.get("content-length")
         if content_length:
             try:
-                too_large = int(content_length) > MAX_REQUEST_BYTES
+                declared_length = int(content_length)
+                too_large = declared_length < 0 or declared_length > MAX_REQUEST_BYTES
             except ValueError:
                 too_large = True
             if too_large:
                 return JSONResponse(status_code=413, content={"detail": "request body too large"})
+
+        # Content-Length is optional and cannot be trusted. Consume the ASGI body
+        # stream incrementally, stop at the first byte above the limit, then cache
+        # only the bounded body for FastAPI's downstream parser.
+        bounded_body = bytearray()
+        async for chunk in request.stream():
+            if len(bounded_body) + len(chunk) > MAX_REQUEST_BYTES:
+                return JSONResponse(status_code=413, content={"detail": "request body too large"})
+            bounded_body.extend(chunk)
+        request._body = bytes(bounded_body)  # type: ignore[attr-defined]
+
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"

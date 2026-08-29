@@ -47,7 +47,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 ### Secret scanning
 
 - [x] Scansionare sempre il working tree con gitleaks e fallire su finding.
-- [ ] Scansionare l'intera history su `main`, manualmente e prima delle release.
+- [x] Scansionare l'intera history su `main`, manualmente e prima delle release.
 - [x] Eliminare `continue-on-error` e intervalli Git che possono produrre scansioni a zero byte.
 - [ ] Pubblicare report redatti/SARIF e testare il workflow con un secret fittizio.
 
@@ -195,3 +195,5 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | Data | Tranche | Stato | Evidenza |
 |---|---|---|---|
 | 2026-08-29 | P0 foundations | CI verde | Run `#119`: Ruff, 687 test, gitleaks e wheel smoke |
+| 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
+| 2026-08-29 | P0 runtime limits | In verifica | Branch `hardening/p0-runtime-auth` |
