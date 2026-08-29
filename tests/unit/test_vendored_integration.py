@@ -97,7 +97,7 @@ def test_legacy_web_requires_explicit_acknowledgement() -> None:
 def test_legacy_web_rejects_non_loopback_bind() -> None:
     result = runner.invoke(
         app,
-        ["aegis", "serve", "--allow-legacy-web", "--host", "0.0.0.0"],
+        ["aegis", "serve", "--allow-legacy-web", "--host", "192.0.2.10"],
     )
     assert result.exit_code == 2
     assert "loopback" in result.output.lower()

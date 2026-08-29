@@ -247,7 +247,7 @@ def test_web_target_checks_all_resolved_addresses() -> None:
             (2, 1, 6, "", ("10.0.0.5", 0)),
         ]
 
-    with pytest.raises(SsrfBlockedError, match="10.0.0.5"):
+    with pytest.raises(SsrfBlockedError, match=r"10\.0\.0\.5"):
         ensure_web_target_allowed(
             "url", "https://example.com", ("example.com",), resolver=mixed_answers
         )
