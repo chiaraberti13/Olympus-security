@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from olympus.athena.application.coordinator import Coordinator
 from olympus.athena.application.registry import UnknownAdapterError
 from olympus.athena.domain.assessment import Assessment, AssessmentState, Job, JobState
 from olympus.athena.domain.contracts import AssessmentPlan, load_plan
-from olympus.athena.ports import Cancellation, ToolRequest, ToolResult, ToolRunner
+from olympus.athena.ports import Cancellation, Clock, ToolRequest, ToolResult, ToolRunner
 from olympus.core.enums import Severity, Source
 from olympus.core.http import HttpResponse
 from olympus.core.models import Finding
@@ -28,6 +29,14 @@ class _Clock:
         if self._values:
             self._last = self._values.pop(0)
         return self._last
+
+    def now_iso(self) -> str:
+        return "2026-08-24T00:00:00+00:00"
+
+
+class _SystemClock:
+    def monotonic(self) -> float:
+        return time.monotonic()
 
     def now_iso(self) -> str:
         return "2026-08-24T00:00:00+00:00"
@@ -79,7 +88,7 @@ def _plan(**overrides: object) -> AssessmentPlan:
 
 
 def _coordinator(
-    tmp_path: Path, runners: dict[str, ToolRunner], clock: _Clock | None = None
+    tmp_path: Path, runners: dict[str, ToolRunner], clock: Clock | None = None
 ) -> tuple[Coordinator, SqliteAssessmentRepository, InMemoryAuditSink]:
     repo = SqliteAssessmentRepository(tmp_path / "athena.db")
     audit = InMemoryAuditSink()
@@ -146,6 +155,52 @@ def test_run_timeout(tmp_path: Path) -> None:
     assert outcome.state is AssessmentState.FAILED
     stored = repo.load_assessment(outcome.assessment_id)
     assert stored is not None and stored.jobs[0].state is JobState.TIMED_OUT
+    repo.close()
+
+
+def test_concurrent_timeouts_share_one_timeout_window(tmp_path: Path) -> None:
+    runners: dict[str, ToolRunner] = {
+        "a": _Runner("a", ToolResult(ok=True), block=True),
+        "b": _Runner("b", ToolResult(ok=True), block=True),
+    }
+    coordinator, repo, _ = _coordinator(tmp_path, runners, clock=_SystemClock())
+
+    started = time.monotonic()
+    outcome = coordinator.run(
+        _plan(
+            adapters=["a", "b"],
+            limits={"per_job_timeout_seconds": 1, "concurrency": 2},
+        )
+    )
+    elapsed = time.monotonic() - started
+
+    assert outcome.state is AssessmentState.FAILED
+    assert elapsed < 1.6
+    stored = repo.load_assessment(outcome.assessment_id)
+    assert stored is not None
+    assert {job.state for job in stored.jobs} == {JobState.TIMED_OUT}
+    repo.close()
+
+
+def test_deadline_limits_running_batch(tmp_path: Path) -> None:
+    runner = _Runner("a", ToolResult(ok=True), block=True)
+    coordinator, repo, _ = _coordinator(tmp_path, {"a": runner}, clock=_SystemClock())
+
+    outcome = coordinator.run(
+        _plan(
+            limits={
+                "per_job_timeout_seconds": 5,
+                "overall_deadline_seconds": 1,
+                "concurrency": 1,
+            }
+        )
+    )
+
+    assert outcome.state is AssessmentState.CANCELLED
+    stored = repo.load_assessment(outcome.assessment_id)
+    assert stored is not None
+    assert stored.jobs[0].state is JobState.CANCELLED
+    assert stored.jobs[0].error_code == "deadline"
     repo.close()
 
 

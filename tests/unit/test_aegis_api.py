@@ -107,6 +107,32 @@ def test_api_rejects_symlink_scope_and_oversized_body(tmp_path: Path) -> None:
     assert client.post("/api/v1/jobs", headers=headers, json=payload).status_code == 413
 
 
+def test_api_rejects_chunked_body_without_content_length(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    def oversized_chunks():  # type: ignore[no-untyped-def]
+        for _ in range(65):
+            yield b"x" * 1024
+
+    response = client.post(
+        "/api/v1/jobs",
+        headers={**AUTH, "Content-Type": "application/json"},
+        content=oversized_chunks(),
+    )
+    assert response.status_code == 413
+    assert response.json() == {"detail": "request body too large"}
+
+
+def test_api_rejects_invalid_content_length(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/v1/jobs",
+        headers={**AUTH, "Content-Length": "-1", "Content-Type": "application/json"},
+        content=b"{}",
+    )
+    assert response.status_code == 413
+
+
 def test_cli_requires_secret_and_tls_for_remote_bind(tmp_path: Path) -> None:
     runner = CliRunner()
     scopes = tmp_path / "scopes"

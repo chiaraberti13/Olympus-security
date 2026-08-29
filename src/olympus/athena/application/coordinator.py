@@ -12,8 +12,7 @@ distributed execution.
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeout
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 
 from olympus.athena.domain.assessment import (
@@ -144,7 +143,8 @@ class Coordinator:
         concurrency = policy.max_concurrency
         allowed = plan.scope.allowed_domains
 
-        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        pool = ThreadPoolExecutor(max_workers=concurrency)
+        try:
             for batch_start in range(0, len(jobs), concurrency):
                 batch = jobs[batch_start : batch_start + concurrency]
                 deadline_hit = self._clock.monotonic() >= deadline
@@ -152,8 +152,21 @@ class Coordinator:
                     terminal_jobs.extend(self._cancel_batch(assessment_id, batch, "deadline"))
                     continue
                 terminal_jobs.extend(
-                    self._run_batch(assessment_id, batch, runners, allowed, policy, findings, pool)
+                    self._run_batch(
+                        assessment_id,
+                        batch,
+                        runners,
+                        allowed,
+                        policy,
+                        findings,
+                        pool,
+                        deadline,
+                    )
                 )
+        finally:
+            # Timed-out adapters receive cooperative cancellation. Do not make
+            # the coordinator wait again for a non-cooperative worker here.
+            pool.shutdown(wait=False, cancel_futures=True)
 
         state = derive_terminal_state(tuple(terminal_jobs))
         self._repo.transition_assessment(assessment_id, state)
@@ -183,6 +196,7 @@ class Coordinator:
         policy: ExecutionPolicy,
         findings: list[Finding],
         pool: ThreadPoolExecutor,
+        deadline: float,
     ) -> list[Job]:
         running: list[Job] = [self._repo.transition_job(job, JobState.RUNNING) for job in batch]
         tokens = {job.job_id: CancellationToken() for job in running}
@@ -197,15 +211,22 @@ class Coordinator:
             ): job
             for job in running
         }
+        deadline_remaining = max(0.0, deadline - self._clock.monotonic())
+        timeout_budget = min(policy.timeout_seconds, deadline_remaining)
+        done, pending = wait(futures, timeout=timeout_budget)
+        deadline_limited = deadline_remaining <= policy.timeout_seconds
+
         results: list[Job] = []
         for future, job in futures.items():
-            try:
-                result = future.result(timeout=policy.timeout_seconds)
-            except FutureTimeout:
-                tokens[job.job_id].cancel()
-                results.append(self._finish_timed_out(assessment_id, job))
+            if future in done:
+                results.append(self._finish(assessment_id, job, future.result(), findings))
                 continue
-            results.append(self._finish(assessment_id, job, result, findings))
+            if future in pending:
+                tokens[job.job_id].cancel()
+                if deadline_limited:
+                    results.append(self._finish_deadline(assessment_id, job))
+                else:
+                    results.append(self._finish_timed_out(assessment_id, job))
         return results
 
     def _invoke(
@@ -277,6 +298,17 @@ class Coordinator:
             "timeout",
             job_id=job.job_id,
             metadata={"adapter": job.adapter},
+        )
+        return updated
+
+    def _finish_deadline(self, assessment_id: str, job: Job) -> Job:
+        updated = self._repo.transition_job(job, JobState.CANCELLED, error_code="deadline")
+        self._emit(
+            assessment_id,
+            "job_cancelled",
+            "deadline",
+            job_id=job.job_id,
+            metadata={"adapter": job.adapter, "reason": "deadline"},
         )
         return updated
 

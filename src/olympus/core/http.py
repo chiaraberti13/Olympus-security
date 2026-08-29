@@ -38,6 +38,12 @@ _RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
 #: Conservative default cap for passive HTTP response bodies (2 MiB).
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
+#: Small enough to observe cancellation promptly without excessive read calls.
+_RESPONSE_CHUNK_BYTES = 64 * 1024
+
+#: Maximum interval between cancellation checks while waiting.
+_CANCELLATION_POLL_SECONDS = 0.1
+
 
 @dataclass(frozen=True)
 class HttpResponse:
@@ -197,17 +203,34 @@ class UrllibHttpClient:
         with self._throttle_lock:
             elapsed = time.monotonic() - self._last_request_at
             if 0.0 <= elapsed < self._min_interval:
-                time.sleep(self._min_interval - elapsed)
+                self._sleep_interruptibly(self._min_interval - elapsed)
             self._last_request_at = time.monotonic()
 
+    def _sleep_interruptibly(self, seconds: float) -> None:
+        """Sleep in bounded slices so cancellation interrupts waits promptly."""
+        remaining = max(0.0, seconds)
+        while remaining > 0.0:
+            self._check_cancelled()
+            interval = min(_CANCELLATION_POLL_SECONDS, remaining)
+            time.sleep(interval)
+            remaining -= interval
+        self._check_cancelled()
+
     def _read_bounded(self, stream: _ReadableBody, url: str) -> bytes:
-        """Read one body with a hard cap before it is retained in memory."""
-        body = stream.read(self._max_response_bytes + 1)
+        """Read a body incrementally with a hard in-memory and transfer cap."""
+        body = bytearray()
+        while len(body) <= self._max_response_bytes:
+            self._check_cancelled()
+            remaining = self._max_response_bytes + 1 - len(body)
+            chunk = stream.read(min(_RESPONSE_CHUNK_BYTES, remaining))
+            if not chunk:
+                break
+            body.extend(chunk)
         if len(body) > self._max_response_bytes:
             raise HttpResponseTooLarge(
                 f"HTTP response for {url} exceeds the {self._max_response_bytes} byte limit"
             )
-        return body
+        return bytes(body)
 
     def _reject_oversized_content_length(
         self, headers: _HeaderLookup | None, url: str
@@ -277,7 +300,6 @@ class UrllibHttpClient:
                 if attempt == self._retries:
                     return response  # out of retries: hand back the last response
             if attempt < self._retries:
-                self._check_cancelled()
-                time.sleep(self._backoff * (2**attempt))
+                self._sleep_interruptibly(self._backoff * (2**attempt))
 
         raise last_error or HttpRequestError(f"HTTP GET failed for {url}")

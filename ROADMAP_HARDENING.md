@@ -39,15 +39,15 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 ### HTTP e input remoti
 
 - [x] Applicare un limite rigido ai body HTTP normali e di errore, incluso `Content-Length`.
-- [ ] Convertire la lettura bounded in streaming incrementale a chunk.
-- [ ] Rendere retry/backoff/throttling interrompibili dalla cancellazione.
+- [x] Convertire la lettura bounded in streaming incrementale a chunk.
+- [x] Rendere retry/backoff/throttling interrompibili dalla cancellazione.
 - [ ] Limitare decompressione e rapporto di espansione.
 - [ ] Applicare limiti a header, numero redirect e durata complessiva.
 
 ### Secret scanning
 
 - [x] Scansionare sempre il working tree con gitleaks e fallire su finding.
-- [ ] Scansionare l'intera history su `main`, manualmente e prima delle release.
+- [x] Scansionare l'intera history su `main`, manualmente e prima delle release.
 - [x] Eliminare `continue-on-error` e intervalli Git che possono produrre scansioni a zero byte.
 - [ ] Pubblicare report redatti/SARIF e testare il workflow con un secret fittizio.
 
@@ -78,14 +78,14 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [ ] Versionare lo schema SQLite e introdurre migrazioni, WAL e busy timeout.
 - [ ] Separare `FAILED`, `PARTIAL`, `CANCELLED`, `TIMED_OUT` e `POLICY_DENIED`.
 - [ ] Redigere eccezioni persistite e non esporre path assoluti via API.
-- [ ] Applicare il limite body durante lo streaming, anche senza `Content-Length`.
+- [x] Applicare il limite body durante lo streaming, anche senza `Content-Length`.
 - [ ] Supportare identità API multiple, scope, rotazione, revoca e rate limiting.
 - [ ] Imporre TLS per bind non-loopback e aggiungere correlation/request/audit ID.
 - [ ] Aggiungere retention e cancellazione sicura di log e artefatti.
 
 ### Athena
 
-- [ ] Correggere deadline complessiva e timeout per job senza attese sequenziali cumulative.
+- [x] Correggere deadline complessiva e timeout per job senza attese sequenziali cumulative.
 - [ ] Rendere la cancellazione effettiva anche per operazioni non cooperative.
 - [ ] Aggiungere backoff con jitter e budget massimo.
 - [ ] Integrare adapter per AEGIS, Helios, Artemis, Hermes, Apollo, Minerva e Vulcan.
@@ -195,3 +195,5 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | Data | Tranche | Stato | Evidenza |
 |---|---|---|---|
 | 2026-08-29 | P0 foundations | CI verde | Run `#119`: Ruff, 687 test, gitleaks e wheel smoke |
+| 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
+| 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
