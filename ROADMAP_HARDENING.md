@@ -16,7 +16,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### Web VAP legacy
 
-- [ ] Quarantenare il comando legacy dietro opt-in esplicito e bind solo loopback.
+- [x] Quarantenare il comando legacy dietro opt-in esplicito e bind solo loopback.
 - [ ] Proteggere tutte le route HTML, incluse `/`, `/scans` e `/scans/{scan_id}`.
 - [ ] Rendere autenticazione e JWT fail-closed; nessun ruolo admin implicito.
 - [ ] Rifiutare l'avvio non locale senza TLS e segreti validi.
@@ -28,9 +28,9 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### SSRF, redirect e DNS
 
-- [ ] Risolvere gli hostname e rifiutare ogni risposta DNS non globale.
-- [ ] Validare ogni destinazione dopo risoluzione e ogni hop di redirect.
-- [ ] Bloccare loopback, private, link-local, multicast, reserved e metadata endpoint IPv4/IPv6.
+- [x] In Athena web, risolvere gli hostname e rifiutare l'intero set se contiene IP non globali.
+- [x] In Athena web, rivalidare scope, DNS e destinazione prima di ogni redirect.
+- [x] In Athena web, bloccare loopback, private, link-local, multicast e reserved IPv4/IPv6.
 - [ ] Eliminare il DNS-rebinding TOCTOU negli scanner tramite IP pinning o egress policy.
 - [ ] Applicare egress allowlist a container/processi di scansione.
 - [ ] Aggiungere test per DNS rebinding, record misti, redirect SSRF e IPv4-mapped IPv6.
@@ -38,16 +38,17 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### HTTP e input remoti
 
-- [ ] Applicare un limite rigido e streaming ai body HTTP normali e di errore.
+- [x] Applicare un limite rigido ai body HTTP normali e di errore, incluso `Content-Length`.
+- [ ] Convertire la lettura bounded in streaming incrementale a chunk.
 - [ ] Rendere retry/backoff/throttling interrompibili dalla cancellazione.
 - [ ] Limitare decompressione e rapporto di espansione.
 - [ ] Applicare limiti a header, numero redirect e durata complessiva.
 
 ### Secret scanning
 
-- [ ] Scansionare sempre il working tree con gitleaks e fallire su finding.
+- [x] Scansionare sempre il working tree con gitleaks e fallire su finding.
 - [ ] Scansionare l'intera history su `main`, manualmente e prima delle release.
-- [ ] Eliminare `continue-on-error` e intervalli Git che possono produrre scansioni a zero byte.
+- [x] Eliminare `continue-on-error` e intervalli Git che possono produrre scansioni a zero byte.
 - [ ] Pubblicare report redatti/SARIF e testare il workflow con un secret fittizio.
 
 ## P1 — Affidabilità operativa
@@ -111,13 +112,13 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### Packaging e configurazione
 
-- [ ] Costruire wheel/sdist e installare il wheel in ambiente pulito in CI.
-- [ ] Eseguire smoke test di tutte le superfici CLI dal wheel installato.
+- [x] Costruire wheel/sdist e installare il wheel in ambiente pulito in CI.
+- [x] Eseguire smoke test di tutte le superfici CLI dal wheel installato.
 - [ ] Decidere se VAP sarà pacchetto separato, container-only o ritirato.
 - [ ] Eliminare la dipendenza runtime da un path relativo `vendor/`.
 - [ ] Definire chiaramente gli extra `dev`, `api`, `aegis` e `vap`.
 - [ ] Introdurre lock/constraints con hash e verificare metadata/licenze/file inclusi.
-- [ ] Rendere TOML malformato, config esplicita assente e valori invalidi errori bloccanti.
+- [x] Rendere TOML malformato, config esplicita assente e valori invalidi errori bloccanti.
 - [ ] Documentare e testare precedenza CLI → environment → file → default.
 - [ ] Aggiungere `olympus config validate` con redazione dei segreti.
 
@@ -152,7 +153,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [ ] Integrare SAST, SCA/OSV, license compliance, CodeQL e SBOM.
 - [ ] Verificare Docker Compose, build immagini e laboratorio e2e autorizzato.
 - [ ] Separare suite unit, contract, integration, offline-e2e e live-e2e.
-- [ ] Aggiornare le GitHub Actions al runtime supportato.
+- [x] Aggiornare le GitHub Actions al runtime supportato.
 - [ ] Introdurre CHANGELOG, SemVer, tag/release firmati, migrazioni e rollback.
 
 ### Manutenibilità e moduli
@@ -193,4 +194,4 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 | Data | Tranche | Stato | Evidenza |
 |---|---|---|---|
-| 2026-08-29 | P0 foundations | In verifica | Branch `hardening/roadmap-p0-foundations` |
+| 2026-08-29 | P0 foundations | CI verde | Run `#119`: Ruff, 687 test, gitleaks e wheel smoke |
