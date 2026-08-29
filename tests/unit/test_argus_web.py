@@ -36,6 +36,7 @@ class _Http:
         *,
         min_interval: float | None = None,
         redirect_validator: Callable[[str], None] | None = None,
+        address_policy: Callable[[str], tuple[str, ...]] | None = None,
     ) -> _Http:
         return cls({"Server": "nginx"})
 
@@ -157,6 +158,7 @@ class _BrokenHttp:
         *,
         min_interval: float | None = None,
         redirect_validator: Callable[[str], None] | None = None,
+        address_policy: Callable[[str], tuple[str, ...]] | None = None,
     ) -> _BrokenHttp:
         return cls()
 
@@ -174,6 +176,7 @@ class _RedirectHttp:
         *,
         min_interval: float | None = None,
         redirect_validator: Callable[[str], None] | None = None,
+        address_policy: Callable[[str], tuple[str, ...]] | None = None,
     ) -> _RedirectHttp:
         assert redirect_validator is not None
         return cls(redirect_validator)

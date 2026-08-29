@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from olympus.core.enums import AssetType, Severity, Source
-from olympus.core.http import HttpClient, HttpRequestError
+from olympus.core.http import HttpAddressPolicyError, HttpClient, HttpRequestError
 from olympus.core.models import Asset, Finding
 
 #: Security response headers Argus checks for on every fetch.
@@ -39,6 +39,16 @@ TECH_HEADERS = ("Server", "X-Powered-By", "Via", "X-AspNet-Version")
 
 class WebReconError(RuntimeError):
     """Raised when the target cannot be reached or the URL is unusable."""
+
+
+class WebPolicyBlockedError(WebReconError):
+    """Raised when the connect-time scope/SSRF policy refused a destination.
+
+    Distinct from a plain unreachable host: it means the target (or a redirect
+    hop, or a rebound DNS answer) pointed somewhere Olympus is not allowed to
+    connect to, and the caller should report a policy block rather than a
+    network failure.
+    """
 
 
 def normalize_url(raw_url: str) -> str:
@@ -94,6 +104,8 @@ def fetch_web(raw_url: str, http: HttpClient) -> WebReport:
     host = host_of(url)
     try:
         response = http.get(url)
+    except HttpAddressPolicyError as exc:
+        raise WebPolicyBlockedError(f"destination refused by policy for {url}: {exc}") from exc
     except HttpRequestError as exc:
         raise WebReconError(f"could not reach {url}: {exc}") from exc
 

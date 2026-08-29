@@ -53,6 +53,8 @@ def _validate_http_config(data: dict[str, Any], path: Path) -> None:
         "max_response_headers": (int, 1, 1_000),
         "max_response_header_bytes": (int, 1, 1024 * 1024),
         "max_redirects": (int, 0, 10),
+        "max_decompressed_bytes": (int, 1, 100 * 1024 * 1024),
+        "max_expansion_ratio": (float, 1.0, 10_000.0),
         "deadline": (float, 0.05, 86_400.0),
     }
     for key, value in table.items():

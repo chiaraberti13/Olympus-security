@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import socket
 import ssl
@@ -327,6 +328,36 @@ def test_pinned_transport_enforces_scheme_address_and_size(
     FakeConnection.response = FakeRawResponse(b"oversized")
     with pytest.raises(HttpClientError, match="byte limit"):
         PinnedTransport().get("https://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 4)
+
+
+def test_pinned_transport_requests_and_bounds_content_codings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent_headers: dict[str, str] = {}
+
+    class RecordingConnection(FakeConnection):
+        def request(self, method: str, path: str, headers: dict[str, str]) -> None:
+            sent_headers.update(headers)
+
+    compressed = FakeRawResponse(gzip.compress(b"decoded"))
+    compressed.headers = {"Content-Type": "text/plain", "Content-Encoding": "gzip"}
+    RecordingConnection.response = compressed
+    monkeypatch.setattr(artemis_http, "_PinnedHTTPSConnection", RecordingConnection)
+
+    response = PinnedTransport().get(
+        "https://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 100_000
+    )
+
+    assert response.body == b"decoded"
+    assert sent_headers["Accept-Encoding"] == artemis_http.ACCEPT_ENCODING
+
+    bomb = FakeRawResponse(gzip.compress(b"\0" * 10_000_000))
+    bomb.headers = {"Content-Encoding": "gzip"}
+    RecordingConnection.response = bomb
+    with pytest.raises(HttpClientError, match="could not be safely decoded"):
+        PinnedTransport().get(
+            "https://portal.olympusdemocorp.example/app", ("192.0.2.10",), 1.0, 100_000
+        )
 
 
 def test_socket_resolver_deduplicates_and_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None:

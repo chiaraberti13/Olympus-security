@@ -47,6 +47,7 @@ from olympus.argus.application import (
     WhoisLookupRequest,
     WhoisLookupService,
     authorize_web_url,
+    web_address_policy,
 )
 from olympus.argus.assets import export_assets, recon_to_assets
 from olympus.argus.ct import CertificateTransparencyError, CrtShClient
@@ -107,6 +108,7 @@ from olympus.argus.whois import (
     export_whois_report,
 )
 from olympus.core.http import UrllibHttpClient
+from olympus.core.pinning import global_address_policy
 
 app = typer.Typer(
     help="Argus — OSINT & passive recon.",
@@ -390,6 +392,7 @@ def accounts(
         client = UrllibHttpClient.from_config(
             min_interval=rate if rate > 0.0 else None,
             redirect_validator=validate_public_site_url,
+            address_policy=global_address_policy(),
         )
         service = AccountEnumerationService(tuple(specs), client)
 
@@ -583,7 +586,10 @@ def investigate(
         service = InvestigationService(
             resolver=DnspythonResolver(),
             ct_client=CrtShClient(),
-            http=UrllibHttpClient.from_config(redirect_validator=validate_public_site_url),
+            http=UrllibHttpClient.from_config(
+                redirect_validator=validate_public_site_url,
+                address_policy=global_address_policy(),
+            ),
             site_specs=tuple(site_specs),
         )
         outcome = service.run(
@@ -792,7 +798,10 @@ def web(
     """Fetch an in-scope URL once and report its passive HTTP security posture."""
     try:
         http = UrllibHttpClient.from_config(
-            redirect_validator=lambda redirect_url: authorize_web_url(redirect_url, scope, log)
+            redirect_validator=lambda redirect_url: authorize_web_url(redirect_url, scope, log),
+            # Pin the socket to the address the scope check just approved, so a
+            # rebound DNS answer cannot redirect the fetch after validation.
+            address_policy=web_address_policy(scope, log),
         )
         intel = WebReconService(http).run(
             WebReconRequest(url=url, scope_path=scope, audit_log_path=log)

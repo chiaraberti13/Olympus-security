@@ -12,10 +12,20 @@ from typing import Protocol
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from olympus.artemis.scope import enforce_address_scope, enforce_scope
+from olympus.core.decompression import (
+    DEFAULT_MAX_DECOMPRESSED_BYTES,
+    DEFAULT_MAX_EXPANSION_RATIO,
+    DecompressionError,
+    decode_body,
+)
 from olympus.core.execution import Cancellation, ExecutionPolicy, NeverCancelled
 
 USER_AGENT = "Olympus-Security-Artemis/0.1 (authorized-recon)"
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
+#: Compression only adds an amplification surface to a recon fetch; ask
+#: compliant servers to skip it and bound whatever a non-compliant one sends.
+ACCEPT_ENCODING = "identity"
 
 
 class HttpClientError(RuntimeError):
@@ -81,6 +91,20 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self._ssl_context.wrap_socket(raw_socket, server_hostname=self.host)
 
 
+def _decode_bounded(payload: bytes, encoding: str | None, max_bytes: int) -> bytes:
+    """Decode a content-coded body under an absolute cap and an expansion ratio."""
+    try:
+        return decode_body(
+            payload,
+            encoding,
+            max_output_bytes=min(DEFAULT_MAX_DECOMPRESSED_BYTES, max(max_bytes, 1)),
+            max_expansion_ratio=DEFAULT_MAX_EXPANSION_RATIO,
+            min_expansion_allowance=min(max_bytes, DEFAULT_MAX_DECOMPRESSED_BYTES),
+        )
+    except DecompressionError as exc:
+        raise HttpClientError(f"response body could not be safely decoded: {exc}") from exc
+
+
 class PinnedTransport:
     """Production transport that connects to an authorized IP without re-resolving DNS."""
 
@@ -100,12 +124,21 @@ class PinnedTransport:
         path = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
         host_header = parsed.netloc
         try:
-            connection.request("GET", path, headers={"Host": host_header, "User-Agent": USER_AGENT})
+            connection.request(
+                "GET",
+                path,
+                headers={
+                    "Host": host_header,
+                    "User-Agent": USER_AGENT,
+                    "Accept-Encoding": ACCEPT_ENCODING,
+                },
+            )
             response = connection.getresponse()
             body = response.read(max_bytes + 1)
             if len(body) > max_bytes:
                 raise HttpClientError(f"response exceeds {max_bytes} byte limit")
             headers = {key.lower(): value for key, value in response.getheaders()}
+            body = _decode_bounded(body, headers.get("content-encoding"), max_bytes)
             return HttpResponse(url, response.status, headers, body)
         except OSError as exc:
             raise HttpClientError(f"HTTP GET failed: {exc}") from exc

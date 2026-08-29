@@ -22,15 +22,27 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from olympus.core.decompression import (
+    DEFAULT_MAX_DECOMPRESSED_BYTES,
+    DEFAULT_MAX_EXPANSION_RATIO,
+    DecompressionError,
+    decode_body,
+)
 from olympus.core.execution import (
     Cancellation,
     CancellationRequested,
     ExecutionPolicy,
     NeverCancelled,
 )
+from olympus.core.pinning import AddressPolicy, PinnedConnectionError, pinned_handlers
 
 #: Honest, fixed identifier sent on every Olympus OSINT HTTP request.
 USER_AGENT = "Olympus/1.0 (+authorized-security-testing)"
+
+#: Compression buys nothing for passive recon and only adds an amplification
+#: surface, so compliant servers are asked not to use it. A server that
+#: compresses anyway is still handled, under the bounds below.
+DEFAULT_ACCEPT_ENCODING = "identity"
 
 #: HTTP statuses worth retrying (rate-limited / transient server errors).
 _RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
@@ -95,6 +107,14 @@ class HttpResponseHeadersTooLarge(HttpRequestError):
     """Raised when response header count or aggregate size exceeds policy."""
 
 
+class HttpResponseUndecodable(HttpRequestError):
+    """Raised when a compressed body is malformed, unsupported, or a bomb."""
+
+
+class HttpAddressPolicyError(HttpRequestError):
+    """Raised when the connect-time address policy refused a destination."""
+
+
 class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Validate every redirect destination before urllib follows it."""
 
@@ -134,8 +154,11 @@ class UrllibHttpClient:
         max_response_headers: int = DEFAULT_MAX_RESPONSE_HEADERS,
         max_response_header_bytes: int = DEFAULT_MAX_RESPONSE_HEADER_BYTES,
         max_redirects: int = DEFAULT_MAX_REDIRECTS,
+        max_decompressed_bytes: int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+        max_expansion_ratio: float = DEFAULT_MAX_EXPANSION_RATIO,
         deadline_seconds: float | None = None,
         redirect_validator: Callable[[str], None] | None = None,
+        address_policy: AddressPolicy | None = None,
         cancellation: Cancellation | None = None,
     ) -> None:
         effective_deadline = (
@@ -172,21 +195,39 @@ class UrllibHttpClient:
             raise ValueError("max_redirects must be an integer")
         if not 0 <= max_redirects <= DEFAULT_MAX_REDIRECTS:
             raise ValueError(f"max_redirects must be between 0 and {DEFAULT_MAX_REDIRECTS}")
+        if not isinstance(max_decompressed_bytes, int) or isinstance(max_decompressed_bytes, bool):
+            raise ValueError("max_decompressed_bytes must be an integer")
+        if not 1 <= max_decompressed_bytes <= 100 * 1024 * 1024:
+            raise ValueError("max_decompressed_bytes must be between 1 and 104857600")
+        if isinstance(max_expansion_ratio, bool) or not isinstance(
+            max_expansion_ratio, (int, float)
+        ):
+            raise ValueError("max_expansion_ratio must be a number")
+        if not 1.0 <= float(max_expansion_ratio) <= 10_000.0:
+            raise ValueError("max_expansion_ratio must be between 1.0 and 10000.0")
         self._max_response_headers = max_response_headers
         self._max_response_header_bytes = max_response_header_bytes
         self._max_redirects = max_redirects
+        self._max_decompressed_bytes = max_decompressed_bytes
+        self._max_expansion_ratio = float(max_expansion_ratio)
         self._deadline_seconds = self._policy.deadline_seconds
         self._cancellation = cancellation or NeverCancelled()
         self._last_request_at = 0.0
         self._throttle_lock = threading.Lock()
         validator = redirect_validator or (lambda _url: None)
-        self._opener = (
-            urllib.request.build_opener(
-                _ValidatingRedirectHandler(validator, max_redirects=max_redirects)
-            )
-            if redirect_validator is not None or max_redirects != DEFAULT_MAX_REDIRECTS
-            else None
+        needs_opener = (
+            redirect_validator is not None
+            or address_policy is not None
+            or max_redirects != DEFAULT_MAX_REDIRECTS
         )
+        handlers: list[urllib.request.BaseHandler] = [
+            _ValidatingRedirectHandler(validator, max_redirects=max_redirects)
+        ]
+        if address_policy is not None:
+            # Pinning must survive redirects too: the same policy authorizes
+            # every hop's address at the moment the socket is opened.
+            handlers.extend(pinned_handlers(address_policy))
+        self._opener = urllib.request.build_opener(*handlers) if needs_opener else None
 
     @classmethod
     def from_policy(
@@ -194,11 +235,14 @@ class UrllibHttpClient:
         policy: ExecutionPolicy,
         *,
         redirect_validator: Callable[[str], None] | None = None,
+        address_policy: AddressPolicy | None = None,
         cancellation: Cancellation | None = None,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         max_response_headers: int = DEFAULT_MAX_RESPONSE_HEADERS,
         max_response_header_bytes: int = DEFAULT_MAX_RESPONSE_HEADER_BYTES,
         max_redirects: int = DEFAULT_MAX_REDIRECTS,
+        max_decompressed_bytes: int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+        max_expansion_ratio: float = DEFAULT_MAX_EXPANSION_RATIO,
     ) -> UrllibHttpClient:
         """Build a client from the shared validated execution policy."""
         return cls(
@@ -210,8 +254,11 @@ class UrllibHttpClient:
             max_response_headers=max_response_headers,
             max_response_header_bytes=max_response_header_bytes,
             max_redirects=max_redirects,
+            max_decompressed_bytes=max_decompressed_bytes,
+            max_expansion_ratio=max_expansion_ratio,
             deadline_seconds=policy.deadline_seconds,
             redirect_validator=redirect_validator,
+            address_policy=address_policy,
             cancellation=cancellation,
         )
 
@@ -221,6 +268,7 @@ class UrllibHttpClient:
         *,
         min_interval: float | None = None,
         redirect_validator: Callable[[str], None] | None = None,
+        address_policy: AddressPolicy | None = None,
     ) -> UrllibHttpClient:
         """Build a client using ``[http]`` config defaults (CLI overrides win).
 
@@ -247,8 +295,15 @@ class UrllibHttpClient:
                 "http", "max_response_header_bytes", DEFAULT_MAX_RESPONSE_HEADER_BYTES, data
             ),
             max_redirects=config.get("http", "max_redirects", DEFAULT_MAX_REDIRECTS, data),
+            max_decompressed_bytes=config.get(
+                "http", "max_decompressed_bytes", DEFAULT_MAX_DECOMPRESSED_BYTES, data
+            ),
+            max_expansion_ratio=config.get(
+                "http", "max_expansion_ratio", DEFAULT_MAX_EXPANSION_RATIO, data
+            ),
             deadline_seconds=config.get("http", "deadline", max(timeout, 600.0), data),
             redirect_validator=redirect_validator,
+            address_policy=address_policy,
         )
 
     def _check_cancelled(self) -> None:
@@ -349,6 +404,25 @@ class UrllibHttpClient:
                 f"{self._max_response_bytes} byte limit"
             )
 
+    def _decode_bounded(self, payload: bytes, headers: object, url: str) -> bytes:
+        """Decode a content-coded body under absolute and ratio bounds."""
+        encoding: str | None = None
+        getter = getattr(headers, "get", None)
+        if callable(getter):
+            raw = getter("Content-Encoding")
+            encoding = str(raw) if raw is not None else None
+        try:
+            return decode_body(
+                payload,
+                encoding,
+                max_output_bytes=self._max_decompressed_bytes,
+                max_expansion_ratio=self._max_expansion_ratio,
+            )
+        except DecompressionError as exc:
+            raise HttpResponseUndecodable(
+                f"HTTP response body for {url} could not be safely decoded: {exc}"
+            ) from exc
+
     def _perform(
         self, request: urllib.request.Request, url: str, *, timeout: float
     ) -> HttpResponse:
@@ -357,14 +431,24 @@ class UrllibHttpClient:
             with open_request(request, timeout=timeout) as response:
                 response_headers = self._copy_bounded_headers(response.headers, url)
                 self._reject_oversized_content_length(response.headers, url)
-                body_bytes = self._read_bounded(response, url)
+                body_bytes = self._decode_bounded(
+                    self._read_bounded(response, url), response.headers, url
+                )
                 status_code = response.status
         except urllib.error.HTTPError as exc:
             response_headers = self._copy_bounded_headers(exc.headers or {}, url)
             self._reject_oversized_content_length(exc.headers, url)
-            body_bytes = self._read_bounded(exc, url)
+            body_bytes = self._decode_bounded(
+                self._read_bounded(exc, url), exc.headers, url
+            )
             status_code = exc.code
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, PinnedConnectionError):
+                raise HttpAddressPolicyError(
+                    f"HTTP GET for {url} was refused by the address policy: {exc.reason}"
+                ) from exc
+            raise HttpRequestError(f"HTTP GET failed for {url}: {exc}") from exc
+        except TimeoutError as exc:
             raise HttpRequestError(f"HTTP GET failed for {url}: {exc}") from exc
         return HttpResponse(
             status_code=status_code,
@@ -377,7 +461,11 @@ class UrllibHttpClient:
         if not url.startswith(("http://", "https://")):
             raise HttpRequestError(f"refusing to fetch a non-HTTP(S) URL: {url}")
 
-        request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
+        request_headers = {
+            "User-Agent": USER_AGENT,
+            "Accept-Encoding": DEFAULT_ACCEPT_ENCODING,
+            **(headers or {}),
+        }
         request = urllib.request.Request(  # noqa: S310 (scheme already checked above)
             url, headers=request_headers
         )
@@ -391,8 +479,14 @@ class UrllibHttpClient:
             remaining = self._check_deadline(deadline_at)
             try:
                 response = self._perform(request, url, timeout=min(self._timeout, remaining))
-            except (HttpResponseTooLarge, HttpResponseHeadersTooLarge):
-                # Retrying a deterministic size-policy violation only wastes bandwidth.
+            except (
+                HttpResponseTooLarge,
+                HttpResponseHeadersTooLarge,
+                HttpResponseUndecodable,
+                HttpAddressPolicyError,
+            ):
+                # Retrying a deterministic policy violation (size, encoding, or a
+                # refused destination) only wastes bandwidth.
                 raise
             except HttpRequestError as exc:
                 last_error = exc
