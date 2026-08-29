@@ -28,7 +28,11 @@ class _CtClient:
 class _Http:
     @classmethod
     def from_config(
-        cls, *, min_interval: object = None, redirect_validator: object = None
+        cls,
+        *,
+        min_interval: object = None,
+        redirect_validator: object = None,
+        address_policy: object = None,
     ) -> _Http:
         return cls()
 

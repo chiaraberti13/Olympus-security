@@ -13,6 +13,7 @@ into the application use cases, and translates outcomes into stable exit codes:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import typer
@@ -24,13 +25,14 @@ from olympus.athena.adapters.system import CoreIdProvider, SystemClock
 from olympus.athena.application.coordinator import Coordinator, RunOutcome
 from olympus.athena.application.planning import load_plan_file
 from olympus.athena.application.registry import (
+    SERVICE_HOSTS,
     UnknownAdapterError,
     available_adapters,
     resolve_adapters,
 )
 from olympus.athena.domain.assessment import AssessmentState
 from olympus.athena.domain.contracts import AssessmentPlan, PlanValidationError
-from olympus.athena.scope import ensure_web_target_allowed
+from olympus.athena.scope import ensure_web_target_allowed, scoped_address_policy
 from olympus.core.http import UrllibHttpClient
 
 app = typer.Typer(help="Athena — assessment orchestration.", no_args_is_help=True)
@@ -124,18 +126,34 @@ def run(
 def _build_coordinator(
     plan: AssessmentPlan, repository: SqliteAssessmentRepository
 ) -> Coordinator:
-    def validate_redirect(url: str) -> None:
-        # urllib invokes this before every redirect hop is followed. Re-run both
-        # the engagement-scope and DNS-aware SSRF checks for the new location.
-        ensure_web_target_allowed("url", url, plan.scope.allowed_domains)
+    def _redirect_validator(allowed: tuple[str, ...]) -> Callable[[str], None]:
+        def validate(url: str) -> None:
+            # urllib invokes this before every redirect hop is followed. Re-run
+            # both the scope and DNS-aware SSRF checks for the new location.
+            ensure_web_target_allowed("url", url, allowed)
 
-    http = UrllibHttpClient.from_config(redirect_validator=validate_redirect)
+        return validate
+
+    def _client(allowed: tuple[str, ...]) -> UrllibHttpClient:
+        # The redirect validator authorizes each destination URL; the address
+        # policy re-authorizes the host and pins the socket to the very address
+        # it approved, so no DNS answer can change between check and connect.
+        return UrllibHttpClient.from_config(
+            redirect_validator=_redirect_validator(allowed),
+            address_policy=scoped_address_policy(allowed),
+        )
+
+    # Target adapters may only reach the engagement's own hosts; the DoH/RDAP
+    # adapters may only reach their fixed service hosts, which are never in the
+    # engagement scope. One client each, so neither can reach the other's set.
+    target_http = _client(plan.scope.allowed_domains)
+    service_http = _client(SERVICE_HOSTS)
     return Coordinator(
         repository=repository,
         audit=SqliteAuditSink(repository),
         clock=SystemClock(),
         ids=CoreIdProvider(),
-        resolver=lambda names: resolve_adapters(names, http),
+        resolver=lambda names: resolve_adapters(names, target_http, service_http=service_http),
     )
 
 

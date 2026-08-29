@@ -10,11 +10,18 @@ network work, independently of the plan-time check. Two guarantees:
 
 from __future__ import annotations
 
-import ipaddress
 import socket
-from collections.abc import Callable, Iterable
-from typing import Any
 from urllib.parse import urlparse
+
+from olympus.core.addresses import (
+    AddressResolutionError,
+    AddressResolver,
+    NonGlobalAddressError,
+    is_globally_routable,
+    parse_address,
+    resolve_authorized_addresses,
+)
+from olympus.core.pinning import AddressPolicy
 
 
 class TargetValidationError(ValueError):
@@ -31,9 +38,6 @@ class SsrfBlockedError(RuntimeError):
 
 class TargetResolutionError(RuntimeError):
     """Raised when an active web target cannot be resolved safely."""
-
-
-AddressResolver = Callable[..., Iterable[tuple[Any, ...]]]
 
 
 def host_of(target_kind: str, target_value: str) -> str:
@@ -56,13 +60,25 @@ def host_of(target_kind: str, target_value: str) -> str:
 
 def _reject_non_global_ip(host: str) -> None:
     try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
+        address = parse_address(host)
+    except NonGlobalAddressError:
         return  # not an IP literal; a hostname is resolved by the network layer
-    if not address.is_global:
+    if not is_globally_routable(address):
         raise SsrfBlockedError(
             f"target host {host} is a non-global IP address and is blocked (SSRF guard)"
         )
+
+
+def _reject_out_of_scope(host: str, allowed_domains: tuple[str, ...]) -> None:
+    """Raise unless ``host`` is covered by the engagement's allowed domains."""
+    normalized = host.strip().lower().rstrip(".")
+    covered = any(
+        normalized == allowed.strip().lower().rstrip(".")
+        or normalized.endswith(f".{allowed.strip().lower().rstrip('.')}")
+        for allowed in allowed_domains
+    )
+    if not covered:
+        raise TargetOutOfScopeError(f"target host {host} is out of scope")
 
 
 def resolve_global_addresses(
@@ -71,30 +87,15 @@ def resolve_global_addresses(
 ) -> tuple[str, ...]:
     """Resolve ``host`` and reject the whole answer set if any address is non-global.
 
-    Checking every answer avoids accepting a hostname that mixes a public address
-    with a loopback/private address and lets the network stack choose the unsafe one.
+    Thin Athena-flavoured wrapper over the shared address policy, so callers keep
+    seeing Athena's error vocabulary.
     """
     try:
-        answers = resolver(host, None, type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise TargetResolutionError(f"target host {host} could not be resolved") from exc
-
-    addresses: set[str] = set()
-    for answer in answers:
-        try:
-            raw_address = str(answer[4][0])
-            address = ipaddress.ip_address(raw_address)
-        except (IndexError, TypeError, ValueError) as exc:
-            raise TargetResolutionError(f"resolver returned an invalid address for {host}") from exc
-        if not address.is_global:
-            raise SsrfBlockedError(
-                f"target host {host} resolves to non-global address {address} "
-                "and is blocked (SSRF guard)"
-            )
-        addresses.add(str(address))
-    if not addresses:
-        raise TargetResolutionError(f"target host {host} resolved to no addresses")
-    return tuple(sorted(addresses))
+        return resolve_authorized_addresses(host, resolver)
+    except NonGlobalAddressError as exc:
+        raise SsrfBlockedError(f"{exc} and is blocked (SSRF guard)") from exc
+    except AddressResolutionError as exc:
+        raise TargetResolutionError(f"target {exc}") from exc
 
 
 def ensure_target_allowed(
@@ -109,14 +110,7 @@ def ensure_target_allowed(
     """
     host = host_of(target_kind, target_value)
     _reject_non_global_ip(host)
-    normalized = host.rstrip(".")
-    covered = any(
-        normalized == allowed.strip().lower().rstrip(".")
-        or normalized.endswith(f".{allowed.strip().lower().rstrip('.')}")
-        for allowed in allowed_domains
-    )
-    if not covered:
-        raise TargetOutOfScopeError(f"target host {host} is out of scope")
+    _reject_out_of_scope(host, allowed_domains)
     return host
 
 
@@ -131,3 +125,25 @@ def ensure_web_target_allowed(
     host = ensure_target_allowed(target_kind, target_value, allowed_domains)
     resolve_global_addresses(host, resolver)
     return host
+
+
+def scoped_address_policy(
+    allowed_domains: tuple[str, ...],
+    *,
+    resolver: AddressResolver = socket.getaddrinfo,
+) -> AddressPolicy:
+    """Return the connect-time policy that authorizes a host's addresses.
+
+    The HTTP stack calls this immediately before opening the socket and then
+    connects to exactly what it returns, so a DNS answer cannot change between
+    the scope/SSRF check and the connection (DNS rebinding). Every hop of a
+    redirect chain goes through it again.
+    """
+
+    def policy(host: str) -> tuple[str, ...]:
+        normalized = host.strip().lower().rstrip(".")
+        _reject_non_global_ip(normalized)
+        _reject_out_of_scope(normalized, allowed_domains)
+        return resolve_global_addresses(normalized, resolver)
+
+    return policy

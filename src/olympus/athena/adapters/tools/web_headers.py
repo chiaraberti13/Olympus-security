@@ -4,15 +4,21 @@ from __future__ import annotations
 
 import socket
 
-from olympus.argus.web import WebReconError, build_web_asset, build_web_findings, fetch_web
+from olympus.argus.web import (
+    WebPolicyBlockedError,
+    WebReconError,
+    build_web_asset,
+    build_web_findings,
+    fetch_web,
+)
 from olympus.athena.adapters.tools.base import guard_target
 from olympus.athena.ports import Cancellation, ToolRequest, ToolResult
 from olympus.athena.scope import (
-    AddressResolver,
     SsrfBlockedError,
     TargetResolutionError,
     ensure_web_target_allowed,
 )
+from olympus.core.addresses import AddressResolver
 from olympus.core.http import HttpClient
 
 
@@ -53,6 +59,10 @@ class WebHeadersAdapter:
             return ToolResult(ok=False, error_code="unreachable")
         try:
             report = fetch_web(request.target_value, self._http)
+        except WebPolicyBlockedError:
+            # The connect-time policy refused the socket: an out-of-scope
+            # redirect hop, or a DNS answer that changed after validation.
+            return ToolResult(ok=False, error_code="ssrf_blocked")
         except WebReconError:
             return ToolResult(ok=False, error_code="unreachable")
         asset = build_web_asset(report)

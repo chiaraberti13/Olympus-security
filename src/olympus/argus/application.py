@@ -79,11 +79,13 @@ from olympus.argus.web import (
     host_of,
 )
 from olympus.argus.whois import WhoisReport, lookup_domain
+from olympus.core.addresses import resolve_authorized_addresses
 from olympus.core.execution import (
     AuthorizationRequiredError as CoreAuthorizationRequiredError,
 )
 from olympus.core.execution import ExecutionPolicy
 from olympus.core.http import HttpClient
+from olympus.core.pinning import AddressPolicy
 from olympus.integrations.diagnostics import Report, check_env_set, check_python_module
 
 
@@ -739,6 +741,22 @@ def authorize_web_url(url: str, scope_path: Path, audit_log_path: Path) -> None:
     except WebReconError as exc:
         raise InvalidWebTargetError(str(exc)) from exc
     enforce_scope(host, scope_path, audit_log_path)
+
+
+def web_address_policy(scope_path: Path, audit_log_path: Path) -> AddressPolicy:
+    """Return the connect-time policy for scoped Argus web fetches.
+
+    The HTTP stack calls this just before opening the socket and connects to
+    exactly the address it returns, so the scope check and the connection can
+    no longer disagree (DNS rebinding). Redirect hops go through it again.
+    """
+
+    def policy(host: str) -> tuple[str, ...]:
+        normalized = host.strip().lower().rstrip(".")
+        enforce_scope(normalized, scope_path, audit_log_path)
+        return resolve_authorized_addresses(normalized)
+
+    return policy
 
 
 @dataclass(frozen=True)

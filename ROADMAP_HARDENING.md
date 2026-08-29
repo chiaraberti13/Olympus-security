@@ -31,9 +31,9 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] In Athena web, risolvere gli hostname e rifiutare l'intero set se contiene IP non globali.
 - [x] In Athena web, rivalidare scope, DNS e destinazione prima di ogni redirect.
 - [x] In Athena web, bloccare loopback, private, link-local, multicast e reserved IPv4/IPv6.
-- [ ] Eliminare il DNS-rebinding TOCTOU negli scanner tramite IP pinning o egress policy.
+- [x] Eliminare il DNS-rebinding TOCTOU negli scanner tramite IP pinning o egress policy.
 - [ ] Applicare egress allowlist a container/processi di scansione.
-- [ ] Aggiungere test per DNS rebinding, record misti, redirect SSRF e IPv4-mapped IPv6.
+- [x] Aggiungere test per DNS rebinding, record misti, redirect SSRF e IPv4-mapped IPv6.
 - [ ] Correggere le richieste VAP che seguono redirect senza rivalidazione.
 
 ### HTTP e input remoti
@@ -41,7 +41,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] Applicare un limite rigido ai body HTTP normali e di errore, incluso `Content-Length`.
 - [x] Convertire la lettura bounded in streaming incrementale a chunk.
 - [x] Rendere retry/backoff/throttling interrompibili dalla cancellazione.
-- [ ] Limitare decompressione e rapporto di espansione.
+- [x] Limitare decompressione e rapporto di espansione.
 - [x] Applicare limiti a header, numero redirect e durata complessiva.
 
 ### Secret scanning
@@ -49,7 +49,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] Scansionare sempre il working tree con gitleaks e fallire su finding.
 - [x] Scansionare l'intera history su `main`, manualmente e prima delle release.
 - [x] Eliminare `continue-on-error` e intervalli Git che possono produrre scansioni a zero byte.
-- [ ] Pubblicare report redatti/SARIF e testare il workflow con un secret fittizio.
+- [x] Pubblicare report redatti/SARIF e testare il workflow con un secret fittizio.
 
 ## P1 — Affidabilità operativa
 
@@ -198,3 +198,4 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
 | 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
 | 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
+| 2026-08-29 | P0 SSRF e decompressione | in verifica | IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |

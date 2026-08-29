@@ -24,6 +24,7 @@ class _Http:
         *,
         min_interval: float | None = None,
         redirect_validator: object = None,
+        address_policy: object = None,
     ) -> _Http:
         return cls()
 

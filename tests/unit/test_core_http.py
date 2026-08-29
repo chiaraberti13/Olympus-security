@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import gzip
 import io
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -10,12 +12,14 @@ import pytest
 
 from olympus.core.execution import CancellationToken, ExecutionPolicy, ExecutionPolicyError
 from olympus.core.http import (
+    DEFAULT_ACCEPT_ENCODING,
     DEFAULT_MAX_REDIRECTS,
     DEFAULT_MAX_RESPONSE_BYTES,
     USER_AGENT,
     HttpRequestError,
     HttpResponseHeadersTooLarge,
     HttpResponseTooLarge,
+    HttpResponseUndecodable,
     UrllibHttpClient,
     _ValidatingRedirectHandler,
 )
@@ -404,3 +408,88 @@ def test_http_client_refuses_invalid_limits_and_observes_cancellation() -> None:
     token.cancel()
     with pytest.raises(HttpRequestError, match="cancelled"):
         UrllibHttpClient(cancellation=token).get("https://olympusdemocorp.example/")
+
+
+def test_request_asks_servers_not_to_compress(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str] = {}
+
+    def fake_urlopen(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        seen.update(request.headers)
+        return _FakeHttpResponse(200, {}, b"ok")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    UrllibHttpClient().get("https://example.test/")
+
+    assert seen["Accept-encoding"] == DEFAULT_ACCEPT_ENCODING
+
+
+def test_gzip_response_is_decoded(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = gzip.compress(b"decoded payload")
+
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda request, timeout=0.0: _FakeHttpResponse(
+            200, {"Content-Encoding": "gzip"}, body
+        ),
+    )
+
+    assert UrllibHttpClient().get("https://example.test/").body == "decoded payload"
+
+
+def test_decompression_bomb_is_refused_and_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bomb = gzip.compress(b"\0" * (64 * 1024 * 1024))
+    attempts = 0
+
+    def fake_urlopen(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        nonlocal attempts
+        attempts += 1
+        return _FakeHttpResponse(200, {"Content-Encoding": "gzip"}, bomb)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(HttpResponseUndecodable):
+        UrllibHttpClient(retries=2).get("https://example.test/")
+    assert attempts == 1
+
+
+def test_unsupported_content_encoding_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda request, timeout=0.0: _FakeHttpResponse(
+            200, {"Content-Encoding": "br"}, b"\x00opaque"
+        ),
+    )
+
+    with pytest.raises(HttpResponseUndecodable, match="could not be safely decoded"):
+        UrllibHttpClient().get("https://example.test/")
+
+
+def test_error_response_bodies_are_decoded_under_the_same_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = urllib.error.HTTPError(
+        "https://example.test/",
+        404,
+        "Not Found",
+        {"Content-Encoding": "gzip"},  # type: ignore[arg-type]
+        io.BytesIO(gzip.compress(b"missing")),
+    )
+
+    def fake_urlopen(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    response = UrllibHttpClient().get("https://example.test/")
+
+    assert (response.status_code, response.body) == (404, "missing")
+
+
+def test_decompression_limits_are_validated() -> None:
+    with pytest.raises(ValueError, match="max_decompressed_bytes"):
+        UrllibHttpClient(max_decompressed_bytes=0)
+    with pytest.raises(ValueError, match="max_expansion_ratio"):
+        UrllibHttpClient(max_expansion_ratio=0.5)

@@ -24,6 +24,10 @@ from olympus.core.models import Asset
 _CLOUDFLARE = "https://cloudflare-dns.com/dns-query"
 _GOOGLE = "https://dns.google/resolve"
 
+#: The only hosts a DoH lookup ever contacts. Exported so callers can pin the
+#: transport to them instead of trusting whatever a URL happens to say.
+RESOLVER_HOSTS = ("cloudflare-dns.com", "dns.google")
+
 #: Record types queried by default, in a stable order.
 RECORD_TYPES = ("A", "AAAA", "MX", "TXT", "NS", "CNAME", "SOA")
 
