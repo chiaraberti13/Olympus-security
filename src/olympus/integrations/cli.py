@@ -129,11 +129,41 @@ def aegis_api(
 def aegis_serve(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the web app."),
     port: int = typer.Option(8000, "--port", help="Port for the web app."),
+    allow_legacy_web: bool = typer.Option(
+        False,
+        "--allow-legacy-web",
+        help="Acknowledge that the legacy VAP web surface is temporary and local-only.",
+    ),
 ) -> None:
-    """Serve the complete AEGIS FastAPI web application (Ctrl-C to stop)."""
+    """Serve the quarantined legacy VAP web application on loopback only."""
+    import ipaddress
+
+    if not allow_legacy_web:
+        typer.echo(
+            "olympus: legacy VAP web is quarantined; use the authenticated native "
+            "'olympus aegis api' service, or explicitly acknowledge local-only use with "
+            "--allow-legacy-web",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = host.lower() == "localhost"
+    if not loopback:
+        typer.echo(
+            "olympus: legacy VAP web may only bind to a loopback address; "
+            "use 'olympus aegis api' for an authenticated network service",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     path = tool_path(VAP_DIR)
     env = {**_os_environ(), "VAP_HOST": host, "VAP_PORT": str(port)}
-    typer.echo(f"olympus: starting AEGIS web app on http://{host}:{port} (from {path})", err=True)
+    typer.echo(
+        f"olympus: starting quarantined legacy VAP web app on http://{host}:{port} "
+        f"(from {path})",
+        err=True,
+    )
     completed = subprocess.run([sys.executable, "app.py"], cwd=str(path), env=env, check=False)
     raise typer.Exit(code=completed.returncode)
 

@@ -24,20 +24,50 @@ def test_loads_from_env_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert config.get("http", "retries", 2, data) == 3
 
 
-def test_get_falls_back_on_type_mismatch() -> None:
+def test_get_rejects_type_mismatch() -> None:
     data = {"http": {"timeout": "not-a-number"}}
-    assert config.get("http", "timeout", 10.0, data) == 10.0
+    with pytest.raises(config.ConfigError, match="invalid type"):
+        config.get("http", "timeout", 10.0, data)
 
 
 def test_get_missing_section_returns_default() -> None:
     assert config.get("http", "timeout", 10.0, {}) == 10.0
 
 
-def test_malformed_toml_returns_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_malformed_toml_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     cfg = tmp_path / "olympus.toml"
     cfg.write_text("this is = = not toml", encoding="utf-8")
     monkeypatch.setenv("OLYMPUS_CONFIG", str(cfg))
-    assert config.load_config() == {}
+    with pytest.raises(config.ConfigError, match="invalid TOML"):
+        config.load_config()
+
+
+def test_missing_explicit_config_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing = tmp_path / "missing.toml"
+    monkeypatch.setenv("OLYMPUS_CONFIG", str(missing))
+    with pytest.raises(config.ConfigError, match="does not exist"):
+        config.load_config()
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "[http]\ntimeout = 0\n",
+        "[http]\nretries = 99\n",
+        "[http]\nmax_response_bytes = 0\n",
+        "[http]\nunknown = 1\n",
+    ],
+)
+def test_invalid_http_config_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, body: str
+) -> None:
+    cfg = tmp_path / "olympus.toml"
+    cfg.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("OLYMPUS_CONFIG", str(cfg))
+    with pytest.raises(config.ConfigError):
+        config.load_config()
 
 
 def test_http_from_config_uses_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -88,6 +88,21 @@ def test_aegis_info_command() -> None:
     assert "install_hint" in payload
 
 
+def test_legacy_web_requires_explicit_acknowledgement() -> None:
+    result = runner.invoke(app, ["aegis", "serve"])
+    assert result.exit_code == 2
+    assert "quarantined" in result.output.lower()
+
+
+def test_legacy_web_rejects_non_loopback_bind() -> None:
+    result = runner.invoke(
+        app,
+        ["aegis", "serve", "--allow-legacy-web", "--host", "192.0.2.10"],
+    )
+    assert result.exit_code == 2
+    assert "loopback" in result.output.lower()
+
+
 def test_aegis_and_vap_compatibility_are_registered() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0

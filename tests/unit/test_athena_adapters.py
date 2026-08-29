@@ -28,6 +28,10 @@ from olympus.core.http import HttpRequestError, HttpResponse
 from olympus.core.models import Finding
 
 
+def _public_dns(host: str, port: object, **kwargs: object) -> list[tuple[object, ...]]:
+    return [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+
 class _NoCancel:
     def is_cancelled(self) -> bool:
         return False
@@ -59,7 +63,7 @@ def _request(kind: str = "domain", value: str = "example.com") -> ToolRequest:
 # -- web-headers adapter --------------------------------------------------- #
 def test_web_headers_adapter_ok() -> None:
     http = _Http(HttpResponse(status_code=200, headers={"Server": "nginx"}, body=""))
-    adapter = WebHeadersAdapter(http)
+    adapter = WebHeadersAdapter(http, resolver=_public_dns)
     assert adapter.name == "web-headers"
     assert adapter.capabilities
     result = adapter.run(_request(kind="url", value="https://example.com"), _NoCancel())
@@ -69,7 +73,7 @@ def test_web_headers_adapter_ok() -> None:
 
 def test_web_headers_adapter_out_of_scope() -> None:
     http = _Http(HttpResponse(status_code=200, headers={}, body=""))
-    result = WebHeadersAdapter(http).run(
+    result = WebHeadersAdapter(http, resolver=_public_dns).run(
         _request(kind="url", value="https://evil.test"), _NoCancel()
     )
     assert not result.ok
@@ -78,18 +82,20 @@ def test_web_headers_adapter_out_of_scope() -> None:
 
 def test_web_headers_adapter_cancelled() -> None:
     http = _Http(HttpResponse(status_code=200, headers={}, body=""))
-    result = WebHeadersAdapter(http).run(_request(), _Cancelled())
+    result = WebHeadersAdapter(http, resolver=_public_dns).run(_request(), _Cancelled())
     assert result.error_code == "cancelled"
 
 
 def test_web_headers_adapter_unreachable() -> None:
-    result = WebHeadersAdapter(_Http(raise_error=True)).run(_request(), _NoCancel())
+    result = WebHeadersAdapter(_Http(raise_error=True), resolver=_public_dns).run(
+        _request(), _NoCancel()
+    )
     assert result.error_code == "unreachable"
 
 
 def test_web_headers_adapter_ssrf() -> None:
     http = _Http(HttpResponse(status_code=200, headers={}, body=""))
-    result = WebHeadersAdapter(http).run(
+    result = WebHeadersAdapter(http, resolver=_public_dns).run(
         ToolRequest("url", "http://127.0.0.1", ("example.com",), 30), _NoCancel()
     )
     assert result.error_code == "ssrf_blocked"
@@ -97,10 +103,21 @@ def test_web_headers_adapter_ssrf() -> None:
 
 def test_web_headers_adapter_invalid_target() -> None:
     http = _Http(HttpResponse(status_code=200, headers={}, body=""))
-    result = WebHeadersAdapter(http).run(
+    result = WebHeadersAdapter(http, resolver=_public_dns).run(
         ToolRequest("domain", "nodot", ("example.com",), 30), _NoCancel()
     )
     assert result.error_code == "invalid_target"
+
+
+def test_web_headers_adapter_blocks_hostname_resolving_private() -> None:
+    def _private_dns(host: str, port: object, **kwargs: object) -> list[tuple[object, ...]]:
+        return [(2, 1, 6, "", ("127.0.0.1", 0))]
+
+    http = _Http(HttpResponse(status_code=200, headers={}, body=""))
+    result = WebHeadersAdapter(http, resolver=_private_dns).run(
+        _request(kind="url", value="https://example.com"), _NoCancel()
+    )
+    assert result.error_code == "ssrf_blocked"
 
 
 # -- dns adapter ----------------------------------------------------------- #

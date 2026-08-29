@@ -10,8 +10,10 @@ import pytest
 
 from olympus.core.execution import CancellationToken, ExecutionPolicy, ExecutionPolicyError
 from olympus.core.http import (
+    DEFAULT_MAX_RESPONSE_BYTES,
     USER_AGENT,
     HttpRequestError,
+    HttpResponseTooLarge,
     UrllibHttpClient,
     _ValidatingRedirectHandler,
 )
@@ -23,8 +25,8 @@ class _FakeHttpResponse:
         self.headers = headers
         self._body = io.BytesIO(body)
 
-    def read(self) -> bytes:
-        return self._body.read()
+    def read(self, amount: int = -1) -> bytes:
+        return self._body.read(amount)
 
     def __enter__(self) -> _FakeHttpResponse:
         return self
@@ -106,6 +108,46 @@ def test_http_error_status_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
     response = UrllibHttpClient().get("https://olympusdemocorp.example/missing")
     assert response.status_code == 404
     assert response.body == "not found"
+
+
+def test_rejects_response_body_over_configured_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHttpResponse(200, {}, b"x" * 9)
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout=0.0: fake)
+
+    with pytest.raises(HttpResponseTooLarge, match="8 byte limit"):
+        UrllibHttpClient(max_response_bytes=8).get("https://olympusdemocorp.example/")
+
+
+def test_rejects_oversized_content_length_before_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeHttpResponse(200, {"Content-Length": "99"}, b"small")
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout=0.0: fake)
+
+    with pytest.raises(HttpResponseTooLarge, match="declares 99 bytes"):
+        UrllibHttpClient(max_response_bytes=8).get("https://olympusdemocorp.example/")
+
+
+def test_response_size_violation_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    def _oversized(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        calls["n"] += 1
+        return _FakeHttpResponse(200, {}, b"too large")
+
+    monkeypatch.setattr("urllib.request.urlopen", _oversized)
+    with pytest.raises(HttpResponseTooLarge):
+        UrllibHttpClient(retries=3, max_response_bytes=4).get(
+            "https://olympusdemocorp.example/"
+        )
+    assert calls["n"] == 1
+
+
+def test_default_response_limit_is_bounded() -> None:
+    client = UrllibHttpClient()
+    assert client._max_response_bytes == DEFAULT_MAX_RESPONSE_BYTES
+    with pytest.raises(ValueError, match="max_response_bytes"):
+        UrllibHttpClient(max_response_bytes=0)
 
 
 def test_network_error_is_wrapped(monkeypatch: pytest.MonkeyPatch) -> None:

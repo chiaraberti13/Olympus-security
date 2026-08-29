@@ -35,6 +35,9 @@ USER_AGENT = "Olympus/1.0 (+authorized-security-testing)"
 #: HTTP statuses worth retrying (rate-limited / transient server errors).
 _RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
 
+#: Conservative default cap for passive HTTP response bodies (2 MiB).
+DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class HttpResponse:
@@ -53,8 +56,24 @@ class HttpClient(Protocol):
         ...
 
 
+class _ReadableBody(Protocol):
+    def read(self, amount: int = -1) -> bytes:
+        """Read up to ``amount`` bytes from a response body."""
+        ...
+
+
+class _HeaderLookup(Protocol):
+    def get(self, name: str, default: str | None = None) -> str | None:
+        """Return one HTTP header value."""
+        ...
+
+
 class HttpRequestError(RuntimeError):
     """Raised when the HTTP request fails (network error, timeout...)."""
+
+
+class HttpResponseTooLarge(HttpRequestError):
+    """Raised when a response exceeds the configured in-memory body limit."""
 
 
 class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -86,6 +105,7 @@ class UrllibHttpClient:
         retries: int = 2,
         backoff: float = 0.5,
         min_interval: float = 0.0,
+        max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         redirect_validator: Callable[[str], None] | None = None,
         cancellation: Cancellation | None = None,
     ) -> None:
@@ -101,6 +121,11 @@ class UrllibHttpClient:
         self._retries = self._policy.retries
         self._backoff = self._policy.backoff_seconds
         self._min_interval = self._policy.min_interval_seconds
+        if not isinstance(max_response_bytes, int) or isinstance(max_response_bytes, bool):
+            raise ValueError("max_response_bytes must be an integer")
+        if not 1 <= max_response_bytes <= 100 * 1024 * 1024:
+            raise ValueError("max_response_bytes must be between 1 and 104857600")
+        self._max_response_bytes = max_response_bytes
         self._cancellation = cancellation or NeverCancelled()
         self._last_request_at = 0.0
         self._throttle_lock = threading.Lock()
@@ -117,6 +142,7 @@ class UrllibHttpClient:
         *,
         redirect_validator: Callable[[str], None] | None = None,
         cancellation: Cancellation | None = None,
+        max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
     ) -> UrllibHttpClient:
         """Build a client from the shared validated execution policy."""
         return cls(
@@ -124,6 +150,7 @@ class UrllibHttpClient:
             retries=policy.retries,
             backoff=policy.backoff_seconds,
             min_interval=policy.min_interval_seconds,
+            max_response_bytes=max_response_bytes,
             redirect_validator=redirect_validator,
             cancellation=cancellation,
         )
@@ -149,6 +176,9 @@ class UrllibHttpClient:
             retries=config.get("http", "retries", 2, data),
             backoff=config.get("http", "backoff", 0.5, data),
             min_interval=rate,
+            max_response_bytes=config.get(
+                "http", "max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES, data
+            ),
             redirect_validator=redirect_validator,
         )
 
@@ -170,15 +200,43 @@ class UrllibHttpClient:
                 time.sleep(self._min_interval - elapsed)
             self._last_request_at = time.monotonic()
 
+    def _read_bounded(self, stream: _ReadableBody, url: str) -> bytes:
+        """Read one body with a hard cap before it is retained in memory."""
+        body = stream.read(self._max_response_bytes + 1)
+        if len(body) > self._max_response_bytes:
+            raise HttpResponseTooLarge(
+                f"HTTP response for {url} exceeds the {self._max_response_bytes} byte limit"
+            )
+        return body
+
+    def _reject_oversized_content_length(
+        self, headers: _HeaderLookup | None, url: str
+    ) -> None:
+        """Fail early when a trustworthy numeric Content-Length is already too large."""
+        if headers is None:
+            return
+        try:
+            raw_value = headers.get("Content-Length")
+            content_length = int(raw_value) if raw_value is not None else None
+        except (TypeError, ValueError):
+            return
+        if content_length is not None and content_length > self._max_response_bytes:
+            raise HttpResponseTooLarge(
+                f"HTTP response for {url} declares {content_length} bytes, exceeding the "
+                f"{self._max_response_bytes} byte limit"
+            )
+
     def _perform(self, request: urllib.request.Request, url: str) -> HttpResponse:
         try:
             open_request = self._opener.open if self._opener is not None else urllib.request.urlopen
             with open_request(request, timeout=self._timeout) as response:
-                body_bytes = response.read()
+                self._reject_oversized_content_length(response.headers, url)
+                body_bytes = self._read_bounded(response, url)
                 status_code = response.status
                 response_headers = dict(response.headers.items())
         except urllib.error.HTTPError as exc:
-            body_bytes = exc.read()
+            self._reject_oversized_content_length(exc.headers, url)
+            body_bytes = self._read_bounded(exc, url)
             status_code = exc.code
             response_headers = dict(exc.headers.items()) if exc.headers else {}
         except (urllib.error.URLError, TimeoutError) as exc:
@@ -205,6 +263,9 @@ class UrllibHttpClient:
             self._throttle()
             try:
                 response = self._perform(request, url)
+            except HttpResponseTooLarge:
+                # Retrying a deterministic size-policy violation only wastes bandwidth.
+                raise
             except HttpRequestError as exc:
                 last_error = exc
             else:

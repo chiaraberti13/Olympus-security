@@ -30,6 +30,7 @@ from olympus.athena.application.registry import (
 )
 from olympus.athena.domain.assessment import AssessmentState
 from olympus.athena.domain.contracts import AssessmentPlan, PlanValidationError
+from olympus.athena.scope import ensure_web_target_allowed
 from olympus.core.http import UrllibHttpClient
 
 app = typer.Typer(help="Athena — assessment orchestration.", no_args_is_help=True)
@@ -123,7 +124,12 @@ def run(
 def _build_coordinator(
     plan: AssessmentPlan, repository: SqliteAssessmentRepository
 ) -> Coordinator:
-    http = UrllibHttpClient.from_config()
+    def validate_redirect(url: str) -> None:
+        # urllib invokes this before every redirect hop is followed. Re-run both
+        # the engagement-scope and DNS-aware SSRF checks for the new location.
+        ensure_web_target_allowed("url", url, plan.scope.allowed_domains)
+
+    http = UrllibHttpClient.from_config(redirect_validator=validate_redirect)
     return Coordinator(
         repository=repository,
         audit=SqliteAuditSink(repository),
