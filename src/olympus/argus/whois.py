@@ -26,6 +26,9 @@ from olympus.core.models import Asset
 
 _RDAP_URL = "https://rdap.org/domain/{domain}"
 
+#: The only host an RDAP lookup ever contacts (see ``RESOLVER_HOSTS``).
+RDAP_HOSTS = ("rdap.org",)
+
 
 class WhoisError(RuntimeError):
     """Raised when the registry lookup fails or the domain is not registered."""

@@ -11,6 +11,12 @@ time — inside the socket call, with no second resolution afterwards — and th
 connection is made to exactly the address the policy returned. TLS is
 unaffected: certificate verification still uses the real hostname, so pinning
 adds a restriction rather than removing one.
+
+One consequence is deliberate: a pinned request cannot go through an HTTP
+proxy. A proxy resolves the destination itself, which is exactly the second
+resolution pinning exists to prevent, so a request that would be tunnelled
+(``HTTPS_PROXY``/``HTTP_PROXY`` set in the environment) is refused with a clear
+error rather than silently losing the guarantee.
 """
 
 from __future__ import annotations
@@ -61,8 +67,11 @@ def _connect_pinned(
 
 def _reject_proxying(connection: http.client.HTTPConnection) -> None:
     """Refuse a CONNECT tunnel: a proxy would resolve the host itself again."""
-    if getattr(connection, "_tunnel_host", None):  # pragma: no cover - unused path
-        raise PinnedConnectionError("pinned connections do not support HTTP proxying")
+    if getattr(connection, "_tunnel_host", None):
+        raise PinnedConnectionError(
+            "pinned connections do not support HTTP proxying: a proxy resolves the "
+            "destination itself, which defeats address pinning"
+        )
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):

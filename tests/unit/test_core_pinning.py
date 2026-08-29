@@ -146,3 +146,17 @@ def test_client_reports_a_policy_refusal_without_retrying(
     with pytest.raises(HttpAddressPolicyError, match="refused by the address policy"):
         client.get("http://rebind.test/")
     assert calls == 1
+
+
+def test_a_proxied_request_is_refused_rather_than_silently_unpinned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A CONNECT tunnel would let the proxy resolve the host — pinning's whole point."""
+    attempted = _record_connections(monkeypatch)
+    _, https_handler = pinned_handlers(lambda host: ("93.184.216.34",))
+    connection = https_handler._connection_class("example.test", timeout=5.0)
+    connection.set_tunnel("internal.example.test", 443)
+
+    with pytest.raises(PinnedConnectionError, match="proxying"):
+        connection.connect()
+    assert attempted == []

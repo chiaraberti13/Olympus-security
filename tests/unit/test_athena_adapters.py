@@ -230,3 +230,63 @@ def test_report_renderer() -> None:
     assert "ENG-1" in renderer.render([finding], "markdown")
     payload = json.loads(renderer.render([finding], "json"))
     assert payload["engagement"] == "ENG-1"
+
+
+class _MarkedHttp:
+    """An HTTP client that only records which transport an adapter received."""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+
+    def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
+        raise AssertionError("this stub is only used for identity checks")
+
+
+def test_target_and_service_adapters_get_separate_transports() -> None:
+    target = _MarkedHttp("target")
+    service = _MarkedHttp("service")
+
+    runners = resolve_adapters(
+        ("web-headers", "dns", "whois"), target, service_http=service
+    )
+
+    # The web adapter connects to the engagement's own hosts...
+    assert runners["web-headers"]._http is target
+    # ...while DoH and RDAP go to fixed third-party services that are never in
+    # the engagement scope. Sharing one scoped client would break both.
+    assert runners["dns"]._http is service
+    assert runners["whois"]._http is service
+
+
+def test_service_hosts_cover_every_endpoint_the_lookup_adapters_use() -> None:
+    from urllib.parse import urlsplit
+
+    from olympus.argus import dns_records, whois
+    from olympus.athena.application.registry import SERVICE_HOSTS
+
+    used = {
+        urlsplit(url).hostname
+        for url in (dns_records._CLOUDFLARE, dns_records._GOOGLE, whois._RDAP_URL)
+    }
+
+    assert used <= set(SERVICE_HOSTS)
+
+
+def test_service_policy_and_engagement_policy_do_not_overlap() -> None:
+    from olympus.athena.application.registry import SERVICE_HOSTS
+    from olympus.athena.scope import (
+        TargetOutOfScopeError,
+        scoped_address_policy,
+    )
+
+    def resolver(host: str, port: object, **kwargs: object) -> list[tuple[object, ...]]:
+        return [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+    service_policy = scoped_address_policy(SERVICE_HOSTS, resolver=resolver)
+    engagement_policy = scoped_address_policy(("example.com",), resolver=resolver)
+
+    assert service_policy("dns.google") == ("93.184.216.34",)
+    with pytest.raises(TargetOutOfScopeError):
+        service_policy("example.com")
+    with pytest.raises(TargetOutOfScopeError):
+        engagement_policy("dns.google")
