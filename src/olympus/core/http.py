@@ -38,6 +38,15 @@ _RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
 #: Conservative default cap for passive HTTP response bodies (2 MiB).
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
+#: Explicit application-level response-header bounds. ``http.client`` also
+#: has parser guards, but these limits keep the normalized copy predictable.
+DEFAULT_MAX_RESPONSE_HEADERS = 100
+DEFAULT_MAX_RESPONSE_HEADER_BYTES = 64 * 1024
+
+#: ``urllib`` defaults to ten redirects; expose the bound so callers can
+#: tighten it and tests can assert the policy instead of relying on internals.
+DEFAULT_MAX_REDIRECTS = 10
+
 #: Small enough to observe cancellation promptly without excessive read calls.
 _RESPONSE_CHUNK_BYTES = 64 * 1024
 
@@ -82,11 +91,21 @@ class HttpResponseTooLarge(HttpRequestError):
     """Raised when a response exceeds the configured in-memory body limit."""
 
 
+class HttpResponseHeadersTooLarge(HttpRequestError):
+    """Raised when response header count or aggregate size exceeds policy."""
+
+
 class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Validate every redirect destination before urllib follows it."""
 
-    def __init__(self, validator: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        validator: Callable[[str], None],
+        *,
+        max_redirects: int = DEFAULT_MAX_REDIRECTS,
+    ) -> None:
         self._validator = validator
+        self.max_redirections = max_redirects
 
     def redirect_request(  # type: ignore[no-untyped-def]
         self, req, fp, code, msg, headers, newurl
@@ -112,13 +131,20 @@ class UrllibHttpClient:
         backoff: float = 0.5,
         min_interval: float = 0.0,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+        max_response_headers: int = DEFAULT_MAX_RESPONSE_HEADERS,
+        max_response_header_bytes: int = DEFAULT_MAX_RESPONSE_HEADER_BYTES,
+        max_redirects: int = DEFAULT_MAX_REDIRECTS,
+        deadline_seconds: float | None = None,
         redirect_validator: Callable[[str], None] | None = None,
         cancellation: Cancellation | None = None,
     ) -> None:
+        effective_deadline = (
+            deadline_seconds if deadline_seconds is not None else max(timeout, 600.0)
+        )
         self._policy = ExecutionPolicy(
             authorized=True,
             timeout_seconds=timeout,
-            deadline_seconds=max(timeout, 600.0),
+            deadline_seconds=effective_deadline,
             retries=retries,
             backoff_seconds=backoff,
             min_interval_seconds=min_interval,
@@ -132,12 +158,33 @@ class UrllibHttpClient:
         if not 1 <= max_response_bytes <= 100 * 1024 * 1024:
             raise ValueError("max_response_bytes must be between 1 and 104857600")
         self._max_response_bytes = max_response_bytes
+        if not isinstance(max_response_headers, int) or isinstance(max_response_headers, bool):
+            raise ValueError("max_response_headers must be an integer")
+        if not 1 <= max_response_headers <= 1_000:
+            raise ValueError("max_response_headers must be between 1 and 1000")
+        if not isinstance(max_response_header_bytes, int) or isinstance(
+            max_response_header_bytes, bool
+        ):
+            raise ValueError("max_response_header_bytes must be an integer")
+        if not 1 <= max_response_header_bytes <= 1024 * 1024:
+            raise ValueError("max_response_header_bytes must be between 1 and 1048576")
+        if not isinstance(max_redirects, int) or isinstance(max_redirects, bool):
+            raise ValueError("max_redirects must be an integer")
+        if not 0 <= max_redirects <= DEFAULT_MAX_REDIRECTS:
+            raise ValueError(f"max_redirects must be between 0 and {DEFAULT_MAX_REDIRECTS}")
+        self._max_response_headers = max_response_headers
+        self._max_response_header_bytes = max_response_header_bytes
+        self._max_redirects = max_redirects
+        self._deadline_seconds = self._policy.deadline_seconds
         self._cancellation = cancellation or NeverCancelled()
         self._last_request_at = 0.0
         self._throttle_lock = threading.Lock()
+        validator = redirect_validator or (lambda _url: None)
         self._opener = (
-            urllib.request.build_opener(_ValidatingRedirectHandler(redirect_validator))
-            if redirect_validator is not None
+            urllib.request.build_opener(
+                _ValidatingRedirectHandler(validator, max_redirects=max_redirects)
+            )
+            if redirect_validator is not None or max_redirects != DEFAULT_MAX_REDIRECTS
             else None
         )
 
@@ -149,6 +196,9 @@ class UrllibHttpClient:
         redirect_validator: Callable[[str], None] | None = None,
         cancellation: Cancellation | None = None,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+        max_response_headers: int = DEFAULT_MAX_RESPONSE_HEADERS,
+        max_response_header_bytes: int = DEFAULT_MAX_RESPONSE_HEADER_BYTES,
+        max_redirects: int = DEFAULT_MAX_REDIRECTS,
     ) -> UrllibHttpClient:
         """Build a client from the shared validated execution policy."""
         return cls(
@@ -157,6 +207,10 @@ class UrllibHttpClient:
             backoff=policy.backoff_seconds,
             min_interval=policy.min_interval_seconds,
             max_response_bytes=max_response_bytes,
+            max_response_headers=max_response_headers,
+            max_response_header_bytes=max_response_header_bytes,
+            max_redirects=max_redirects,
+            deadline_seconds=policy.deadline_seconds,
             redirect_validator=redirect_validator,
             cancellation=cancellation,
         )
@@ -177,14 +231,23 @@ class UrllibHttpClient:
 
         data = config.load_config()
         rate = min_interval if min_interval is not None else config.get("http", "rate", 0.0, data)
+        timeout = config.get("http", "timeout", 10.0, data)
         return cls(
-            config.get("http", "timeout", 10.0, data),
+            timeout,
             retries=config.get("http", "retries", 2, data),
             backoff=config.get("http", "backoff", 0.5, data),
             min_interval=rate,
             max_response_bytes=config.get(
                 "http", "max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES, data
             ),
+            max_response_headers=config.get(
+                "http", "max_response_headers", DEFAULT_MAX_RESPONSE_HEADERS, data
+            ),
+            max_response_header_bytes=config.get(
+                "http", "max_response_header_bytes", DEFAULT_MAX_RESPONSE_HEADER_BYTES, data
+            ),
+            max_redirects=config.get("http", "max_redirects", DEFAULT_MAX_REDIRECTS, data),
+            deadline_seconds=config.get("http", "deadline", max(timeout, 600.0), data),
             redirect_validator=redirect_validator,
         )
 
@@ -194,7 +257,7 @@ class UrllibHttpClient:
         except CancellationRequested as exc:
             raise HttpRequestError("HTTP request cancelled") from exc
 
-    def _throttle(self) -> None:
+    def _throttle(self, *, deadline_at: float | None = None) -> None:
         """Sleep just enough to honor the configured minimum request interval."""
         if self._min_interval <= 0.0:
             return
@@ -203,18 +266,55 @@ class UrllibHttpClient:
         with self._throttle_lock:
             elapsed = time.monotonic() - self._last_request_at
             if 0.0 <= elapsed < self._min_interval:
-                self._sleep_interruptibly(self._min_interval - elapsed)
+                self._sleep_interruptibly(
+                    self._min_interval - elapsed, deadline_at=deadline_at
+                )
             self._last_request_at = time.monotonic()
 
-    def _sleep_interruptibly(self, seconds: float) -> None:
+    @staticmethod
+    def _check_deadline(deadline_at: float) -> float:
+        remaining = deadline_at - time.monotonic()
+        if remaining <= 0.0:
+            raise HttpRequestError("HTTP operation deadline exceeded")
+        return remaining
+
+    def _sleep_interruptibly(self, seconds: float, *, deadline_at: float | None = None) -> None:
         """Sleep in bounded slices so cancellation interrupts waits promptly."""
         remaining = max(0.0, seconds)
         while remaining > 0.0:
             self._check_cancelled()
             interval = min(_CANCELLATION_POLL_SECONDS, remaining)
+            if deadline_at is not None:
+                interval = min(interval, self._check_deadline(deadline_at))
             time.sleep(interval)
             remaining -= interval
         self._check_cancelled()
+        if deadline_at is not None:
+            self._check_deadline(deadline_at)
+
+    def _copy_bounded_headers(self, headers: object, url: str) -> dict[str, str]:
+        """Copy headers only after enforcing count and aggregate encoded size."""
+        try:
+            items = list(headers.items())  # type: ignore[union-attr]
+        except AttributeError:
+            items = []
+        if len(items) > self._max_response_headers:
+            raise HttpResponseHeadersTooLarge(
+                f"HTTP response for {url} exceeds the {self._max_response_headers} header limit"
+            )
+        total = 0
+        normalized: dict[str, str] = {}
+        for raw_name, raw_value in items:
+            name = str(raw_name)
+            value = str(raw_value)
+            total += len(name.encode("utf-8")) + len(value.encode("utf-8")) + 4
+            if total > self._max_response_header_bytes:
+                raise HttpResponseHeadersTooLarge(
+                    f"HTTP response headers for {url} exceed the "
+                    f"{self._max_response_header_bytes} byte limit"
+                )
+            normalized[name] = value
+        return normalized
 
     def _read_bounded(self, stream: _ReadableBody, url: str) -> bytes:
         """Read a body incrementally with a hard in-memory and transfer cap."""
@@ -249,19 +349,21 @@ class UrllibHttpClient:
                 f"{self._max_response_bytes} byte limit"
             )
 
-    def _perform(self, request: urllib.request.Request, url: str) -> HttpResponse:
+    def _perform(
+        self, request: urllib.request.Request, url: str, *, timeout: float
+    ) -> HttpResponse:
         try:
             open_request = self._opener.open if self._opener is not None else urllib.request.urlopen
-            with open_request(request, timeout=self._timeout) as response:
+            with open_request(request, timeout=timeout) as response:
+                response_headers = self._copy_bounded_headers(response.headers, url)
                 self._reject_oversized_content_length(response.headers, url)
                 body_bytes = self._read_bounded(response, url)
                 status_code = response.status
-                response_headers = dict(response.headers.items())
         except urllib.error.HTTPError as exc:
+            response_headers = self._copy_bounded_headers(exc.headers or {}, url)
             self._reject_oversized_content_length(exc.headers, url)
             body_bytes = self._read_bounded(exc, url)
             status_code = exc.code
-            response_headers = dict(exc.headers.items()) if exc.headers else {}
         except (urllib.error.URLError, TimeoutError) as exc:
             raise HttpRequestError(f"HTTP GET failed for {url}: {exc}") from exc
         return HttpResponse(
@@ -279,14 +381,17 @@ class UrllibHttpClient:
         request = urllib.request.Request(  # noqa: S310 (scheme already checked above)
             url, headers=request_headers
         )
+        deadline_at = time.monotonic() + self._deadline_seconds
 
         last_error: HttpRequestError | None = None
         for attempt in range(self._retries + 1):
             self._check_cancelled()
-            self._throttle()
+            self._check_deadline(deadline_at)
+            self._throttle(deadline_at=deadline_at)
+            remaining = self._check_deadline(deadline_at)
             try:
-                response = self._perform(request, url)
-            except HttpResponseTooLarge:
+                response = self._perform(request, url, timeout=min(self._timeout, remaining))
+            except (HttpResponseTooLarge, HttpResponseHeadersTooLarge):
                 # Retrying a deterministic size-policy violation only wastes bandwidth.
                 raise
             except HttpRequestError as exc:
@@ -300,6 +405,8 @@ class UrllibHttpClient:
                 if attempt == self._retries:
                     return response  # out of retries: hand back the last response
             if attempt < self._retries:
-                self._sleep_interruptibly(self._backoff * (2**attempt))
+                self._sleep_interruptibly(
+                    self._backoff * (2**attempt), deadline_at=deadline_at
+                )
 
         raise last_error or HttpRequestError(f"HTTP GET failed for {url}")
