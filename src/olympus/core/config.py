@@ -50,6 +50,10 @@ def _validate_http_config(data: dict[str, Any], path: Path) -> None:
         "backoff": (float, 0.0, 300.0),
         "rate": (float, 0.0, 3600.0),
         "max_response_bytes": (int, 1, 100 * 1024 * 1024),
+        "max_response_headers": (int, 1, 1_000),
+        "max_response_header_bytes": (int, 1, 1024 * 1024),
+        "max_redirects": (int, 0, 10),
+        "deadline": (float, 0.05, 86_400.0),
     }
     for key, value in table.items():
         if key not in numeric_rules:

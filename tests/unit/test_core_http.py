@@ -10,9 +10,11 @@ import pytest
 
 from olympus.core.execution import CancellationToken, ExecutionPolicy, ExecutionPolicyError
 from olympus.core.http import (
+    DEFAULT_MAX_REDIRECTS,
     DEFAULT_MAX_RESPONSE_BYTES,
     USER_AGENT,
     HttpRequestError,
+    HttpResponseHeadersTooLarge,
     HttpResponseTooLarge,
     UrllibHttpClient,
     _ValidatingRedirectHandler,
@@ -76,6 +78,14 @@ def test_redirect_handler_does_not_follow_rejected_destination() -> None:
             {},
             "http://127.0.0.1/admin",
         )
+
+
+def test_redirect_handler_has_an_explicit_configurable_limit() -> None:
+    handler = _ValidatingRedirectHandler(lambda _url: None, max_redirects=3)
+    assert handler.max_redirections == 3
+    assert UrllibHttpClient()._max_redirects == DEFAULT_MAX_REDIRECTS
+    with pytest.raises(ValueError, match="max_redirects"):
+        UrllibHttpClient(max_redirects=DEFAULT_MAX_REDIRECTS + 1)
 
 
 def test_request_sends_honest_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,6 +161,33 @@ def test_response_size_violation_is_not_retried(monkeypatch: pytest.MonkeyPatch)
             "https://olympusdemocorp.example/"
         )
     assert calls["n"] == 1
+
+
+def test_rejects_excessive_response_headers_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"n": 0}
+
+    def _many_headers(request: Any, timeout: float = 0.0) -> _FakeHttpResponse:
+        calls["n"] += 1
+        return _FakeHttpResponse(200, {"A": "1", "B": "2"}, b"ok")
+
+    monkeypatch.setattr("urllib.request.urlopen", _many_headers)
+    with pytest.raises(HttpResponseHeadersTooLarge, match="header limit"):
+        UrllibHttpClient(retries=3, max_response_headers=1).get(
+            "https://olympusdemocorp.example/"
+        )
+    assert calls["n"] == 1
+
+
+def test_rejects_aggregate_response_header_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHttpResponse(200, {"Long": "x" * 20}, b"ok")
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout=0.0: fake)
+
+    with pytest.raises(HttpResponseHeadersTooLarge, match="byte limit"):
+        UrllibHttpClient(max_response_header_bytes=8).get(
+            "https://olympusdemocorp.example/"
+        )
 
 
 def test_default_response_limit_is_bounded() -> None:
@@ -270,6 +307,34 @@ def test_raises_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> Non
         UrllibHttpClient(retries=1).get("https://olympusdemocorp.example/")
 
 
+def test_overall_deadline_caps_retries_backoff_and_request_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import urllib.error
+
+    clock = [0.0]
+    observed_timeouts: list[float] = []
+    monkeypatch.setattr("time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("time.sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+
+    def _fail(request: Any, timeout: float = 0.0) -> Any:
+        observed_timeouts.append(timeout)
+        raise urllib.error.URLError("temporary")
+
+    monkeypatch.setattr("urllib.request.urlopen", _fail)
+    with pytest.raises(HttpRequestError, match="deadline exceeded"):
+        UrllibHttpClient(
+            timeout=10.0,
+            retries=5,
+            backoff=0.2,
+            deadline_seconds=0.25,
+        ).get("https://olympusdemocorp.example/")
+
+    assert len(observed_timeouts) == 2
+    assert observed_timeouts[0] == pytest.approx(0.25)
+    assert observed_timeouts[1] == pytest.approx(0.05)
+
+
 def test_retries_on_retryable_status(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = {"n": 0}
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
@@ -301,7 +366,7 @@ def test_rate_limit_sleeps_between_requests(monkeypatch: pytest.MonkeyPatch) -> 
     slept: list[float] = []
     monkeypatch.setattr("time.sleep", lambda seconds: slept.append(seconds))
     times = iter([0.0, 0.0, 0.0, 0.1])  # monotonic() readings
-    monkeypatch.setattr("time.monotonic", lambda: next(times))
+    monkeypatch.setattr("time.monotonic", lambda: next(times, 0.1))
     monkeypatch.setattr(
         "urllib.request.urlopen", lambda request, timeout=0.0: _FakeHttpResponse(200, {}, b"ok")
     )
