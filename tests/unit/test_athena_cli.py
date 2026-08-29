@@ -19,7 +19,12 @@ class _Http:
     """Serves canned DNS / RDAP / web responses for every adapter."""
 
     @classmethod
-    def from_config(cls, *, min_interval: float | None = None) -> _Http:
+    def from_config(
+        cls,
+        *,
+        min_interval: float | None = None,
+        redirect_validator: object = None,
+    ) -> _Http:
         return cls()
 
     def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
