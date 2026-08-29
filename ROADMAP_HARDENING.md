@@ -42,7 +42,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] Convertire la lettura bounded in streaming incrementale a chunk.
 - [x] Rendere retry/backoff/throttling interrompibili dalla cancellazione.
 - [ ] Limitare decompressione e rapporto di espansione.
-- [ ] Applicare limiti a header, numero redirect e durata complessiva.
+- [x] Applicare limiti a header, numero redirect e durata complessiva.
 
 ### Secret scanning
 
@@ -197,3 +197,4 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-29 | P0 foundations | CI verde | Run `#119`: Ruff, 687 test, gitleaks e wheel smoke |
 | 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
 | 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
+| 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
