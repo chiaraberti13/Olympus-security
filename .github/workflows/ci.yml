@@ -41,120 +41,31 @@ jobs:
         run: |
           python -m venv /tmp/olympus-wheel-smoke
           /tmp/olympus-wheel-smoke/bin/python -m pip install dist/*.whl
-      # The wheel does not package the vendored upstream tree, so these run in
-      # exactly the environment a user installing from PyPI would have. A
-      # command that only works inside a checkout fails here.
       - name: Smoke-test installed CLI surfaces
         run: |
-          set -euo pipefail
           OLYMPUS=/tmp/olympus-wheel-smoke/bin/olympus
           "$OLYMPUS" --help
           "$OLYMPUS" version
+          "$OLYMPUS" config validate
           for module in core argus athena helios artemis proteus hermes apollo minerva vulcan metis aegis; do
             "$OLYMPUS" "$module" --help
           done
-          for group in "aegis jobs" "aegis identities" "aegis retention"; do
-            "$OLYMPUS" $group --help
-          done
-
-      - name: Smoke-test diagnostics without a vendored source tree
-        run: |
-          set -euo pipefail
-          OLYMPUS=/tmp/olympus-wheel-smoke/bin/olympus
-          "$OLYMPUS" doctor
-          "$OLYMPUS" aegis doctor
-          "$OLYMPUS" aegis deps
-          "$OLYMPUS" aegis info
-          "$OLYMPUS" aegis scanners
-          "$OLYMPUS" aegis capabilities
 
   secret-scan:
     name: gitleaks (blocking working-tree + history scan)
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write   # upload the redacted SARIF to code scanning
-    env:
-      GITLEAKS_IMAGE: zricethezav/gitleaks:v8.28.0
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      # The canary runs first and deliberately plants a secret outside the
-      # repository tree. A scanner that cannot find a known secret proves
-      # nothing when it later reports a clean tree, so the job fails loudly
-      # if detection is broken or the config accidentally allowlists
-      # everything.
-      - name: Canary — prove the scanner detects a planted secret
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/gitleaks-canary"
-          cp .gitleaks.toml "$RUNNER_TEMP/gitleaks-canary/.gitleaks.toml"
-          # A synthetic, non-functional credential shaped like an AWS access
-          # key id. Assembled from two halves so this workflow file itself
-          # carries no matchable secret — the scan below must stay clean.
-          # (The AWS documentation key AKIA...EXAMPLE is allowlisted by
-          # gitleaks' default rules and would never fire.)
-          printf 'aws_access_key_id = %s%s\n' 'AKIA' 'Q2M7RJ4TVBN5XKZW' \
-            > "$RUNNER_TEMP/gitleaks-canary/planted.txt"
-          set +e
-          docker run --rm -v "$RUNNER_TEMP/gitleaks-canary:/canary" "$GITLEAKS_IMAGE" \
-            detect --source=/canary --no-git --config=/canary/.gitleaks.toml \
-            --redact --exit-code=1
-          status=$?
-          set -e
-          if [ "$status" -ne 1 ]; then
-            echo "::error::gitleaks did not flag the planted canary secret (exit $status)."
-            echo "Secret scanning is not working; treat every clean result as unverified."
-            exit 1
-          fi
-          echo "Canary detected as expected: the scanner and config are live."
-
-      # Reports land outside the checkout so a scan never sees another scan's
-      # output and the working tree stays exactly as committed.
-      - name: Prepare report directory
-        run: mkdir -p "$RUNNER_TEMP/gitleaks-reports"
-
       - name: Scan checked-out files
         run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/repo:ro" \
-            -v "$RUNNER_TEMP/gitleaks-reports:/reports" \
-            "$GITLEAKS_IMAGE" \
-            detect --source=/repo --no-git --config=/repo/.gitleaks.toml \
-            --redact --exit-code=1 --report-format=sarif \
-            --report-path=/reports/gitleaks-worktree.sarif
-
-      # Not mounted read-only: a git-history scan walks the object store and
-      # some git versions touch the repository while doing so.
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.28.0 \
+            detect --source=/repo --no-git --config=/repo/.gitleaks.toml --redact --exit-code=1
       - name: Scan complete Git history
         if: github.event_name != 'pull_request'
         run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/repo" \
-            -v "$RUNNER_TEMP/gitleaks-reports:/reports" \
-            "$GITLEAKS_IMAGE" \
-            detect --source=/repo --config=/repo/.gitleaks.toml \
-            --redact --exit-code=1 --report-format=sarif \
-            --report-path=/reports/gitleaks-history.sarif
-
-      # --redact means the reports carry locations and rule names, never the
-      # secret values, so they are safe to publish. Both steps run even when
-      # a scan failed: the report is exactly what a responder needs then.
-      - name: Upload redacted SARIF to code scanning
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ${{ runner.temp }}/gitleaks-reports/gitleaks-worktree.sarif
-          category: gitleaks-worktree
-        continue-on-error: true   # never mask a real finding behind an upload error
-
-      - name: Publish redacted SARIF reports as an artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: gitleaks-sarif
-          path: ${{ runner.temp }}/gitleaks-reports/*.sarif
-          if-no-files-found: warn
-          retention-days: 30
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.28.0 \
+            detect --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=1

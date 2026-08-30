@@ -1,5 +1,6 @@
 """Unit tests for optional TOML configuration."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -87,3 +88,57 @@ def test_http_from_config_caller_rate_wins(
     monkeypatch.setenv("OLYMPUS_CONFIG", str(cfg))
     client = UrllibHttpClient.from_config(min_interval=2.0)
     assert client._min_interval == 2.0
+
+
+def test_precedence_is_caller_then_environment_then_file_then_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg = tmp_path / "olympus.toml"
+    cfg.write_text("[http]\nrate = 0.5\ntimeout = 20.0\n", encoding="utf-8")
+    monkeypatch.setenv("OLYMPUS_CONFIG", str(cfg))
+    monkeypatch.setenv("OLYMPUS_HTTP_RATE", "1.25")
+    data = config.load_config()
+
+    assert config.get("http", "rate", 0.0, data) == 1.25
+    assert config.get("http", "timeout", 10.0, data) == 20.0
+    assert config.get("http", "retries", 2, data) == 2
+    assert UrllibHttpClient.from_config(min_interval=2.0)._min_interval == 2.0
+
+
+def test_invalid_environment_override_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLYMPUS_HTTP_RETRIES", "1.5")
+    with pytest.raises(config.ConfigError, match="OLYMPUS_HTTP_RETRIES"):
+        config.get("http", "retries", 2, {})
+
+    monkeypatch.setenv("OLYMPUS_HTTP_RETRIES", "99")
+    with pytest.raises(config.ConfigError, match=r"invalid.*retries"):
+        config.get("http", "retries", 2, {})
+
+
+def test_load_config_with_explicit_source_does_not_mutate_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg = tmp_path / "selected.toml"
+    cfg.write_text("[http]\ntimeout = 12.0\n", encoding="utf-8")
+    monkeypatch.delenv("OLYMPUS_CONFIG", raising=False)
+
+    data, source = config.load_config_with_source(cfg)
+
+    assert data["http"]["timeout"] == 12.0
+    assert source == cfg.resolve()
+    assert "OLYMPUS_CONFIG" not in os.environ
+
+
+def test_effective_config_lists_override_names_not_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_HTTP_TIMEOUT", "13.5")
+    effective = config.effective_config({"service": {"api_token": "super-secret"}})
+
+    assert effective["http"]["timeout"] == 13.5
+    assert config.active_environment_overrides() == ["OLYMPUS_HTTP_TIMEOUT"]
+
+
+def test_effective_deadline_tracks_timeout_when_not_overridden() -> None:
+    effective = config.effective_config({"http": {"timeout": 900.0}})
+    assert effective["http"]["deadline"] == 900.0

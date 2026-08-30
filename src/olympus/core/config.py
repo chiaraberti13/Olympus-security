@@ -1,10 +1,14 @@
 """Optional TOML configuration so operators stop repeating the same flags.
 
-Olympus reads, in order of precedence:
+Olympus resolves values, in order of precedence:
 
-1. the path in the ``OLYMPUS_CONFIG`` environment variable, if set;
-2. ``./olympus.toml`` in the current directory;
-3. ``~/.olympus.toml`` in the user's home.
+1. an explicit caller/CLI override;
+2. ``OLYMPUS_<SECTION>_<KEY>`` environment variables;
+3. the selected TOML file;
+4. built-in defaults.
+
+The TOML file itself is selected from ``OLYMPUS_CONFIG``, then
+``./olympus.toml``, then ``~/.olympus.toml``.
 
 The file is entirely optional — with no file present every helper falls back
 to the built-in defaults, so nothing changes. Example::
@@ -27,6 +31,37 @@ class ConfigError(RuntimeError):
     """Raised when an explicitly selected or discovered config is invalid."""
 
 
+HTTP_DEFAULTS: dict[str, int | float] = {
+    "timeout": 10.0,
+    "retries": 2,
+    "backoff": 0.5,
+    "jitter": 0.0,
+    "rate": 0.0,
+    "max_response_bytes": 2 * 1024 * 1024,
+    "max_response_headers": 100,
+    "max_response_header_bytes": 64 * 1024,
+    "max_redirects": 10,
+    "max_decompressed_bytes": 8 * 1024 * 1024,
+    "max_expansion_ratio": 100.0,
+    "deadline": 600.0,
+}
+
+_HTTP_NUMERIC_RULES: dict[str, tuple[type, float, float]] = {
+    "timeout": (float, 0.001, 3600.0),
+    "retries": (int, 0, 10),
+    "backoff": (float, 0.0, 300.0),
+    "jitter": (float, 0.0, 1.0),
+    "rate": (float, 0.0, 3600.0),
+    "max_response_bytes": (int, 1, 100 * 1024 * 1024),
+    "max_response_headers": (int, 1, 1_000),
+    "max_response_header_bytes": (int, 1, 1024 * 1024),
+    "max_redirects": (int, 0, 10),
+    "max_decompressed_bytes": (int, 1, 100 * 1024 * 1024),
+    "max_expansion_ratio": (float, 1.0, 10_000.0),
+    "deadline": (float, 0.05, 86_400.0),
+}
+
+
 def _candidate_paths() -> list[Path]:
     paths: list[Path] = []
     env_path = os.environ.get("OLYMPUS_CONFIG", "").strip()
@@ -44,23 +79,10 @@ def _validate_http_config(data: dict[str, Any], path: Path) -> None:
     if not isinstance(table, dict):
         raise ConfigError(f"[http] must be a TOML table in {path}")
 
-    numeric_rules: dict[str, tuple[type, float, float]] = {
-        "timeout": (float, 0.001, 3600.0),
-        "retries": (int, 0, 10),
-        "backoff": (float, 0.0, 300.0),
-        "rate": (float, 0.0, 3600.0),
-        "max_response_bytes": (int, 1, 100 * 1024 * 1024),
-        "max_response_headers": (int, 1, 1_000),
-        "max_response_header_bytes": (int, 1, 1024 * 1024),
-        "max_redirects": (int, 0, 10),
-        "max_decompressed_bytes": (int, 1, 100 * 1024 * 1024),
-        "max_expansion_ratio": (float, 1.0, 10_000.0),
-        "deadline": (float, 0.05, 86_400.0),
-    }
     for key, value in table.items():
-        if key not in numeric_rules:
+        if key not in _HTTP_NUMERIC_RULES:
             raise ConfigError(f"unknown [http] option {key!r} in {path}")
-        expected, minimum, maximum = numeric_rules[key]
+        expected, minimum, maximum = _HTTP_NUMERIC_RULES[key]
         valid_type = isinstance(value, expected) and not isinstance(value, bool)
         if expected is float:
             valid_type = isinstance(value, int | float) and not isinstance(value, bool)
@@ -76,14 +98,17 @@ def _validate_config(data: dict[str, Any], path: Path) -> dict[str, Any]:
     return data
 
 
-def load_config() -> dict[str, Any]:
-    """Load and validate the first config file; never hide a broken selection."""
-    explicit_path = os.environ.get("OLYMPUS_CONFIG", "").strip()
-    for index, path in enumerate(_candidate_paths()):
+def load_config_with_source(
+    explicit_path: Path | None = None,
+) -> tuple[dict[str, Any], Path | None]:
+    """Load the selected document and return its source without hiding failures."""
+    configured_path = os.environ.get("OLYMPUS_CONFIG", "").strip()
+    candidates = [explicit_path] if explicit_path is not None else _candidate_paths()
+    for index, path in enumerate(candidates):
         try:
             raw = path.read_bytes()
         except FileNotFoundError as exc:
-            if explicit_path and index == 0:
+            if explicit_path is not None or (configured_path and index == 0):
                 raise ConfigError(f"explicit config file does not exist: {path}") from exc
             continue
         except OSError as exc:
@@ -94,13 +119,55 @@ def load_config() -> dict[str, Any]:
             raise ConfigError(f"invalid TOML config {path}: {exc}") from exc
         if not isinstance(parsed, dict):
             raise ConfigError(f"config root must be a TOML table: {path}")
-        return _validate_config(parsed, path)
-    return {}
+        return _validate_config(parsed, path), path.resolve()
+    return {}, None
+
+
+def load_config() -> dict[str, Any]:
+    """Load and validate the selected configuration document."""
+    data, _source = load_config_with_source()
+    return data
+
+
+def environment_variable(section: str, key: str) -> str:
+    """Return the deterministic environment override name for one value."""
+    normalized = f"{section}_{key}".upper().replace("-", "_")
+    return f"OLYMPUS_{normalized}"
+
+
+def _environment_value(variable: str, raw: str, default: Any) -> Any:
+    """Parse one environment value using the declared default's exact type."""
+    try:
+        if isinstance(default, bool):
+            normalized = raw.strip().casefold()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+            raise ValueError
+        if isinstance(default, int):
+            return int(raw.strip())
+        if isinstance(default, float):
+            return float(raw.strip())
+        if isinstance(default, str):
+            return raw
+    except ValueError as exc:
+        raise ConfigError(
+            f"invalid environment override {variable}: expected {type(default).__name__}"
+        ) from exc
+    raise ConfigError(f"unsupported configuration type for {variable}")
 
 
 def get(section: str, key: str, default: Any, config: dict[str, Any] | None = None) -> Any:
-    """Return a validated config value, or ``default`` when it is absent."""
+    """Resolve environment, validated file value, then built-in default."""
     data = load_config() if config is None else config
+    variable = environment_variable(section, key)
+    raw_environment = os.environ.get(variable)
+    if raw_environment is not None:
+        value = _environment_value(variable, raw_environment, default)
+        if section == "http":
+            _validate_http_config({"http": {key: value}}, Path(f"environment:{variable}"))
+        return value
     table = data.get(section)
     if not isinstance(table, dict) or key not in table:
         return default
@@ -113,4 +180,27 @@ def get(section: str, key: str, default: Any, config: dict[str, Any] | None = No
     raise ConfigError(
         f"invalid type for [{section}].{key}: expected {type(default).__name__}, "
         f"got {type(value).__name__}"
+    )
+
+
+def effective_config(data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return the redaction-ready effective document for known settings."""
+    loaded = load_config() if data is None else data
+    effective = {key: value for key, value in loaded.items() if key != "http"}
+    http = {
+        key: get("http", key, default, loaded)
+        for key, default in HTTP_DEFAULTS.items()
+        if key != "deadline"
+    }
+    http["deadline"] = get("http", "deadline", max(float(http["timeout"]), 600.0), loaded)
+    effective["http"] = http
+    return effective
+
+
+def active_environment_overrides() -> list[str]:
+    """List active known override names without exposing their values."""
+    return sorted(
+        variable
+        for key in HTTP_DEFAULTS
+        if (variable := environment_variable("http", key)) in os.environ
     )
