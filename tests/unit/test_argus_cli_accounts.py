@@ -166,6 +166,8 @@ def test_accounts_batch_skips_out_of_scope(tmp_path: Path, monkeypatch: pytest.M
             str(_scope(tmp_path)),
             "--sites",
             str(_sites(tmp_path)),
+            "--log",
+            str(tmp_path / "blocked.log"),
         ],
     )
     assert result.exit_code == 0, result.output

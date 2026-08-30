@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from olympus.core.execution import AuthorizationRequiredError, ExecutionPolicyError
+from olympus.core.paths import audit_log_path, output_path
 from olympus.helios.application import SurfaceScanRequest, SurfaceScanService
 from olympus.helios.export import export_scan_result
 from olympus.helios.scanner import SocketConnector
@@ -14,8 +15,8 @@ from olympus.helios.scope import OutOfScopeError, ScopeError
 
 app = typer.Typer(help="Helios — authorized network attack-surface mapper.", no_args_is_help=True)
 DEFAULT_SCOPE = Path("examples/input/helios-scope.json")
-DEFAULT_LOG = Path("examples/output/helios-blocked.log")
-DEFAULT_OUTPUT = Path("examples/output/helios-findings.json")
+DEFAULT_LOG = audit_log_path("helios-blocked.log")
+DEFAULT_OUTPUT = output_path("helios-findings.json")
 
 
 @app.command()

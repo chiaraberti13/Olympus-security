@@ -9,6 +9,7 @@ import typer
 
 from olympus.core.contracts import ContractCompatibilityError
 from olympus.core.execution import CancellationRequested, ExecutionPolicyError
+from olympus.core.paths import output_path
 from olympus.hermes.application import SecretScanRequest, SecretScanService
 from olympus.hermes.sarif import write_sarif
 from olympus.hermes.scanner import (
@@ -21,7 +22,7 @@ from olympus.hermes.scanner import (
 )
 
 app = typer.Typer(help="Hermes — secret and configuration scanner.", no_args_is_help=True)
-DEFAULT_OUTPUT = Path("examples/output/hermes-results.sarif")
+DEFAULT_OUTPUT = output_path("hermes-results.sarif")
 
 
 @app.command()

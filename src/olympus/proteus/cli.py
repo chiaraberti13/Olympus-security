@@ -9,6 +9,7 @@ import typer
 
 from olympus.core.contracts import ContractCompatibilityError
 from olympus.core.execution import AuthorizationRequiredError, CancellationRequested
+from olympus.core.paths import audit_log_path, output_path
 from olympus.proteus.application import (
     CampaignApplicationService,
     CampaignBuildRequest,
@@ -27,8 +28,10 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+DEFAULT_CAMPAIGN_OUTPUT = output_path("proteus-campaign.json")
+DEFAULT_TRAINING_OUTPUT = output_path("proteus-training.html")
 DEFAULT_SCOPE = Path("examples/input/proteus-scope.json")
-DEFAULT_LOG = Path("examples/output/proteus-blocked.log")
+DEFAULT_LOG = audit_log_path("proteus-blocked.log")
 
 _DISCLAIMER = (
     "AUTHORIZED USE ONLY — a phishing simulation targets real people's inboxes. Run it only "
@@ -52,7 +55,7 @@ def campaign(
         False, "--i-am-authorized", help="Confirm documented authorization for the engagement."
     ),
     output: Path = typer.Option(
-        Path("examples/output/proteus-campaign.json"), "--output", help="Campaign JSON output."
+        DEFAULT_CAMPAIGN_OUTPUT, "--output", help="Campaign JSON output."
     ),
 ) -> None:
     """Build an authorized simulation campaign (unique token per in-scope target)."""
@@ -107,7 +110,7 @@ def campaign(
 def page(
     engagement: str = typer.Option(..., "--engagement", help="Engagement name for the page."),
     output: Path = typer.Option(
-        Path("examples/output/proteus-training.html"), "--output", help="Training-page HTML output."
+        DEFAULT_TRAINING_OUTPUT, "--output", help="Training-page HTML output."
     ),
 ) -> None:
     """Render the training/awareness page a clicker lands on (captures nothing)."""

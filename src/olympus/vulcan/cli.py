@@ -10,6 +10,7 @@ import typer
 from olympus.core.enums import Severity
 from olympus.core.execution import CancellationRequested, ExecutionPolicyError
 from olympus.core.output import OutputFormat, render
+from olympus.core.paths import output_path
 from olympus.vulcan.aggregate import (
     DEFAULT_MAX_FILES,
     DEFAULT_MAX_INPUT_BYTES,
@@ -25,6 +26,8 @@ from olympus.vulcan.application import (
     VulcanReportRequest,
 )
 from olympus.vulcan.report import export_report, export_text
+
+DEFAULT_REPORT_OUTPUT = output_path("vulcan-report.json")
 
 app = typer.Typer(
     help="Vulcan — Findings aggregation & report engine.",
@@ -53,7 +56,7 @@ def report(
         [], "--alerts", help="core.Alert JSON file(s) to include (repeatable)."
     ),
     output: Path = typer.Option(
-        Path("examples/output/vulcan-report.json"), "--output", help="JSON report output path."
+        DEFAULT_REPORT_OUTPUT, "--output", help="JSON report output path."
     ),
     markdown: Path | None = typer.Option(
         None, "--markdown", help="If set, also write a Markdown report to this path."

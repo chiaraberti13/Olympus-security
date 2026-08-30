@@ -108,6 +108,7 @@ from olympus.argus.whois import (
     export_whois_report,
 )
 from olympus.core.http import UrllibHttpClient
+from olympus.core.paths import audit_log_path, output_path
 from olympus.core.pinning import global_address_policy
 
 app = typer.Typer(
@@ -115,22 +116,24 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+DEFAULT_FRONTING_OUTPUT = output_path("argus-fronting.json")
+DEFAULT_INVESTIGATION_OUTPUT = output_path("argus-investigation.json")
 DEFAULT_SCOPE_PATH = Path("examples/input/argus-scope.json")
-DEFAULT_BLOCK_LOG_PATH = Path("examples/output/argus-blocked.log")
-DEFAULT_ASSETS_PATH = Path("examples/output/argus-assets.json")
+DEFAULT_BLOCK_LOG_PATH = audit_log_path("argus-blocked.log")
+DEFAULT_ASSETS_PATH = output_path("argus-assets.json")
 
 DEFAULT_PHONE_SCOPE_PATH = Path("examples/input/argus-phone-scope.json")
-DEFAULT_PHONE_BLOCK_LOG_PATH = Path("examples/output/argus-phone-blocked.log")
+DEFAULT_PHONE_BLOCK_LOG_PATH = audit_log_path("argus-phone-blocked.log")
 
 DEFAULT_SITES_PATH = Path("examples/input/argus-sites.json")
 DEFAULT_ACCOUNT_SCOPE_PATH = Path("examples/input/argus-accounts-scope.json")
-DEFAULT_ACCOUNT_BLOCK_LOG_PATH = Path("examples/output/argus-accounts-blocked.log")
+DEFAULT_ACCOUNT_BLOCK_LOG_PATH = audit_log_path("argus-accounts-blocked.log")
 
 DEFAULT_IP_SCOPE_PATH = Path("examples/input/argus-ip-scope.json")
-DEFAULT_IP_BLOCK_LOG_PATH = Path("examples/output/argus-ip-blocked.log")
+DEFAULT_IP_BLOCK_LOG_PATH = audit_log_path("argus-ip-blocked.log")
 
 DEFAULT_MAC_SCOPE_PATH = Path("examples/input/argus-mac-scope.json")
-DEFAULT_MAC_BLOCK_LOG_PATH = Path("examples/output/argus-mac-blocked.log")
+DEFAULT_MAC_BLOCK_LOG_PATH = audit_log_path("argus-mac-blocked.log")
 
 _IP_DISCLAIMER = (
     "AUTHORIZED USE ONLY — --geo queries a third-party geolocation service about the target "
@@ -203,7 +206,7 @@ def fronting(
         "AST-ARGUS-FRONT-1", "--asset-id", help="core.Asset id to attach findings to."
     ),
     output: Path = typer.Option(
-        Path("examples/output/argus-fronting.json"), "--output", help="Fronting report JSON."
+        DEFAULT_FRONTING_OUTPUT, "--output", help="Fronting report JSON."
     ),
 ) -> None:
     """Passively check whether an in-scope domain is CDN/WAF-fronted and leaks its origin IP."""
@@ -535,7 +538,7 @@ _INVESTIGATE_DISCLAIMER = (
     "and everything it links to. Run it only with documented authorization. Re-run with "
     "--i-am-authorized to confirm."
 )
-DEFAULT_INVESTIGATION_LOG = Path("examples/output/argus-investigate.log")
+DEFAULT_INVESTIGATION_LOG = audit_log_path("argus-investigate.log")
 
 
 @app.command()
@@ -570,7 +573,7 @@ def investigate(
         False, "--i-am-authorized", help="Confirm documented authorization for the fan-out."
     ),
     output: Path = typer.Option(
-        Path("examples/output/argus-investigation.json"), "--output", help="Graph JSON output."
+        DEFAULT_INVESTIGATION_OUTPUT, "--output", help="Graph JSON output."
     ),
     mermaid: Path | None = typer.Option(
         None, "--mermaid", help="If set, also write a Mermaid diagram of the graph."
@@ -640,10 +643,10 @@ def investigate(
     )
 
 
-DEFAULT_EMAIL_OUTPUT = Path("examples/output/argus-email.json")
-DEFAULT_WEB_OUTPUT = Path("examples/output/argus-web.json")
-DEFAULT_DNS_OUTPUT = Path("examples/output/argus-dns.json")
-DEFAULT_WHOIS_OUTPUT = Path("examples/output/argus-whois.json")
+DEFAULT_EMAIL_OUTPUT = output_path("argus-email.json")
+DEFAULT_WEB_OUTPUT = output_path("argus-web.json")
+DEFAULT_DNS_OUTPUT = output_path("argus-dns.json")
+DEFAULT_WHOIS_OUTPUT = output_path("argus-whois.json")
 
 _EMAIL_DISCLAIMER = (
     "AUTHORIZED USE ONLY — --enrich runs passive live lookups (MX resolution and Gravatar "

@@ -183,7 +183,8 @@ olympus argus scan --domain olympusdemocorp.example --scope examples/input/argus
 ```
 
 This really queries DNS, MX, SPF/DMARC, and exports the result to
-`examples/output/argus-assets.json` as a `core.Asset`.
+`argus-assets.json` in the current directory as a `core.Asset` (pass `--output`
+to write it elsewhere).
 
 **Step 5 — See what happens outside scope.**
 
@@ -195,8 +196,8 @@ olympus argus scan --domain some-random-domain.com --scope examples/input/argus-
 
 The command refuses to proceed, prints `blocked, out of scope`, and exits with code `3` — no
 network request is ever made toward that domain. The event is written to the audit log
-(`examples/output/argus-blocked.log` by default): this is how every offensive module respects
-its perimeter, always, with no silent exceptions.
+(`~/.local/state/olympus/audit/argus-blocked.log` by default — see **Where Olympus writes**):
+this is how every offensive module respects its perimeter, always, with no silent exceptions.
 
 **Step 6 — Aggregate everything into a report.**
 
@@ -205,14 +206,14 @@ instead reads an **array** of `core.Asset`/`Finding`/`Alert` objects. Pull the a
 one line of Python, then hand it to Vulcan:
 
 ```bash
-python -c "import json; json.dump(json.load(open('examples/output/argus-assets.json'))['assets'], \
+python -c "import json; json.dump(json.load(open('argus-assets.json'))['assets'], \
   open('/tmp/vulcan-assets.json', 'w'))"
 
 olympus vulcan report --engagement "olympus-demo-corp-2026" \
   --assets /tmp/vulcan-assets.json \
-  --output examples/output/vulcan-report.json \
-  --markdown examples/output/vulcan-report.md \
-  --html examples/output/vulcan-report.html
+  --output vulcan-report.json \
+  --markdown vulcan-report.md \
+  --html vulcan-report.html
 ```
 
 Vulcan merges, deduplicates and produces one consolidated report. Open `vulcan-report.html` in
@@ -308,6 +309,17 @@ timeout = 15.0
 retries = 3
 rate = 0.25
 ```
+
+**Where Olympus writes** — two kinds of file, two different homes:
+
+| Kind | Default | Override |
+|---|---|---|
+| **Reports and exports** — what you asked for (`--output`, `--markdown`, `--html`) | a plain filename in the directory you ran the command from, e.g. `argus-assets.json` | `--output <path>` |
+| **Audit and block logs** — written implicitly when a target is refused (`--log`) | `~/.local/state/olympus/audit/`, following `$XDG_STATE_HOME` when set | `--log <path>`, or `$OLYMPUS_STATE_DIR` for all of them at once |
+
+Audit logs deliberately do *not* depend on your working directory: they are written as a side
+effect of a scope violation, so they must land in the same place whether you ran the command
+from your home directory or from a checkout. `OLYMPUS_STATE_DIR` is read once at startup.
 
 ### Guided walkthrough: from recon to report, on a practice target included in the repo
 
@@ -527,7 +539,8 @@ olympus argus scan --domain olympusdemocorp.example --scope examples/input/argus
 ```
 
 Interroga davvero DNS, MX, SPF/DMARC ed esporta il risultato in
-`examples/output/argus-assets.json` come `core.Asset`.
+`argus-assets.json` nella directory corrente come `core.Asset` (usa `--output`
+per scriverlo altrove).
 
 **Passo 5 — Guarda cosa succede fuori dallo scope.**
 
@@ -539,8 +552,9 @@ olympus argus scan --domain un-dominio-a-caso.com --scope examples/input/argus-s
 
 Il comando si rifiuta di procedere, stampa `blocked, out of scope` ed esce con codice `3` —
 niente richiesta di rete viene mai fatta verso quel dominio. L'evento resta scritto nel log di
-audit (`examples/output/argus-blocked.log` di default): è così che ogni modulo offensivo
-rispetta il perimetro, sempre, senza eccezioni silenziose.
+audit (`~/.local/state/olympus/audit/argus-blocked.log` di default — vedi **Dove scrive
+Olympus**): è così che ogni modulo offensivo rispetta il perimetro, sempre, senza eccezioni
+silenziose.
 
 **Passo 6 — Aggrega tutto in un report.**
 
@@ -549,14 +563,14 @@ Ogni modulo scrive il proprio output JSON come un documento avvolgente (es.
 `Alert`. Estrai l'array con una riga di Python, poi passalo a Vulcan:
 
 ```bash
-python -c "import json; json.dump(json.load(open('examples/output/argus-assets.json'))['assets'], \
+python -c "import json; json.dump(json.load(open('argus-assets.json'))['assets'], \
   open('/tmp/vulcan-assets.json', 'w'))"
 
 olympus vulcan report --engagement "olympus-demo-corp-2026" \
   --assets /tmp/vulcan-assets.json \
-  --output examples/output/vulcan-report.json \
-  --markdown examples/output/vulcan-report.md \
-  --html examples/output/vulcan-report.html
+  --output vulcan-report.json \
+  --markdown vulcan-report.md \
+  --html vulcan-report.html
 ```
 
 Vulcan unisce, deduplica e produce un report unico. Apri `vulcan-report.html` in un browser: è
@@ -652,6 +666,18 @@ timeout = 15.0
 retries = 3
 rate = 0.25
 ```
+
+**Dove scrive Olympus** — due tipi di file, due destinazioni diverse:
+
+| Tipo | Default | Override |
+|---|---|---|
+| **Report ed export** — quello che hai chiesto (`--output`, `--markdown`, `--html`) | un nome di file semplice nella directory da cui hai lanciato il comando, es. `argus-assets.json` | `--output <path>` |
+| **Log di audit e di blocco** — scritti implicitamente quando un bersaglio viene rifiutato (`--log`) | `~/.local/state/olympus/audit/`, rispettando `$XDG_STATE_HOME` se impostata | `--log <path>`, oppure `$OLYMPUS_STATE_DIR` per tutti insieme |
+
+I log di audit di proposito *non* dipendono dalla directory di lavoro: sono scritti come
+effetto collaterale di una violazione di scope, quindi devono finire sempre nello stesso posto,
+che tu abbia lanciato il comando dalla home o da un checkout. `OLYMPUS_STATE_DIR` viene letta
+una volta sola all'avvio.
 
 ### Percorso guidato: dal recon al report, su un bersaglio di prova incluso
 

@@ -9,6 +9,7 @@ import typer
 from olympus.core.contracts import ContractCompatibilityError
 from olympus.core.execution import CancellationRequested, ExecutionPolicyError
 from olympus.core.output import OutputFormat, render
+from olympus.core.paths import output_path
 from olympus.minerva.application import (
     DEFAULT_MAX_EVIDENCE_BYTES,
     MinervaApplicationService,
@@ -24,8 +25,8 @@ from olympus.minerva.custody import (
 from olympus.minerva.triage import DEFAULT_MAX_ALERT_BYTES, DEFAULT_MAX_ALERTS, export_incident
 
 app = typer.Typer(help="Minerva — incident response and DFIR.", no_args_is_help=True)
-DEFAULT_LEDGER = Path("examples/output/minerva-custody.json")
-DEFAULT_INCIDENT = Path("examples/output/minerva-incident.json")
+DEFAULT_LEDGER = output_path("minerva-custody.json")
+DEFAULT_INCIDENT = output_path("minerva-incident.json")
 _APPLICATION_ERRORS = (
     CancellationRequested,
     ContractCompatibilityError,
