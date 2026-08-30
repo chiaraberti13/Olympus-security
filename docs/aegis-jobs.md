@@ -102,9 +102,9 @@ operator-visible at the same time:
   deployment does not publish hostnames or PIDs. An operator who sets
   `--worker-id` chooses what to reveal.
 
-## Still open
+## Retention
 
-Tracked in `ROADMAP_HARDENING.md` and not provided here: multiple API
-identities with scopes/rotation/revocation and rate limiting, enforced TLS for
-non-loopback binds with correlation/request/audit IDs, and retention plus secure
-deletion of logs and artefacts.
+`olympus aegis jobs prune --older-than-days N` removes terminal jobs past the
+retention window; queued and running work is never pruned. See
+[`retention.md`](retention.md) for what the store does with the deleted content
+and for artefact and log retention.

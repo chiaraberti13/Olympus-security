@@ -99,6 +99,11 @@ TERMINAL_STATES = frozenset(
     }
 )
 
+#: The states a job can still leave on its own. Together with
+#: ``TERMINAL_STATES`` this partitions ``JobState`` — a test pins that, so a new
+#: state cannot quietly fall outside retention or recovery.
+ACTIVE_STATES = frozenset({JobState.QUEUED, JobState.RUNNING})
+
 #: Only transient outcomes are retried. A refused policy, a cancellation or a
 #: scanner that ran and failed will fail again; retrying them wastes a budget
 #: and re-sends traffic to a target for no reason.
@@ -342,7 +347,7 @@ class AegisJobStore:
             )
 
     def _by_idempotency_key(self, key: str) -> sqlite3.Row | None:
-        with self._connect() as db:
+        with self._reading() as db:
             row: sqlite3.Row | None = db.execute(
                 "SELECT * FROM aegis_jobs WHERE idempotency_key = ?", (key,)
             ).fetchone()
@@ -351,7 +356,7 @@ class AegisJobStore:
     # -- reads -------------------------------------------------------------- #
     def get(self, job_id: str) -> AegisJob:
         self.initialize()
-        with self._connect() as db:
+        with self._reading() as db:
             row = db.execute("SELECT * FROM aegis_jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"unknown AEGIS job: {job_id}")
@@ -360,7 +365,7 @@ class AegisJobStore:
     def execution_record(self, job_id: str) -> JobExecution:
         """Return the server-side record a worker needs, including the scope path."""
         self.initialize()
-        with self._connect() as db:
+        with self._reading() as db:
             row = db.execute("SELECT * FROM aegis_jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"unknown AEGIS job: {job_id}")
@@ -387,7 +392,7 @@ class AegisJobStore:
             query += " WHERE state = ?"
             params = (state.value, limit)
         query += " ORDER BY created_at DESC LIMIT ?"
-        with self._connect() as db:
+        with self._reading() as db:
             return [_job(row) for row in db.execute(query, params).fetchall()]
 
     # -- leases ------------------------------------------------------------- #
@@ -494,7 +499,7 @@ class AegisJobStore:
         return self.get(job_id)
 
     def cancellation_requested(self, job_id: str) -> bool:
-        with self._connect() as db:
+        with self._reading() as db:
             row = db.execute(
                 "SELECT cancel_requested FROM aegis_jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
@@ -592,6 +597,45 @@ class AegisJobStore:
             return 0.0
         return base + base * 0.25 * (secrets.randbelow(1_000) / 1_000.0)
 
+    def prune(
+        self, *, older_than_days: int, dry_run: bool = False, now: datetime | None = None
+    ) -> tuple[int, tuple[str, ...]]:
+        """Delete finished jobs older than the retention window.
+
+        Only terminal jobs are removed: queued and running work is never pruned
+        out from under a worker, however old it is. Deletion runs with
+        ``secure_delete`` on and is followed by a VACUUM, so the removed
+        targets, errors and results do not linger in the database file.
+        """
+        if not 0 <= older_than_days <= 3_650:
+            raise ValueError("older_than_days must be between 0 and 3650")
+        self.initialize()
+        cutoff = ((now or datetime.now(UTC)) - timedelta(days=older_than_days)).isoformat()
+        query = (
+            "SELECT job_id FROM aegis_jobs WHERE state NOT IN (?, ?) "
+            "AND COALESCE(finished_at, updated_at) < ?"
+        )
+        parameters = (JobState.QUEUED.value, JobState.RUNNING.value, cutoff)
+        with self._reading() as db:
+            doomed = [row["job_id"] for row in db.execute(query, parameters).fetchall()]
+        if dry_run or not doomed:
+            return len(doomed), tuple(doomed)
+        with self._transaction(immediate=True) as db:
+            db.executemany(
+                "DELETE FROM aegis_jobs WHERE job_id = ?", [(job_id,) for job_id in doomed]
+            )
+        # VACUUM cannot run inside a transaction; it rebuilds the file so the
+        # freed pages are released rather than kept for reuse. Truncating the
+        # write-ahead log afterwards drops the pre-deletion page images that
+        # would otherwise stay readable in the -wal file.
+        vacuum = self._connect()
+        try:
+            vacuum.execute("VACUUM")
+            vacuum.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            vacuum.close()
+        return len(doomed), tuple(doomed)
+
     # -- connections -------------------------------------------------------- #
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=10)
@@ -603,7 +647,24 @@ class AegisJobStore:
         # caller is told it happened.
         db.execute("PRAGMA journal_mode = WAL")
         db.execute("PRAGMA synchronous = FULL")
+        # Deleted rows carry targets, errors and results. secure_delete zeroes
+        # the freed pages instead of leaving that content in the file.
+        db.execute("PRAGMA secure_delete = ON")
         return db
+
+    @contextmanager
+    def _reading(self) -> Iterator[sqlite3.Connection]:
+        """Run one read and always close the handle.
+
+        ``with sqlite3.connect(...)`` manages a *transaction*, not the
+        connection: using it alone leaks the handle, and in WAL mode a leaked
+        reader also keeps the write-ahead log from ever being checkpointed away.
+        """
+        db = self._connect()
+        try:
+            yield db
+        finally:
+            db.close()
 
     @contextmanager
     def _transaction(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:

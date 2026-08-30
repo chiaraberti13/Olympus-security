@@ -57,8 +57,14 @@ identities_app = typer.Typer(
     no_args_is_help=True,
     help="API identities: scoped credentials with rotation, expiry and revocation.",
 )
+retention_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Retention and best-effort secure deletion of logs, artefacts and jobs.",
+)
 aegis_app.add_typer(jobs_app, name="jobs")
 aegis_app.add_typer(identities_app, name="identities")
+aegis_app.add_typer(retention_app, name="retention")
 
 #: Credential hashes are deployment state, not a report: they follow the
 #: state directory rather than the working directory.
@@ -439,6 +445,36 @@ def aegis_jobs_work(
         raise typer.Exit(code=4)
 
 
+@jobs_app.command("prune")
+def aegis_jobs_prune(
+    older_than_days: int = typer.Option(
+        30, "--older-than-days", min=0, max=3_650, help="Keep finished jobs for this long."
+    ),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Report what would be deleted."),
+) -> None:
+    """Delete finished jobs past the retention window; queued/running work is kept."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    count, job_ids = AegisJobStore(Path(database)).prune(
+        older_than_days=older_than_days, dry_run=dry_run
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "pruned": count,
+                "job_ids": list(job_ids),
+                "older_than_days": older_than_days,
+                "dry_run": dry_run,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
 @jobs_app.command("recover")
 def aegis_jobs_recover(
     database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
@@ -602,6 +638,69 @@ def _emit_secret(identity_id: str, secret: str, action: str) -> None:
             indent=2,
         )
     )
+
+
+@retention_app.command("prune")
+def aegis_retention_prune(
+    directory: str = typer.Argument(..., help="Directory of artefacts to bound."),
+    pattern: str = typer.Option("*", "--pattern", help="Filename glob within that directory."),
+    older_than_days: int | None = typer.Option(
+        None, "--older-than-days", min=0, max=3_650, help="Delete artefacts older than this."
+    ),
+    max_files: int | None = typer.Option(
+        None, "--max-files", min=0, max=10_000, help="Keep at most this many, oldest deleted."
+    ),
+    max_bytes: int | None = typer.Option(
+        None, "--max-bytes", min=0, help="Keep at most this many bytes, oldest deleted."
+    ),
+    insecure: bool = typer.Option(
+        False, "--no-overwrite", help="Unlink without overwriting the contents first."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Enforce an age/count/size budget over an artefact directory."""
+    from pathlib import Path
+
+    from olympus.core.retention import RetentionError, RetentionPolicy, prune_paths
+
+    try:
+        report = prune_paths(
+            Path(directory),
+            policy=RetentionPolicy(
+                max_age_days=older_than_days,
+                max_files=max_files,
+                max_total_bytes=max_bytes,
+                secure=not insecure,
+            ),
+            pattern=pattern,
+            dry_run=dry_run,
+        )
+    except RetentionError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+
+
+@retention_app.command("rotate-log")
+def aegis_retention_rotate_log(
+    path: str = typer.Argument(..., help="Append-only log to roll over."),
+    max_bytes: int = typer.Option(50_000_000, "--max-bytes", min=1),
+    keep: int = typer.Option(5, "--keep", min=0, max=100, help="Generations to retain."),
+    insecure: bool = typer.Option(False, "--no-overwrite"),
+) -> None:
+    """Roll an audit log once it passes a size budget, securely dropping the oldest."""
+    from pathlib import Path
+
+    from olympus.core.retention import RetentionError, rotate_log
+
+    try:
+        report = rotate_log(
+            Path(path), max_bytes=max_bytes, keep=keep, secure=not insecure
+        )
+    except RetentionError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
 
 
 @aegis_app.command("deps")

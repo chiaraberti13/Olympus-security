@@ -15,7 +15,9 @@ from typer.testing import CliRunner
 from olympus.aegis.application import AegisApplicationService
 from olympus.aegis.base import ScannerAdapter
 from olympus.aegis.jobs import (
+    ACTIVE_STATES,
     SCHEMA_VERSION,
+    TERMINAL_STATES,
     AegisJob,
     AegisJobStore,
     AegisWorker,
@@ -617,3 +619,109 @@ def test_recover_cli_reports_what_it_requeued(tmp_path: Path) -> None:
     payload = json.loads(recovered.output)
     assert payload["recovered"] == 1
     assert payload["jobs"][0]["state"] == "failed"
+
+
+# --------------------------------------------------------------------------- #
+# Retention
+# --------------------------------------------------------------------------- #
+def test_every_job_state_is_either_active_or_terminal() -> None:
+    """A new state must be classified, or retention and recovery would skip it."""
+    assert set(JobState) == ACTIVE_STATES | TERMINAL_STATES
+    assert not ACTIVE_STATES & TERMINAL_STATES
+
+
+def _finish(store: AegisJobStore, tmp_path: Path, *, key: str) -> AegisJob:
+    job = _submit(store, tmp_path, idempotency_key=key)
+    store.claim_next("worker-a")
+    return store.complete(
+        job.job_id, worker_id="worker-a", state=JobState.SUCCEEDED, result={"state": "live"}
+    )
+
+
+def _age_job(store: AegisJobStore, job_id: str, days: int) -> None:
+    stamp = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with sqlite3.connect(store.path) as db:
+        db.execute(
+            "UPDATE aegis_jobs SET finished_at = ?, updated_at = ? WHERE job_id = ?",
+            (stamp, stamp, job_id),
+        )
+
+
+def test_finished_jobs_are_pruned_past_the_retention_window(tmp_path: Path) -> None:
+    store = AegisJobStore(tmp_path / "jobs.sqlite3")
+    old = _finish(store, tmp_path, key="old")
+    recent = _finish(store, tmp_path, key="recent")
+    _age_job(store, old.job_id, 90)
+
+    count, pruned = store.prune(older_than_days=30)
+
+    assert count == 1 and pruned == (old.job_id,)
+    with pytest.raises(KeyError):
+        store.get(old.job_id)
+    assert store.get(recent.job_id).state is JobState.SUCCEEDED
+
+
+def test_pruning_never_removes_queued_or_running_work(tmp_path: Path) -> None:
+    store = AegisJobStore(tmp_path / "jobs.sqlite3")
+    queued = _submit(store, tmp_path, idempotency_key="queued")
+    running = _submit(store, tmp_path, idempotency_key="running")
+    store.claim_next("worker-a")
+    for job_id in (queued.job_id, running.job_id):
+        _age_job(store, job_id, 400)
+
+    count, _ = store.prune(older_than_days=1)
+
+    assert count == 0
+    assert {job.job_id for job in store.list()} == {queued.job_id, running.job_id}
+
+
+def test_a_pruning_dry_run_changes_nothing(tmp_path: Path) -> None:
+    store = AegisJobStore(tmp_path / "jobs.sqlite3")
+    old = _finish(store, tmp_path, key="old")
+    _age_job(store, old.job_id, 90)
+
+    count, pruned = store.prune(older_than_days=30, dry_run=True)
+
+    assert count == 1 and pruned == (old.job_id,)
+    assert store.get(old.job_id).job_id == old.job_id
+
+
+def test_pruned_content_does_not_linger_in_the_database_file(tmp_path: Path) -> None:
+    store = AegisJobStore(tmp_path / "jobs.sqlite3")
+    job = store.submit(
+        scanner="test-engine",
+        target="secret-host.internal.example",
+        target_kind="host",
+        scope_path=_scope(tmp_path / "scope.json"),
+        authorized=True,
+    )
+    store.claim_next("worker-a")
+    store.complete(job.job_id, worker_id="worker-a", state=JobState.SUCCEEDED, result={})
+    _age_job(store, job.job_id, 90)
+    assert b"secret-host.internal.example" in store.path.read_bytes()
+
+    store.prune(older_than_days=30)
+
+    assert b"secret-host.internal.example" not in store.path.read_bytes()
+
+
+def test_prune_validates_its_window(tmp_path: Path) -> None:
+    store = AegisJobStore(tmp_path / "jobs.sqlite3")
+    with pytest.raises(ValueError, match="older_than_days"):
+        store.prune(older_than_days=99_999)
+
+
+def test_prune_cli_reports_what_it_removed(tmp_path: Path) -> None:
+    database = tmp_path / "jobs.sqlite3"
+    store = AegisJobStore(database)
+    old = _finish(store, tmp_path, key="old")
+    _age_job(store, old.job_id, 90)
+
+    result = runner.invoke(
+        app,
+        ["aegis", "jobs", "prune", "-d", str(database), "--older-than-days", "30"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["pruned"] == 1 and payload["job_ids"] == [old.job_id]

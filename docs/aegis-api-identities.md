@@ -101,7 +101,7 @@ olympus aegis api --identities ~/.local/state/olympus/aegis-api-identities.json 
   --host 10.0.0.5 --ssl-certfile server.crt --ssl-keyfile server.key
 ```
 
-## Still open
+## Log retention
 
-Tracked in `ROADMAP_HARDENING.md`: retention and secure deletion of logs and
-artefacts.
+The per-request audit log grows for as long as the API serves traffic. Bound it
+with `olympus aegis retention rotate-log`; see [`retention.md`](retention.md).

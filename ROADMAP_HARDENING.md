@@ -81,7 +81,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] Applicare il limite body durante lo streaming, anche senza `Content-Length`.
 - [x] Supportare identità API multiple, scope, rotazione, revoca e rate limiting.
 - [x] Imporre TLS per bind non-loopback e aggiungere correlation/request/audit ID.
-- [ ] Aggiungere retention e cancellazione sicura di log e artefatti.
+- [x] Aggiungere retention e cancellazione sicura di log e artefatti.
 
 ### Athena
 
@@ -202,3 +202,4 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-30 | P1 isolamento esecuzioni | in verifica | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |
 | 2026-08-30 | P1 job plane AEGIS | in verifica | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |
 | 2026-08-30 | P1 identità API AEGIS | in verifica | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
+| 2026-08-30 | P1 retention AEGIS | in verifica | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
