@@ -8,7 +8,9 @@ runtime surface is replaced by the native AEGIS control plane.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from olympus.cli import app
@@ -126,3 +128,49 @@ def test_doctor_commands_run() -> None:
         assert result.exit_code == 0, (argv, result.output)
         payload = json.loads(result.output)
         assert payload.get("checks")
+
+
+def test_diagnostics_work_from_an_installation_without_the_vendored_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wheel install has no vendor/ tree; diagnostics must report, not crash."""
+    monkeypatch.setenv("OLYMPUS_VENDOR_DIR", str(tmp_path))
+
+    for argv in (["doctor"], ["aegis", "doctor"], ["aegis", "deps"]):
+        result = runner.invoke(app, argv)
+        assert result.exit_code == 0, (argv, result.output)
+        assert json.loads(result.output)["checks"]
+
+    reported = json.loads(runner.invoke(app, ["aegis", "doctor"]).output)
+    vendor = next(
+        item for item in reported["checks"] if item["name"].startswith("vendor:")
+    )
+    assert vendor["ok"] is False and vendor["optional"] is True
+    assert "not installed" in vendor["detail"]
+
+    info = json.loads(runner.invoke(app, ["aegis", "info"]).output)
+    assert info["vendored_source_present"] is False
+    assert info["path"] is None
+
+
+def test_commands_that_need_the_vendored_tree_fail_with_a_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OLYMPUS_VENDOR_DIR", str(tmp_path))
+
+    # `serve` is quarantined behind its own opt-in, which it checks first.
+    for argv in (
+        ["aegis", "migrate"],
+        ["aegis", "workers"],
+        ["aegis", "serve", "--allow-legacy-web"],
+    ):
+        result = runner.invoke(app, argv)
+        assert result.exit_code == 2, (argv, result.output)
+        assert "OLYMPUS_VENDOR_DIR" in result.output
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_diagnostics_find_the_vendored_tree_in_a_checkout() -> None:
+    reported = json.loads(runner.invoke(app, ["aegis", "doctor"]).output)
+    vendor = next(item for item in reported["checks"] if item["name"].startswith("vendor:"))
+    assert vendor["ok"] is True, "the checkout ships the vendored tree"

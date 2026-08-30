@@ -264,9 +264,11 @@ def test_state_live_runs_real_process() -> None:
     assert result.findings and result.findings[0].title == "live finding"
     document = result.to_dict()
     assert document["schema_name"] == "olympus.aegis-result"
-    assert document["schema_version"] == "1.0.0"
+    assert document["schema_version"] == "1.1.0"
     assert document["real_execution"] is True
     assert document["resolved_addresses"] == ["127.0.0.1"]
+    termination = document["termination"]
+    assert isinstance(termination, dict) and termination["cause"] == "completed"
 
 
 def test_nonzero_process_is_failed_before_parser() -> None:
@@ -385,7 +387,7 @@ def test_scope_loader_and_application_output_audit(tmp_path: Path) -> None:
     )
     assert result.state is ExecutionState.LIVE
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["target"].endswith("api_key=%5BREDACTED%5D")
+    assert payload["target"].endswith("api_key=[REDACTED]")
     assert payload["findings"][0]["schema_name"] == "olympus.finding"
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     audit_text = audit.read_text(encoding="utf-8")

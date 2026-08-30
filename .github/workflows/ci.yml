@@ -41,14 +41,32 @@ jobs:
         run: |
           python -m venv /tmp/olympus-wheel-smoke
           /tmp/olympus-wheel-smoke/bin/python -m pip install dist/*.whl
+      # The wheel does not package the vendored upstream tree, so these run in
+      # exactly the environment a user installing from PyPI would have. A
+      # command that only works inside a checkout fails here.
       - name: Smoke-test installed CLI surfaces
         run: |
+          set -euo pipefail
           OLYMPUS=/tmp/olympus-wheel-smoke/bin/olympus
           "$OLYMPUS" --help
           "$OLYMPUS" version
           for module in core argus athena helios artemis proteus hermes apollo minerva vulcan metis aegis; do
             "$OLYMPUS" "$module" --help
           done
+          for group in "aegis jobs" "aegis identities" "aegis retention"; do
+            "$OLYMPUS" $group --help
+          done
+
+      - name: Smoke-test diagnostics without a vendored source tree
+        run: |
+          set -euo pipefail
+          OLYMPUS=/tmp/olympus-wheel-smoke/bin/olympus
+          "$OLYMPUS" doctor
+          "$OLYMPUS" aegis doctor
+          "$OLYMPUS" aegis deps
+          "$OLYMPUS" aegis info
+          "$OLYMPUS" aegis scanners
+          "$OLYMPUS" aegis capabilities
 
   secret-scan:
     name: gitleaks (blocking working-tree + history scan)

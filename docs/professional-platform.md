@@ -52,6 +52,11 @@ responses carry no-store and browser-hardening headers.
 Workers execute the same persisted jobs with `olympus aegis jobs work`, through
 the canonical native application service. API submission cannot bypass scope,
 authorization, SSRF validation, deadlines, output limits or redacted audit.
+Claims are leases renewed by a heartbeat, so a worker that dies releases its job
+instead of stranding it; see [`aegis-jobs.md`](aegis-jobs.md) for the lifecycle
+states, retry budget, idempotency keys and schema migrations, and
+[`aegis-api-identities.md`](aegis-api-identities.md) for scoped API credentials,
+rotation, revocation, rate limits and per-request audit ids.
 
 ## Professional end-to-end workflow
 

@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 
-from olympus.core.paths import audit_log_path
+from olympus.core.paths import audit_log_path, state_file_path
 from olympus.integrations import scanners as scanner_registry
 from olympus.integrations.capabilities import inventory_document
 from olympus.integrations.diagnostics import (
@@ -30,7 +31,13 @@ from olympus.integrations.diagnostics import (
     check_tcp,
     check_writable_dir,
 )
-from olympus.integrations.vendored import VAP_DIR, ensure_on_path, tool_path
+from olympus.integrations.vendored import (
+    VAP_DIR,
+    VendoredToolNotFoundError,
+    ensure_on_path,
+    optional_tool_path,
+    tool_path,
+)
 
 
 def _os_environ() -> dict[str, str]:
@@ -52,7 +59,23 @@ jobs_app = typer.Typer(
     no_args_is_help=True,
     help="Durable native AEGIS job queue (SQLite, no Redis/Celery required).",
 )
+identities_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="API identities: scoped credentials with rotation, expiry and revocation.",
+)
+retention_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Retention and best-effort secure deletion of logs, artefacts and jobs.",
+)
 aegis_app.add_typer(jobs_app, name="jobs")
+aegis_app.add_typer(identities_app, name="identities")
+aegis_app.add_typer(retention_app, name="retention")
+
+#: Credential hashes are deployment state, not a report: they follow the
+#: state directory rather than the working directory.
+DEFAULT_IDENTITY_REGISTER = str(state_file_path("aegis-api-identities.json"))
 
 #: AEGIS writes this audit log whether or not the operator asked for it, so it
 #: defaults to the per-user state directory rather than the working directory.
@@ -63,6 +86,31 @@ def _emit_report(report: Report) -> None:
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
 
 
+def _require_vendored(name: str) -> Path:
+    """Return a vendored tool's root, or exit with the reason it is unavailable."""
+    try:
+        return tool_path(name)
+    except VendoredToolNotFoundError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+def _vendor_check() -> Check:
+    """Report whether the vendored upstream tree this command can use is present."""
+    path = optional_tool_path(VAP_DIR)
+    if path is None:
+        return Check(
+            f"vendor:{VAP_DIR}",
+            False,
+            "not installed: the vendored upstream source is not packaged in the wheel. "
+            "Native AEGIS commands work without it; 'aegis serve|migrate|workers' need "
+            "a checkout or OLYMPUS_VENDOR_DIR.",
+            optional=True,
+        )
+    ensure_on_path(VAP_DIR)
+    return Check(f"vendor:{VAP_DIR}", True, str(path), optional=True)
+
+
 @aegis_app.command("api")
 def aegis_api(
     database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
@@ -70,13 +118,20 @@ def aegis_api(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8443, "--port", min=1, max=65_535),
     api_key_env: str = typer.Option("OLYMPUS_AEGIS_API_KEY", "--api-key-env"),
+    identities: str = typer.Option(
+        "", "--identities", help="Identity register with scoped, revocable credentials."
+    ),
+    audit: str = typer.Option(
+        DEFAULT_AEGIS_AUDIT_LOG, "--audit", help="Redacted per-request audit log."
+    ),
     ssl_certfile: str = typer.Option("", "--ssl-certfile"),
     ssl_keyfile: str = typer.Option("", "--ssl-keyfile"),
 ) -> None:
     """Serve the authenticated native AEGIS API.
 
-    Non-loopback binds require both a TLS certificate and key. The API secret is
-    read from an environment variable and is never accepted on the command line.
+    Non-loopback binds require both a TLS certificate and key. Credentials come
+    from an identity register or a single environment variable, never from the
+    command line.
     """
     import ipaddress
     import os
@@ -93,9 +148,9 @@ def aegis_api(
         )
         raise typer.Exit(code=2)
     api_key = os.environ.get(api_key_env, "")
-    if not api_key:
+    if not api_key and not identities:
         typer.echo(
-            f"olympus: required API key environment variable is not set: {api_key_env}",
+            f"olympus: set {api_key_env} or pass --identities with a credential register",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -110,6 +165,8 @@ def aegis_api(
                 database=Path(database),
                 scope_directory=Path(scope_directory),
                 api_key=api_key,
+                identities_path=Path(identities) if identities else None,
+                audit_path=Path(audit) if audit else None,
             )
         )
     except (ImportError, OSError, ValueError) as exc:
@@ -162,7 +219,7 @@ def aegis_serve(
             err=True,
         )
         raise typer.Exit(code=2)
-    path = tool_path(VAP_DIR)
+    path = _require_vendored(VAP_DIR)
     env = {**_os_environ(), "VAP_HOST": host, "VAP_PORT": str(port)}
     typer.echo(
         f"olympus: starting quarantined legacy VAP web app on http://{host}:{port} "
@@ -176,7 +233,7 @@ def aegis_serve(
 @aegis_app.command("migrate")
 def aegis_migrate() -> None:
     """Run the AEGIS database migrations (alembic upgrade head)."""
-    path = tool_path(VAP_DIR)
+    path = _require_vendored(VAP_DIR)
     completed = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=str(path),
@@ -192,7 +249,7 @@ def aegis_workers(
     loglevel: str = typer.Option("info", "--loglevel", help="Celery worker log level."),
 ) -> None:
     """Start an AEGIS Celery worker that runs queued scans (Ctrl-C to stop)."""
-    path = tool_path(VAP_DIR)
+    path = _require_vendored(VAP_DIR)
     typer.echo(f"olympus: starting AEGIS Celery worker on queue '{queue}' (from {path})", err=True)
     completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
         ["celery", "-A", "celery_app.celery_app", "worker", "-Q", queue, "--loglevel", loglevel],  # noqa: S607
@@ -292,6 +349,14 @@ def aegis_jobs_submit(
     kind: str = typer.Option("host", "--kind"),
     scope: str = typer.Option(..., "--scope"),
     database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    idempotency_key: str | None = typer.Option(
+        None,
+        "--idempotency-key",
+        help="Resubmitting the same key returns the existing job instead of queueing a second.",
+    ),
+    max_attempts: int = typer.Option(
+        1, "--max-attempts", min=1, max=10, help="Execution attempts before the job is failed."
+    ),
     i_am_authorized: bool = typer.Option(False, "--i-am-authorized"),
 ) -> None:
     """Persist one authorized scan job without executing it."""
@@ -302,13 +367,19 @@ def aegis_jobs_submit(
     if not i_am_authorized:
         typer.echo("olympus: queued live work requires --i-am-authorized", err=True)
         raise typer.Exit(code=4)
-    job = AegisJobStore(Path(database)).submit(
-        scanner=scanner,
-        target=target,
-        target_kind=kind,
-        scope_path=Path(scope),
-        authorized=True,
-    )
+    try:
+        job = AegisJobStore(Path(database)).submit(
+            scanner=scanner,
+            target=target,
+            target_kind=kind,
+            scope_path=Path(scope),
+            authorized=True,
+            idempotency_key=idempotency_key,
+            max_attempts=max_attempts,
+        )
+    except ValueError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
     _emit_job(job)
 
 
@@ -333,7 +404,7 @@ def aegis_jobs_list(
         json.dumps(
             {
                 "schema_name": "olympus.aegis-job-list",
-                "schema_version": "1.0.0",
+                "schema_version": "2.0.0",
                 "count": len(jobs),
                 "jobs": [job.model_dump(mode="json") for job in jobs],
             },
@@ -381,26 +452,294 @@ def aegis_jobs_cancel(
 def aegis_jobs_work(
     database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
     audit: str = typer.Option(".olympus/aegis-audit.ndjson", "--audit"),
+    worker_id: str | None = typer.Option(
+        None, "--worker-id", help="Stable identity for this worker's leases."
+    ),
 ) -> None:
     """Claim and execute at most one job; safe for cron/systemd/container loops."""
     from pathlib import Path
 
-    from olympus.aegis.jobs import AegisJobStore, AegisWorker
+    from olympus.aegis.jobs import AegisJobStore, AegisWorker, generate_worker_id
 
-    job = AegisWorker(AegisJobStore(Path(database))).run_next(audit_path=Path(audit))
+    store = AegisJobStore(Path(database))
+    try:
+        worker = AegisWorker(store, worker_id=worker_id or generate_worker_id())
+    except ValueError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    job = worker.run_next(audit_path=Path(audit))
     if job is None:
         typer.echo(json.dumps({"claimed": False, "reason": "queue-empty"}, indent=2))
         return
     _emit_job(job)
-    if job.state.value == "failed":
+    # A refused, broken or timed-out job is not a successful worker run.
+    if job.state.value in {"failed", "timed_out", "policy_denied"}:
         raise typer.Exit(code=4)
+
+
+@jobs_app.command("prune")
+def aegis_jobs_prune(
+    older_than_days: int = typer.Option(
+        30, "--older-than-days", min=0, max=3_650, help="Keep finished jobs for this long."
+    ),
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Report what would be deleted."),
+) -> None:
+    """Delete finished jobs past the retention window; queued/running work is kept."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    count, job_ids = AegisJobStore(Path(database)).prune(
+        older_than_days=older_than_days, dry_run=dry_run
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "pruned": count,
+                "job_ids": list(job_ids),
+                "older_than_days": older_than_days,
+                "dry_run": dry_run,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@jobs_app.command("recover")
+def aegis_jobs_recover(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Requeue (or fail) jobs whose worker stopped renewing its lease."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    recovered = AegisJobStore(Path(database)).recover_expired_leases()
+    typer.echo(
+        json.dumps(
+            {
+                "recovered": len(recovered),
+                "jobs": [job.model_dump(mode="json") for job in recovered],
+            },
+            indent=2,
+            sort_keys=True,
+            default=str,
+        )
+    )
+
+
+def _identity_register(path: str, *, create: bool = False) -> object:
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityRegister, load_register
+
+    location = Path(path)
+    if not location.exists():
+        if create:
+            return IdentityRegister()
+        typer.echo(f"olympus: identity register not found: {location}", err=True)
+        raise typer.Exit(code=2)
+    return load_register(location)
+
+
+@identities_app.command("init")
+def aegis_identities_init(
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Create an empty identity register (owner-only)."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityRegister, save_register
+
+    location = Path(register_path)
+    if location.exists():
+        typer.echo(f"olympus: identity register already exists: {location}", err=True)
+        raise typer.Exit(code=2)
+    save_register(location, IdentityRegister())
+    typer.echo(json.dumps({"register": str(location), "identities": 0}, indent=2))
+
+
+@identities_app.command("add")
+def aegis_identities_add(
+    identity_id: str = typer.Argument(..., help="Identity name, e.g. 'ops-console'."),
+    scopes: str = typer.Option(
+        "jobs:read", "--scopes", help="Comma-separated scopes granted to this identity."
+    ),
+    rate_limit: int = typer.Option(120, "--rate-limit", min=1, max=100_000),
+    expires_in_days: int = typer.Option(
+        0, "--expires-in-days", min=0, max=3_650, help="0 keeps the credential open-ended."
+    ),
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Add one scoped identity and print its secret exactly once."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityError, add_identity, save_register
+
+    register = _identity_register(register_path, create=True)
+    try:
+        updated, secret = add_identity(
+            register,  # type: ignore[arg-type]
+            identity_id=identity_id,
+            scopes=[item.strip() for item in scopes.split(",") if item.strip()],
+            rate_limit_per_minute=rate_limit,
+            expires_in_days=expires_in_days or None,
+        )
+    except IdentityError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    save_register(Path(register_path), updated)
+    _emit_secret(identity_id, secret, "created")
+
+
+@identities_app.command("rotate")
+def aegis_identities_rotate(
+    identity_id: str = typer.Argument(...),
+    overlap_seconds: int = typer.Option(
+        300,
+        "--overlap-seconds",
+        min=0,
+        max=604_800,
+        help="How long the previous secret keeps working; 0 revokes it immediately.",
+    ),
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Issue a new secret, keeping the old one valid for a bounded overlap."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityError, rotate_identity, save_register
+
+    try:
+        updated, secret = rotate_identity(
+            _identity_register(register_path),  # type: ignore[arg-type]
+            identity_id,
+            overlap_seconds=overlap_seconds,
+        )
+    except IdentityError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    save_register(Path(register_path), updated)
+    _emit_secret(identity_id, secret, "rotated")
+
+
+@identities_app.command("revoke")
+def aegis_identities_revoke(
+    identity_id: str = typer.Argument(...),
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Revoke an identity immediately, including any secret still rotating."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityError, revoke_identity, save_register
+
+    try:
+        updated = revoke_identity(
+            _identity_register(register_path), identity_id  # type: ignore[arg-type]
+        )
+    except IdentityError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    save_register(Path(register_path), updated)
+    typer.echo(json.dumps({"identity_id": identity_id, "revoked": True}, indent=2))
+
+
+@identities_app.command("list")
+def aegis_identities_list(
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """List identities, their scopes and status. Secrets are never stored."""
+    register = _identity_register(register_path)
+    identities = register.public_view()  # type: ignore[attr-defined]
+    typer.echo(
+        json.dumps({"count": len(identities), "identities": identities}, indent=2, sort_keys=True)
+    )
+
+
+def _emit_secret(identity_id: str, secret: str, action: str) -> None:
+    """Print a credential once; only its SHA-256 is written to the register."""
+    typer.echo(
+        json.dumps(
+            {
+                "identity_id": identity_id,
+                "action": action,
+                "secret": secret,
+                "notice": "store this secret now: only its hash is kept on disk",
+            },
+            indent=2,
+        )
+    )
+
+
+@retention_app.command("prune")
+def aegis_retention_prune(
+    directory: str = typer.Argument(..., help="Directory of artefacts to bound."),
+    pattern: str = typer.Option("*", "--pattern", help="Filename glob within that directory."),
+    older_than_days: int | None = typer.Option(
+        None, "--older-than-days", min=0, max=3_650, help="Delete artefacts older than this."
+    ),
+    max_files: int | None = typer.Option(
+        None, "--max-files", min=0, max=10_000, help="Keep at most this many, oldest deleted."
+    ),
+    max_bytes: int | None = typer.Option(
+        None, "--max-bytes", min=0, help="Keep at most this many bytes, oldest deleted."
+    ),
+    insecure: bool = typer.Option(
+        False, "--no-overwrite", help="Unlink without overwriting the contents first."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Enforce an age/count/size budget over an artefact directory."""
+    from pathlib import Path
+
+    from olympus.core.retention import RetentionError, RetentionPolicy, prune_paths
+
+    try:
+        report = prune_paths(
+            Path(directory),
+            policy=RetentionPolicy(
+                max_age_days=older_than_days,
+                max_files=max_files,
+                max_total_bytes=max_bytes,
+                secure=not insecure,
+            ),
+            pattern=pattern,
+            dry_run=dry_run,
+        )
+    except RetentionError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+
+
+@retention_app.command("rotate-log")
+def aegis_retention_rotate_log(
+    path: str = typer.Argument(..., help="Append-only log to roll over."),
+    max_bytes: int = typer.Option(50_000_000, "--max-bytes", min=1),
+    keep: int = typer.Option(5, "--keep", min=0, max=100, help="Generations to retain."),
+    insecure: bool = typer.Option(False, "--no-overwrite"),
+) -> None:
+    """Roll an audit log once it passes a size budget, securely dropping the oldest."""
+    from pathlib import Path
+
+    from olympus.core.retention import RetentionError, rotate_log
+
+    try:
+        report = rotate_log(
+            Path(path), max_bytes=max_bytes, keep=keep, secure=not insecure
+        )
+    except RetentionError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
 
 
 @aegis_app.command("deps")
 def aegis_deps() -> None:
     """Report AEGIS runtime dependencies: web stack, services, and scanner binaries."""
     report = Report("aegis deps")
-    ensure_on_path(VAP_DIR)
+    report.add(_vendor_check())
     for module in ("fastapi", "uvicorn", "sqlalchemy", "alembic", "celery", "redis"):
         report.add(check_python_module(module, optional=True))
     for spec in scanner_registry.REGISTRY:
@@ -414,13 +753,15 @@ def aegis_info() -> None:
     """Show where AEGIS lives and whether its stack is importable."""
     import importlib.util
 
-    path = tool_path(VAP_DIR)
-    ensure_on_path(VAP_DIR)
+    path = optional_tool_path(VAP_DIR)
+    if path is not None:
+        ensure_on_path(VAP_DIR)
     importable = importlib.util.find_spec("fastapi") is not None
     binaries = sum(1 for s in scanner_registry.REGISTRY if s.available())
     payload = {
         "name": "AEGIS (vendored Vulnerability Assessment Platform)",
-        "path": str(path),
+        "path": str(path) if path is not None else None,
+        "vendored_source_present": path is not None,
         "scanners": len(scanner_registry.REGISTRY),
         "scanner_binaries_available": binaries,
         "web_stack_importable": importable,
@@ -508,7 +849,7 @@ def aegis_doctor() -> None:
     import os
 
     report = Report("aegis doctor")
-    ensure_on_path(VAP_DIR)
+    report.add(_vendor_check())
     for module in ("fastapi", "uvicorn", "sqlalchemy", "alembic", "celery", "redis"):
         report.add(check_python_module(module, optional=True))
     # Redis reachability (parsed from the broker URL host/port, best effort).
@@ -531,7 +872,30 @@ def aegis_doctor() -> None:
             f"{binaries}/{len(scanner_registry.REGISTRY)} scanner binaries on PATH",
         )
     )
+    report.add(sandbox_check())
     _emit_report(report)
+
+
+def sandbox_check() -> Check:
+    """Report how confined scanner processes will be (see docs/aegis-sandbox.md)."""
+    import os
+
+    from olympus.aegis.sandbox import SandboxError, SandboxPolicy
+
+    try:
+        policy = SandboxPolicy.from_environment()
+        identity = policy.resolve_identity()
+    except SandboxError as exc:
+        return Check("sandbox:isolation", False, str(exc), optional=True)
+    privileged_parent = os.name == "posix" and os.geteuid() == 0
+    if identity is not None:
+        confined, detail = True, f"scanners drop to {identity.name} (uid {identity.uid})"
+    elif privileged_parent:
+        confined, detail = False, "AEGIS_SANDBOX_ALLOW_ROOT is set: scanners would run as ROOT"
+    else:
+        confined, detail = True, "parent process is already unprivileged"
+    limits = ", ".join(f"{name}={value}" for name, value in sorted(policy.describe().items()))
+    return Check("sandbox:isolation", confined, f"{detail}; limits {limits}", optional=True)
 
 
 def _redis_host_port(url: str) -> tuple[str, int]:

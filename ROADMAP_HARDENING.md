@@ -64,24 +64,24 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### Isolamento esecuzioni
 
-- [ ] Eseguire scanner come utente non privilegiato.
-- [ ] Limitare CPU, RAM, PID, file descriptor, output e spazio temporaneo.
-- [ ] Usare process group e escalation terminate → kill.
-- [ ] Applicare seccomp/AppArmor, filesystem read-only e directory temporanee isolate.
+- [x] Eseguire scanner come utente non privilegiato.
+- [x] Limitare CPU, RAM, PID, file descriptor, output e spazio temporaneo.
+- [x] Usare process group e escalation terminate → kill.
+- [ ] Applicare seccomp/AppArmor e filesystem read-only (directory temporanee isolate: fatto).
 - [ ] Separare rete di controllo e rete di scansione.
-- [ ] Registrare cause strutturate per timeout, kill e violazioni di risorse.
+- [x] Registrare cause strutturate per timeout, kill e violazioni di risorse.
 
 ### Job AEGIS e API
 
-- [ ] Aggiungere lease, heartbeat, worker ownership e recupero dei job `RUNNING` orfani.
-- [ ] Implementare retry con limite, backoff e idempotency key.
-- [ ] Versionare lo schema SQLite e introdurre migrazioni, WAL e busy timeout.
-- [ ] Separare `FAILED`, `PARTIAL`, `CANCELLED`, `TIMED_OUT` e `POLICY_DENIED`.
-- [ ] Redigere eccezioni persistite e non esporre path assoluti via API.
+- [x] Aggiungere lease, heartbeat, worker ownership e recupero dei job `RUNNING` orfani.
+- [x] Implementare retry con limite, backoff e idempotency key.
+- [x] Versionare lo schema SQLite e introdurre migrazioni, WAL e busy timeout.
+- [x] Separare `FAILED`, `PARTIAL`, `CANCELLED`, `TIMED_OUT` e `POLICY_DENIED`.
+- [x] Redigere eccezioni persistite e non esporre path assoluti via API.
 - [x] Applicare il limite body durante lo streaming, anche senza `Content-Length`.
-- [ ] Supportare identità API multiple, scope, rotazione, revoca e rate limiting.
-- [ ] Imporre TLS per bind non-loopback e aggiungere correlation/request/audit ID.
-- [ ] Aggiungere retention e cancellazione sicura di log e artefatti.
+- [x] Supportare identità API multiple, scope, rotazione, revoca e rate limiting.
+- [x] Imporre TLS per bind non-loopback e aggiungere correlation/request/audit ID.
+- [x] Aggiungere retention e cancellazione sicura di log e artefatti.
 
 ### Athena
 
@@ -115,7 +115,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] Costruire wheel/sdist e installare il wheel in ambiente pulito in CI.
 - [x] Eseguire smoke test di tutte le superfici CLI dal wheel installato.
 - [ ] Decidere se VAP sarà pacchetto separato, container-only o ritirato.
-- [ ] Eliminare la dipendenza runtime da un path relativo `vendor/`.
+- [ ] Eliminare la dipendenza runtime da un path relativo `vendor/` (diagnostica e comandi nativi ora funzionano senza `vendor/`; `aegis serve`, `migrate` e `workers` lo richiedono ancora).
 - [ ] Definire chiaramente gli extra `dev`, `api`, `aegis` e `vap`.
 - [ ] Introdurre lock/constraints con hash e verificare metadata/licenze/file inclusi.
 - [x] Rendere TOML malformato, config esplicita assente e valori invalidi errori bloccanti.
@@ -198,4 +198,11 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
 | 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
 | 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
-| 2026-08-29 | P0 SSRF e decompressione | in verifica | IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
+| 2026-08-29 | P0 SSRF e decompressione | verificato | Ruff pulito e 859 test verdi su `main@d94bbf4`: IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
+| 2026-08-30 | P1 isolamento esecuzioni | in verifica | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |
+| 2026-08-30 | P1 job plane AEGIS | in verifica | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |
+| 2026-08-30 | P1 identità API AEGIS | in verifica | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
+| 2026-08-30 | P1 retention AEGIS | in verifica | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
+| 2026-08-30 | Wheel senza vendor | verificato | Smoke del wheel esteso a `doctor` e a `aegis doctor`, `deps`, `info`, `scanners`, `capabilities` più i nuovi gruppi CLI: la diagnostica non richiede più l'albero `vendor/` e i comandi che lo richiedono escono con codice 2 |
+
+**Nota sulle evidenze.** Le righe `in verifica` sono state validate localmente su `claude/hardening-roadmap-check-21qouj` (ruff pulito, 978 test, build del wheel e smoke CLI in ambiente pulito). La CI di repository gira su `pull_request`/`push` su `main`: diventano `CI verde` quando quel workflow ha girato sul branch.

@@ -19,6 +19,7 @@ Implemented in `olympus.aegis.config`; used by the native execution layer
 | `AEGIS_DATABASE_URL` | `VAP_DATABASE_URL` | Database URL | `sqlite:///./vap.db` |
 | `AEGIS_REPORTS_DIR` | `VAP_REPORTS_DIR` | Reports directory | `reports` |
 | `AEGIS_CELERY_BROKER_URL` | `VAP_CELERY_BROKER_URL` | Celery broker | `redis://localhost:6379/0` |
+| `AEGIS_SANDBOX_*` | — | Scanner process isolation (user, rlimits, kill grace) | see [`aegis-sandbox.md`](aegis-sandbox.md) |
 
 ## Notes
 
