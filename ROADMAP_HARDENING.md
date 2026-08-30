@@ -93,13 +93,13 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### Artemis e Helios
 
-- [ ] Non trasformare errori Artemis in risultati apparentemente puliti.
-- [ ] Esporre copertura e stati `CLEAN`, `FINDINGS`, `PARTIAL`, `FAILED`.
-- [ ] Uniformare gli exit code e il comportamento quando esistono finding.
-- [ ] Applicare rate limit, jitter e deadline globale alla discovery Artemis.
-- [ ] Distinguere in Helios porta chiusa, timeout, DNS failure, routing failure e policy denial.
-- [ ] Aggiungere concorrenza limitata, cancellazione e deadline a Helios.
-- [ ] Sostituire il solo mapping porta-servizio con fingerprinting opzionale sicuro.
+- [x] Non trasformare errori Artemis in risultati apparentemente puliti.
+- [x] Esporre copertura e stati `CLEAN`, `FINDINGS`, `PARTIAL`, `FAILED`.
+- [x] Uniformare gli exit code e il comportamento quando esistono finding.
+- [x] Applicare rate limit, jitter e deadline globale alla discovery Artemis.
+- [x] Distinguere in Helios porta chiusa, timeout, DNS failure, routing failure e policy denial.
+- [x] Aggiungere concorrenza limitata, cancellazione e deadline a Helios.
+- [x] Sostituire il solo mapping porta-servizio con fingerprinting opzionale sicuro.
 
 ### TUI
 
@@ -204,5 +204,6 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-30 | P1 identità API AEGIS | in verifica | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
 | 2026-08-30 | P1 retention AEGIS | in verifica | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
 | 2026-08-30 | Wheel senza vendor | verificato | Smoke del wheel esteso a `doctor` e a `aegis doctor`, `deps`, `info`, `scanners`, `capabilities` più i nuovi gruppi CLI: la diagnostica non richiede più l'albero `vendor/` e i comandi che lo richiedono escono con codice 2 |
+| 2026-08-30 | P1 stati e copertura Artemis/Helios | in verifica | `olympus.core.coverage`: stati `CLEAN`/`FINDINGS`/`PARTIAL`/`FAILED`, contatori planned/completed/failed/skipped con motivo strutturato ed errori redatti; exit code canonici estesi (`5` parziale, `6` fallito, `7` annullato) e adottati da Artemis, Helios e Athena; Helios distingue closed/filtered/unreachable/dns_failure/denied con concorrenza limitata, deadline unica e banner opzionale in sola lettura; Artemis conta ogni candidato con rate limit jitterato e deadline globale |
 
 **Nota sulle evidenze.** Le righe `in verifica` sono state validate localmente su `claude/hardening-roadmap-check-21qouj` (ruff pulito, 978 test, build del wheel e smoke CLI in ambiente pulito). La CI di repository gira su `pull_request`/`push` su `main`: diventano `CI verde` quando quel workflow ha girato sul branch.

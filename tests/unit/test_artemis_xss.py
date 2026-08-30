@@ -5,10 +5,10 @@ import json
 from pathlib import Path
 
 from olympus.artemis.http import HttpClientError, HttpResponse
-from olympus.artemis.xss import MARKER, check_reflected_xss
+from olympus.artemis.xss import MARKER, XssProbeResult, check_reflected_xss
+from olympus.core.coverage import FailureKind
 from olympus.core.enums import Severity
 from olympus.core.execution import ExecutionPolicy
-from olympus.core.models import Finding
 
 ASSET = "AST-2026-00001"
 BASE = "https://target.example/app/search"
@@ -50,7 +50,7 @@ class _Transport:
         return HttpResponse(url, 200, {"content-type": "text/html"}, self._body)
 
 
-def _run(tmp_path: Path, transport: _Transport) -> list[Finding]:
+def _run(tmp_path: Path, transport: _Transport) -> XssProbeResult:
     return check_reflected_xss(
         ASSET,
         BASE,
@@ -65,24 +65,35 @@ def _run(tmp_path: Path, transport: _Transport) -> list[Finding]:
 
 def test_unescaped_reflection_is_flagged_high(tmp_path: Path) -> None:
     body = f"<html><h1>Results for {MARKER}</h1></html>".encode()
-    findings = _run(tmp_path, _Transport(body))
-    assert len(findings) == 1
-    assert findings[0].severity is Severity.HIGH
-    assert "Reflected XSS" in findings[0].title
+    probe = _run(tmp_path, _Transport(body))
+    assert probe.completed is True
+    assert len(probe.findings) == 1
+    assert probe.findings[0].severity is Severity.HIGH
+    assert "Reflected XSS" in probe.findings[0].title
 
 
 def test_escaped_reflection_is_not_flagged(tmp_path: Path) -> None:
     # The app echoes the marker but HTML-escapes it -> safe, no finding.
     body = f"<html>Results for {html.escape(MARKER)}</html>".encode()
-    assert _run(tmp_path, _Transport(body)) == []
+    probe = _run(tmp_path, _Transport(body))
+    assert probe.completed is True
+    assert probe.findings == ()
 
 
 def test_no_reflection_is_not_flagged(tmp_path: Path) -> None:
-    assert _run(tmp_path, _Transport(b"<html>no echo here</html>")) == []
+    probe = _run(tmp_path, _Transport(b"<html>no echo here</html>"))
+    assert probe.completed is True
+    assert probe.findings == ()
 
 
-def test_transport_error_yields_nothing(tmp_path: Path) -> None:
-    assert _run(tmp_path, _Transport(b"", error=True)) == []
+def test_transport_error_is_a_failure_not_a_clean_result(tmp_path: Path) -> None:
+    """A probe that never reached the parameter must not look like "no XSS"."""
+    probe = _run(tmp_path, _Transport(b"", error=True))
+
+    assert probe.findings == ()
+    assert probe.completed is False
+    assert probe.failure is FailureKind.TRANSPORT_ERROR
+    assert probe.detail and "boom" in probe.detail
 
 
 def test_marker_is_non_executable() -> None:

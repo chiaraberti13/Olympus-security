@@ -1,13 +1,16 @@
 """Command-line interface for Athena — assessment orchestration.
 
 The CLI contains no domain decisions: it validates input, wires real adapters
-into the application use cases, and translates outcomes into stable exit codes:
+into the application use cases, and translates outcomes into the canonical
+Olympus exit codes (:mod:`olympus.core.exit_codes`):
 
 * ``0`` succeeded with no findings;
-* ``1`` partial, or succeeded with findings to review;
+* ``1`` succeeded with findings to review;
 * ``2`` invalid input or configuration;
 * ``3`` authorization/scope denial;
-* ``4`` execution or infrastructure failure (including cancellation).
+* ``5`` partial — some jobs did not complete, so the findings are not exhaustive;
+* ``6`` execution or infrastructure failure;
+* ``7`` cancelled before finishing.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from olympus.athena.application.registry import (
 from olympus.athena.domain.assessment import AssessmentState
 from olympus.athena.domain.contracts import AssessmentPlan, PlanValidationError
 from olympus.athena.scope import ensure_web_target_allowed, scoped_address_policy
+from olympus.core.exit_codes import ExitCode
 from olympus.core.http import UrllibHttpClient
 
 app = typer.Typer(help="Athena — assessment orchestration.", no_args_is_help=True)
@@ -74,11 +78,20 @@ def plan_validate(
 
 
 def _exit_code_for(outcome: RunOutcome) -> int:
+    """Map an assessment's terminal state onto the canonical Olympus exit codes.
+
+    These are the same codes every other module uses (see
+    :mod:`olympus.core.exit_codes`): a partial run is ``5`` rather than being
+    reported as findings, and a failure is ``6`` rather than ``4``, which is
+    reserved for a missing authorization flag.
+    """
     if outcome.state is AssessmentState.SUCCEEDED:
-        return 1 if outcome.findings else 0
+        return ExitCode.FINDINGS if outcome.findings else ExitCode.OK
     if outcome.state is AssessmentState.PARTIAL:
-        return 1
-    return 4  # failed or cancelled
+        return ExitCode.PARTIAL
+    if outcome.state is AssessmentState.CANCELLED:
+        return ExitCode.CANCELLED
+    return ExitCode.FAILED
 
 
 @app.command()

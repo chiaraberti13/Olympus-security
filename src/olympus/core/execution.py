@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import stat
 import threading
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +26,7 @@ MAX_CONCURRENCY = 64
 MAX_RETRIES = 5
 MAX_BACKOFF_SECONDS = 60.0
 MAX_MIN_INTERVAL_SECONDS = 60.0
+MAX_JITTER_RATIO = 1.0
 
 _SENSITIVE_KEY_PARTS = (
     "authorization",
@@ -79,6 +82,14 @@ class CancellationToken:
         return self._event.is_set()
 
 
+#: Returns a float in ``[0, 1)``. Injectable so tests can pin jitter.
+RandomSource = Callable[[], float]
+
+#: Jitter is not a secret, but a system source costs nothing here and keeps
+#: the module free of a seeded global generator that a caller could disturb.
+default_random_source: RandomSource = secrets.SystemRandom().random
+
+
 @dataclass(frozen=True)
 class ExecutionPolicy:
     """Validated resource and authorization policy for one operation."""
@@ -91,6 +102,7 @@ class ExecutionPolicy:
     retries: int = 0
     backoff_seconds: float = 0.5
     min_interval_seconds: float = 0.0
+    jitter_ratio: float = 0.0
 
     def __post_init__(self) -> None:
         if not 0.05 <= self.timeout_seconds <= MAX_TIMEOUT_SECONDS:
@@ -113,6 +125,8 @@ class ExecutionPolicy:
             raise ExecutionPolicyError(
                 f"min_interval_seconds must be between 0 and {MAX_MIN_INTERVAL_SECONDS:g}"
             )
+        if not 0.0 <= self.jitter_ratio <= MAX_JITTER_RATIO:
+            raise ExecutionPolicyError(f"jitter_ratio must be between 0 and {MAX_JITTER_RATIO:g}")
         if self.approval_reference is not None and not self.approval_reference.strip():
             raise ExecutionPolicyError("approval_reference must not be blank")
 
@@ -134,6 +148,97 @@ class ExecutionPolicy:
         """Raise a stable exception when cooperative cancellation is requested."""
         if cancellation.is_cancelled():
             raise CancellationRequested("operation cancelled")
+
+    def next_interval(self, random_source: RandomSource | None = None) -> float:
+        """Return the next throttle wait, with symmetric jitter applied.
+
+        Without jitter a paced scanner sends a request on a perfectly regular
+        tick, which is both trivially fingerprintable and prone to landing in
+        lockstep with another client. The wait is spread over
+        ``±jitter_ratio`` of the configured interval and never goes negative.
+        """
+        if self.min_interval_seconds <= 0.0:
+            return 0.0
+        if self.jitter_ratio <= 0.0:
+            return self.min_interval_seconds
+        draw = (random_source or default_random_source)()
+        offset = (draw * 2.0 - 1.0) * self.jitter_ratio
+        return max(0.0, self.min_interval_seconds * (1.0 + offset))
+
+    def next_backoff(self, attempt: int, random_source: RandomSource | None = None) -> float:
+        """Return the wait before retry ``attempt`` (1-based), jittered and capped.
+
+        The base is an exponential backoff from ``backoff_seconds``, bounded by
+        ``MAX_BACKOFF_SECONDS`` so a large retry budget cannot turn into an
+        unbounded sleep, and by the policy's own deadline elsewhere.
+        """
+        if attempt < 1:
+            raise ExecutionPolicyError("attempt must be 1 or greater")
+        base = min(self.backoff_seconds * (2.0 ** (attempt - 1)), MAX_BACKOFF_SECONDS)
+        if base <= 0.0 or self.jitter_ratio <= 0.0:
+            return base
+        draw = (random_source or default_random_source)()
+        offset = (draw * 2.0 - 1.0) * self.jitter_ratio
+        return max(0.0, min(base * (1.0 + offset), MAX_BACKOFF_SECONDS))
+
+
+class Deadline:
+    """A monotonic overall budget shared by every unit of one run.
+
+    Modules used to add up per-request timeouts, which lets a long run drift
+    far past what the operator asked for. A deadline is taken once, at the
+    start, and every unit asks it how much time is actually left.
+    """
+
+    def __init__(self, seconds: float) -> None:
+        if seconds <= 0.0:
+            raise ExecutionPolicyError("deadline seconds must be positive")
+        self._expiry = time.monotonic() + seconds
+
+    @property
+    def remaining(self) -> float:
+        """Seconds left before the budget is spent; never negative."""
+        return max(0.0, self._expiry - time.monotonic())
+
+    @property
+    def expired(self) -> bool:
+        """Whether the budget is spent."""
+        return self.remaining <= 0.0
+
+    def slice_for(self, requested: float) -> float:
+        """Return ``requested`` capped by whatever budget is still left."""
+        return min(requested, self.remaining)
+
+
+#: Longest uninterrupted sleep taken while waiting; a cancellation request is
+#: observed at least this often even during a long rate-limit wait.
+CANCELLATION_POLL_SECONDS = 0.05
+
+
+def interruptible_sleep(
+    seconds: float,
+    cancellation: Cancellation | None = None,
+    deadline: Deadline | None = None,
+) -> bool:
+    """Sleep in cancellation-sized slices; return whether the full wait elapsed.
+
+    Returns ``False`` as soon as cancellation is requested or the run deadline
+    is spent, so a caller can stop instead of finishing a wait nobody is
+    waiting for any more.
+    """
+    if seconds <= 0.0:
+        return True
+    token = cancellation or NeverCancelled()
+    end = time.monotonic() + seconds
+    while True:
+        if token.is_cancelled():
+            return False
+        if deadline is not None and deadline.expired:
+            return False
+        left = end - time.monotonic()
+        if left <= 0.0:
+            return True
+        time.sleep(min(left, CANCELLATION_POLL_SECONDS))
 
 
 def _sensitive_key(key: object) -> bool:

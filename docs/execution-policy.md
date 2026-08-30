@@ -30,10 +30,18 @@ network action.
 | Retries | 0–5 additional attempts |
 | Backoff | 0–60 seconds |
 | Minimum request interval | 0–60 seconds |
+| Jitter ratio | 0–1 (fraction of the interval/backoff to randomize by) |
 
 Modules may impose tighter bounds. They must not silently clamp or widen an
 invalid operator value. Retried actions must be read-only/idempotent and retry
 only explicit transient failures.
+
+## Run status and coverage
+
+Every module that probes a target in a loop reports what it planned, what it
+completed, and why the rest did not, through `olympus.core.coverage`. The
+status (`clean`, `findings`, `partial`, `failed`) determines the process exit
+code. See [run status and coverage](run-status.md).
 
 ## Cancellation and audit
 
@@ -58,12 +66,18 @@ uses the same URL redactor before SQLite persistence.
   now drives transient adapter retries, cancellation tokens are issued per job,
   and audit URL queries are redacted before storage.
 - Helios: the application service validates ports, requires explicit authorization,
-  applies CIDR scope, observes cancellation between probes, and emits versioned
-  observations/findings. Scope denials use the shared redacted NDJSON audit format.
+  applies CIDR scope and an optional engagement port allowlist, probes with bounded
+  concurrency under one overall deadline taken at the start, observes cancellation
+  between probes, and emits versioned observations/findings for every probe — open,
+  closed, filtered, unreachable, DNS failure, denied or out of budget. Scope denials
+  use the shared redacted NDJSON audit format.
 - Artemis: every active web command supplies an explicit policy to the DNS-pinned
   transport. Authorization and URL/IP scope precede DNS and traffic; redirects repeat
-  scope checks; retries cover transport failures only; rate waits and each request obey
-  cancellation and an overall deadline. No low-level network API assumes authorization.
+  scope checks; retries cover transport failures only; rate waits are jittered and each
+  request obeys cancellation and one overall deadline taken at the start. No low-level
+  network API assumes authorization. Requests that could not be made are counted with a
+  reason rather than dropped, so a failed run never reports as clean — see
+  [run status and coverage](run-status.md).
 - Proteus: campaign creation requires explicit authorization at both application and
   domain boundaries. Engagement, sender, recipient domains and the HTTPS training origin
   are scope-checked before token generation; cancellation is cooperative, and structured

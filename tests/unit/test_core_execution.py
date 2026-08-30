@@ -8,14 +8,17 @@ from pathlib import Path
 import pytest
 
 from olympus.core.execution import (
+    MAX_BACKOFF_SECONDS,
     AuthorizationRequiredError,
     CancellationRequested,
     CancellationToken,
+    Deadline,
     ExecutionPolicy,
     ExecutionPolicyError,
     NeverCancelled,
     StructuredAuditRecord,
     append_structured_audit,
+    interruptible_sleep,
     redact_mapping,
 )
 
@@ -29,6 +32,8 @@ from olympus.core.execution import (
         ("retries", 6),
         ("backoff_seconds", -1),
         ("min_interval_seconds", 61),
+        ("jitter_ratio", 1.5),
+        ("jitter_ratio", -0.1),
     ],
 )
 def test_policy_rejects_unsafe_resource_values(field: str, value: object) -> None:
@@ -104,3 +109,69 @@ def test_structured_audit_append_writes_one_redacted_line(tmp_path: Path) -> Non
     assert len(lines) == 1
     assert json.loads(lines[0])["metadata"]["authorization"] == "[REDACTED]"
     assert "synthetic-secret" not in lines[0]
+
+
+def test_jitter_spreads_the_rate_limit_around_the_configured_interval() -> None:
+    """Perfectly regular pacing is both fingerprintable and prone to lockstep."""
+    policy = ExecutionPolicy(min_interval_seconds=2.0, jitter_ratio=0.5)
+
+    assert policy.next_interval(lambda: 0.0) == pytest.approx(1.0)
+    assert policy.next_interval(lambda: 1.0) == pytest.approx(3.0)
+    assert policy.next_interval(lambda: 0.5) == pytest.approx(2.0)
+
+
+def test_jitter_never_produces_a_negative_wait() -> None:
+    policy = ExecutionPolicy(min_interval_seconds=1.0, jitter_ratio=1.0)
+    assert policy.next_interval(lambda: 0.0) == 0.0
+
+
+def test_interval_is_zero_when_no_rate_limit_is_configured() -> None:
+    assert ExecutionPolicy(jitter_ratio=0.5).next_interval(lambda: 0.0) == 0.0
+
+
+def test_backoff_grows_exponentially_and_stays_capped() -> None:
+    policy = ExecutionPolicy(backoff_seconds=1.0, retries=5)
+
+    assert policy.next_backoff(1) == 1.0
+    assert policy.next_backoff(2) == 2.0
+    assert policy.next_backoff(3) == 4.0
+    assert policy.next_backoff(20) == MAX_BACKOFF_SECONDS
+    with pytest.raises(ExecutionPolicyError):
+        policy.next_backoff(0)
+
+
+def test_jittered_backoff_stays_inside_the_band_and_the_cap() -> None:
+    policy = ExecutionPolicy(backoff_seconds=1.0, jitter_ratio=0.5)
+
+    assert policy.next_backoff(2, lambda: 0.0) == pytest.approx(1.0)
+    assert policy.next_backoff(2, lambda: 1.0) == pytest.approx(3.0)
+    capped = ExecutionPolicy(backoff_seconds=MAX_BACKOFF_SECONDS, jitter_ratio=1.0)
+    assert capped.next_backoff(1, lambda: 1.0) == MAX_BACKOFF_SECONDS
+
+
+def test_deadline_is_taken_once_and_reports_what_is_left() -> None:
+    deadline = Deadline(5.0)
+
+    assert 0.0 < deadline.remaining <= 5.0
+    assert deadline.expired is False
+    assert deadline.slice_for(30.0) <= 5.0
+    assert deadline.slice_for(0.5) == pytest.approx(0.5)
+    with pytest.raises(ExecutionPolicyError):
+        Deadline(0.0)
+
+
+def test_interruptible_sleep_returns_early_on_cancellation() -> None:
+    token = CancellationToken()
+    token.cancel()
+
+    assert interruptible_sleep(30.0, token) is False
+    assert interruptible_sleep(0.0, token) is True  # nothing to wait for
+
+
+def test_interruptible_sleep_returns_early_on_a_spent_deadline() -> None:
+    deadline = Deadline(0.05)
+    assert interruptible_sleep(5.0, NeverCancelled(), deadline) is False
+
+
+def test_interruptible_sleep_completes_a_short_wait() -> None:
+    assert interruptible_sleep(0.06, NeverCancelled()) is True
