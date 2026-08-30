@@ -147,3 +147,59 @@ def test_cli_requires_secret_and_tls_for_remote_bind(tmp_path: Path) -> None:
     )
     assert remote.exit_code == 2
     assert "require TLS" in remote.output
+
+
+def test_resubmitting_with_an_idempotency_key_returns_the_same_job(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    payload = {
+        "scanner": "nmap",
+        "target": "127.0.0.1",
+        "scope_id": "engagement",
+        "authorized": True,
+        "idempotency_key": "ticket-4711",
+    }
+    first = client.post("/api/v1/jobs", headers=AUTH, json=payload)
+    second = client.post("/api/v1/jobs", headers=AUTH, json=payload)
+    assert first.status_code == 201 and second.status_code == 201
+    assert first.json()["job_id"] == second.json()["job_id"]
+    assert client.get("/api/v1/jobs", headers=AUTH).json()["count"] == 1
+
+    conflicting = dict(payload, target="127.0.0.2")
+    assert client.post("/api/v1/jobs", headers=AUTH, json=conflicting).status_code == 409
+
+
+def test_submission_validates_the_attempt_budget(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    payload = {
+        "scanner": "nmap",
+        "target": "127.0.0.1",
+        "scope_id": "engagement",
+        "authorized": True,
+        "max_attempts": 99,
+    }
+    assert client.post("/api/v1/jobs", headers=AUTH, json=payload).status_code == 422
+    accepted = client.post("/api/v1/jobs", headers=AUTH, json=dict(payload, max_attempts=3))
+    assert accepted.status_code == 201
+    assert accepted.json()["max_attempts"] == 3
+
+
+def test_the_api_never_publishes_server_filesystem_paths(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    submitted = client.post(
+        "/api/v1/jobs",
+        headers=AUTH,
+        json={
+            "scanner": "nmap",
+            "target": "127.0.0.1",
+            "scope_id": "engagement",
+            "authorized": True,
+        },
+    )
+    assert submitted.status_code == 201
+    body = submitted.json()
+    assert body["scope_name"] == "engagement.json"
+    assert "scope_path" not in body
+    assert str(tmp_path) not in submitted.text
+    listed = client.get("/api/v1/jobs", headers=AUTH)
+    assert str(tmp_path) not in listed.text
+    assert listed.json()["schema_version"] == "2.0.0"

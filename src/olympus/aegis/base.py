@@ -20,7 +20,7 @@ from olympus.aegis.runner import (
 )
 from olympus.aegis.scope import ensure_allowed, resolve_and_validate, socket_resolver
 from olympus.aegis.states import ExecutionState
-from olympus.core.execution import ExecutionPolicy, redact_url
+from olympus.core.execution import ExecutionPolicy, redact_text, redact_url
 from olympus.core.models import Asset, Finding
 
 
@@ -313,9 +313,6 @@ _SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b(authorization|cookie|credential|password|secret|token|api[-_]?key|access[-_]?key)"
     r"(\s*[:=]\s*)([^\s,;]+)"
 )
-_URL = re.compile(r"https?://[^\s\]\[<>\"']+")
-
-
 def _evidence(output: CommandOutput) -> str:
     parts = []
     if output.stdout.strip():
@@ -324,8 +321,7 @@ def _evidence(output: CommandOutput) -> str:
         parts.append("[stderr]\n" + output.stderr.strip())
     value = "\n".join(parts)
     value = _SECRET_ASSIGNMENT.sub(r"\1\2[REDACTED]", value)
-    value = _URL.sub(lambda match: redact_url(match.group(0)), value)
-    return value[:MAX_RAW_EVIDENCE]
+    return redact_text(value)[:MAX_RAW_EVIDENCE]
 
 
 def _safe_line(value: str, maximum: int) -> str:

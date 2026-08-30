@@ -73,11 +73,11 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### Job AEGIS e API
 
-- [ ] Aggiungere lease, heartbeat, worker ownership e recupero dei job `RUNNING` orfani.
-- [ ] Implementare retry con limite, backoff e idempotency key.
-- [ ] Versionare lo schema SQLite e introdurre migrazioni, WAL e busy timeout.
-- [ ] Separare `FAILED`, `PARTIAL`, `CANCELLED`, `TIMED_OUT` e `POLICY_DENIED`.
-- [ ] Redigere eccezioni persistite e non esporre path assoluti via API.
+- [x] Aggiungere lease, heartbeat, worker ownership e recupero dei job `RUNNING` orfani.
+- [x] Implementare retry con limite, backoff e idempotency key.
+- [x] Versionare lo schema SQLite e introdurre migrazioni, WAL e busy timeout.
+- [x] Separare `FAILED`, `PARTIAL`, `CANCELLED`, `TIMED_OUT` e `POLICY_DENIED`.
+- [x] Redigere eccezioni persistite e non esporre path assoluti via API.
 - [x] Applicare il limite body durante lo streaming, anche senza `Content-Length`.
 - [ ] Supportare identità API multiple, scope, rotazione, revoca e rate limiting.
 - [ ] Imporre TLS per bind non-loopback e aggiungere correlation/request/audit ID.
@@ -200,3 +200,4 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
 | 2026-08-29 | P0 SSRF e decompressione | verificato | Ruff pulito e 859 test verdi su `main@d94bbf4`: IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
 | 2026-08-30 | P1 isolamento esecuzioni | in verifica | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |
+| 2026-08-30 | P1 job plane AEGIS | in verifica | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |

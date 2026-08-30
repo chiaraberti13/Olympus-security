@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import threading
 from collections.abc import Callable, Mapping
@@ -157,7 +158,26 @@ def redact_url(value: str) -> str:
     )
     hostname = parsed.hostname or ""
     port = f":{parsed.port}" if parsed.port is not None else ""
-    return urlunsplit((parsed.scheme, f"{hostname}{port}", parsed.path, query, parsed.fragment))
+    redacted = urlunsplit(
+        (parsed.scheme, f"{hostname}{port}", parsed.path, query, parsed.fragment)
+    )
+    # Audit logs and job records are read by people and matched by policy
+    # checks, so keep the sentinel legible rather than percent-encoded.
+    return redacted.replace("%5BREDACTED%5D", "[REDACTED]")
+
+
+#: A URL embedded in free text (an error message, scanner output, a log line).
+_URL_IN_TEXT = re.compile(r"https?://[^\s\]\[<>\"']+")
+
+
+def redact_text(value: str) -> str:
+    """Redact the secret-bearing query parameters of every URL inside free text.
+
+    ``redact_url`` only rewrites a string that *is* a URL. Most secrets leak
+    inside a sentence, so anything human-readable that is persisted or printed
+    goes through this instead.
+    """
+    return _URL_IN_TEXT.sub(lambda match: redact_url(match.group(0)), value)
 
 
 def redact_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -193,10 +213,6 @@ class StructuredAuditRecord:
     def to_dict(self) -> dict[str, Any]:
         """Return the redacted serialization; raw metadata is never exposed."""
         target = redact_url(self.target) if self.target is not None else None
-        # Audit logs are read by operators and policy checks, so keep the
-        # redaction sentinel visible instead of percent-encoding it as URL data.
-        if target is not None:
-            target = target.replace("%5BREDACTED%5D", "[REDACTED]")
         return {
             "timestamp": self.timestamp,
             "execution_id": self.execution_id,

@@ -387,7 +387,7 @@ def test_scope_loader_and_application_output_audit(tmp_path: Path) -> None:
     )
     assert result.state is ExecutionState.LIVE
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["target"].endswith("api_key=%5BREDACTED%5D")
+    assert payload["target"].endswith("api_key=[REDACTED]")
     assert payload["findings"][0]["schema_name"] == "olympus.finding"
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     audit_text = audit.read_text(encoding="utf-8")

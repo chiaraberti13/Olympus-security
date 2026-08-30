@@ -13,7 +13,13 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field
 
 from olympus import __version__
-from olympus.aegis.jobs import AegisJob, AegisJobStore, JobState
+from olympus.aegis.jobs import (
+    MAX_ATTEMPTS_LIMIT,
+    AegisJob,
+    AegisJobStore,
+    IdempotencyConflict,
+    JobState,
+)
 from olympus.integrations.capabilities import inventory_document
 
 MAX_REQUEST_BYTES = 64 * 1024
@@ -46,13 +52,21 @@ class JobSubmission(BaseModel):
     target_kind: Literal["host", "domain", "url"] = "host"
     scope_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
     authorized: bool
+    #: Resubmitting the same key returns the job that already exists instead of
+    #: queueing a second scan of the same target.
+    idempotency_key: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    )
+    max_attempts: int = Field(default=1, ge=1, le=MAX_ATTEMPTS_LIMIT)
 
 
 class JobList(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_name: Literal["olympus.aegis-job-list"] = "olympus.aegis-job-list"
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    # 2.0.0 tracks the embedded olympus.aegis-job contract, which replaced
+    # `scope_path` with `scope_name`.
+    schema_version: Literal["2.0.0"] = "2.0.0"
     count: int
     jobs: list[AegisJob]
 
@@ -156,7 +170,11 @@ def create_app(settings: ApiSettings) -> FastAPI:
                 target_kind=body.target_kind,
                 scope_path=scope_path,
                 authorized=True,
+                idempotency_key=body.idempotency_key,
+                max_attempts=body.max_attempts,
             )
+        except IdempotencyConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

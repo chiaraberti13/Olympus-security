@@ -292,6 +292,14 @@ def aegis_jobs_submit(
     kind: str = typer.Option("host", "--kind"),
     scope: str = typer.Option(..., "--scope"),
     database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+    idempotency_key: str | None = typer.Option(
+        None,
+        "--idempotency-key",
+        help="Resubmitting the same key returns the existing job instead of queueing a second.",
+    ),
+    max_attempts: int = typer.Option(
+        1, "--max-attempts", min=1, max=10, help="Execution attempts before the job is failed."
+    ),
     i_am_authorized: bool = typer.Option(False, "--i-am-authorized"),
 ) -> None:
     """Persist one authorized scan job without executing it."""
@@ -302,13 +310,19 @@ def aegis_jobs_submit(
     if not i_am_authorized:
         typer.echo("olympus: queued live work requires --i-am-authorized", err=True)
         raise typer.Exit(code=4)
-    job = AegisJobStore(Path(database)).submit(
-        scanner=scanner,
-        target=target,
-        target_kind=kind,
-        scope_path=Path(scope),
-        authorized=True,
-    )
+    try:
+        job = AegisJobStore(Path(database)).submit(
+            scanner=scanner,
+            target=target,
+            target_kind=kind,
+            scope_path=Path(scope),
+            authorized=True,
+            idempotency_key=idempotency_key,
+            max_attempts=max_attempts,
+        )
+    except ValueError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
     _emit_job(job)
 
 
@@ -333,7 +347,7 @@ def aegis_jobs_list(
         json.dumps(
             {
                 "schema_name": "olympus.aegis-job-list",
-                "schema_version": "1.0.0",
+                "schema_version": "2.0.0",
                 "count": len(jobs),
                 "jobs": [job.model_dump(mode="json") for job in jobs],
             },
@@ -381,19 +395,52 @@ def aegis_jobs_cancel(
 def aegis_jobs_work(
     database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
     audit: str = typer.Option(".olympus/aegis-audit.ndjson", "--audit"),
+    worker_id: str | None = typer.Option(
+        None, "--worker-id", help="Stable identity for this worker's leases."
+    ),
 ) -> None:
     """Claim and execute at most one job; safe for cron/systemd/container loops."""
     from pathlib import Path
 
-    from olympus.aegis.jobs import AegisJobStore, AegisWorker
+    from olympus.aegis.jobs import AegisJobStore, AegisWorker, generate_worker_id
 
-    job = AegisWorker(AegisJobStore(Path(database))).run_next(audit_path=Path(audit))
+    store = AegisJobStore(Path(database))
+    try:
+        worker = AegisWorker(store, worker_id=worker_id or generate_worker_id())
+    except ValueError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    job = worker.run_next(audit_path=Path(audit))
     if job is None:
         typer.echo(json.dumps({"claimed": False, "reason": "queue-empty"}, indent=2))
         return
     _emit_job(job)
-    if job.state.value == "failed":
+    # A refused, broken or timed-out job is not a successful worker run.
+    if job.state.value in {"failed", "timed_out", "policy_denied"}:
         raise typer.Exit(code=4)
+
+
+@jobs_app.command("recover")
+def aegis_jobs_recover(
+    database: str = typer.Option(".olympus/aegis-jobs.sqlite3", "--database", "-d"),
+) -> None:
+    """Requeue (or fail) jobs whose worker stopped renewing its lease."""
+    from pathlib import Path
+
+    from olympus.aegis.jobs import AegisJobStore
+
+    recovered = AegisJobStore(Path(database)).recover_expired_leases()
+    typer.echo(
+        json.dumps(
+            {
+                "recovered": len(recovered),
+                "jobs": [job.model_dump(mode="json") for job in recovered],
+            },
+            indent=2,
+            sort_keys=True,
+            default=str,
+        )
+    )
 
 
 @aegis_app.command("deps")
