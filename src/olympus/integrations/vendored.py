@@ -44,6 +44,20 @@ def tool_path(name: str) -> Path:
     return path
 
 
+def optional_tool_path(name: str) -> Path | None:
+    """Return a vendored tool's root, or ``None`` when it is not installed.
+
+    An Olympus installed from a wheel legitimately has no ``vendor/`` tree: the
+    upstream source is not packaged. Diagnostics must report that as a fact
+    about the environment, not fail with a traceback, so they use this instead
+    of :func:`tool_path`.
+    """
+    try:
+        return tool_path(name)
+    except VendoredToolNotFoundError:
+        return None
+
+
 def ensure_on_path(name: str) -> Path:
     """Put a vendored tool's root on ``sys.path`` (idempotently) and return it."""
     path = tool_path(name)

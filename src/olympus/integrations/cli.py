@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 
@@ -30,7 +31,13 @@ from olympus.integrations.diagnostics import (
     check_tcp,
     check_writable_dir,
 )
-from olympus.integrations.vendored import VAP_DIR, ensure_on_path, tool_path
+from olympus.integrations.vendored import (
+    VAP_DIR,
+    VendoredToolNotFoundError,
+    ensure_on_path,
+    optional_tool_path,
+    tool_path,
+)
 
 
 def _os_environ() -> dict[str, str]:
@@ -77,6 +84,31 @@ DEFAULT_AEGIS_AUDIT_LOG = str(audit_log_path("aegis-audit.ndjson"))
 
 def _emit_report(report: Report) -> None:
     typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+
+
+def _require_vendored(name: str) -> Path:
+    """Return a vendored tool's root, or exit with the reason it is unavailable."""
+    try:
+        return tool_path(name)
+    except VendoredToolNotFoundError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+def _vendor_check() -> Check:
+    """Report whether the vendored upstream tree this command can use is present."""
+    path = optional_tool_path(VAP_DIR)
+    if path is None:
+        return Check(
+            f"vendor:{VAP_DIR}",
+            False,
+            "not installed: the vendored upstream source is not packaged in the wheel. "
+            "Native AEGIS commands work without it; 'aegis serve|migrate|workers' need "
+            "a checkout or OLYMPUS_VENDOR_DIR.",
+            optional=True,
+        )
+    ensure_on_path(VAP_DIR)
+    return Check(f"vendor:{VAP_DIR}", True, str(path), optional=True)
 
 
 @aegis_app.command("api")
@@ -187,7 +219,7 @@ def aegis_serve(
             err=True,
         )
         raise typer.Exit(code=2)
-    path = tool_path(VAP_DIR)
+    path = _require_vendored(VAP_DIR)
     env = {**_os_environ(), "VAP_HOST": host, "VAP_PORT": str(port)}
     typer.echo(
         f"olympus: starting quarantined legacy VAP web app on http://{host}:{port} "
@@ -201,7 +233,7 @@ def aegis_serve(
 @aegis_app.command("migrate")
 def aegis_migrate() -> None:
     """Run the AEGIS database migrations (alembic upgrade head)."""
-    path = tool_path(VAP_DIR)
+    path = _require_vendored(VAP_DIR)
     completed = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=str(path),
@@ -217,7 +249,7 @@ def aegis_workers(
     loglevel: str = typer.Option("info", "--loglevel", help="Celery worker log level."),
 ) -> None:
     """Start an AEGIS Celery worker that runs queued scans (Ctrl-C to stop)."""
-    path = tool_path(VAP_DIR)
+    path = _require_vendored(VAP_DIR)
     typer.echo(f"olympus: starting AEGIS Celery worker on queue '{queue}' (from {path})", err=True)
     completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
         ["celery", "-A", "celery_app.celery_app", "worker", "-Q", queue, "--loglevel", loglevel],  # noqa: S607
@@ -707,7 +739,7 @@ def aegis_retention_rotate_log(
 def aegis_deps() -> None:
     """Report AEGIS runtime dependencies: web stack, services, and scanner binaries."""
     report = Report("aegis deps")
-    ensure_on_path(VAP_DIR)
+    report.add(_vendor_check())
     for module in ("fastapi", "uvicorn", "sqlalchemy", "alembic", "celery", "redis"):
         report.add(check_python_module(module, optional=True))
     for spec in scanner_registry.REGISTRY:
@@ -721,13 +753,15 @@ def aegis_info() -> None:
     """Show where AEGIS lives and whether its stack is importable."""
     import importlib.util
 
-    path = tool_path(VAP_DIR)
-    ensure_on_path(VAP_DIR)
+    path = optional_tool_path(VAP_DIR)
+    if path is not None:
+        ensure_on_path(VAP_DIR)
     importable = importlib.util.find_spec("fastapi") is not None
     binaries = sum(1 for s in scanner_registry.REGISTRY if s.available())
     payload = {
         "name": "AEGIS (vendored Vulnerability Assessment Platform)",
-        "path": str(path),
+        "path": str(path) if path is not None else None,
+        "vendored_source_present": path is not None,
         "scanners": len(scanner_registry.REGISTRY),
         "scanner_binaries_available": binaries,
         "web_stack_importable": importable,
@@ -815,7 +849,7 @@ def aegis_doctor() -> None:
     import os
 
     report = Report("aegis doctor")
-    ensure_on_path(VAP_DIR)
+    report.add(_vendor_check())
     for module in ("fastapi", "uvicorn", "sqlalchemy", "alembic", "celery", "redis"):
         report.add(check_python_module(module, optional=True))
     # Redis reachability (parsed from the broker URL host/port, best effort).

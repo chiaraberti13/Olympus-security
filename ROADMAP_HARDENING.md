@@ -115,7 +115,7 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [x] Costruire wheel/sdist e installare il wheel in ambiente pulito in CI.
 - [x] Eseguire smoke test di tutte le superfici CLI dal wheel installato.
 - [ ] Decidere se VAP sarà pacchetto separato, container-only o ritirato.
-- [ ] Eliminare la dipendenza runtime da un path relativo `vendor/`.
+- [ ] Eliminare la dipendenza runtime da un path relativo `vendor/` (diagnostica e comandi nativi ora funzionano senza `vendor/`; `aegis serve`, `migrate` e `workers` lo richiedono ancora).
 - [ ] Definire chiaramente gli extra `dev`, `api`, `aegis` e `vap`.
 - [ ] Introdurre lock/constraints con hash e verificare metadata/licenze/file inclusi.
 - [x] Rendere TOML malformato, config esplicita assente e valori invalidi errori bloccanti.
@@ -203,3 +203,6 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-30 | P1 job plane AEGIS | in verifica | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |
 | 2026-08-30 | P1 identità API AEGIS | in verifica | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
 | 2026-08-30 | P1 retention AEGIS | in verifica | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
+| 2026-08-30 | Wheel senza vendor | verificato | Smoke del wheel esteso a `doctor` e a `aegis doctor`, `deps`, `info`, `scanners`, `capabilities` più i nuovi gruppi CLI: la diagnostica non richiede più l'albero `vendor/` e i comandi che lo richiedono escono con codice 2 |
+
+**Nota sulle evidenze.** Le righe `in verifica` sono state validate localmente su `claude/hardening-roadmap-check-21qouj` (ruff pulito, 978 test, build del wheel e smoke CLI in ambiente pulito). La CI di repository gira su `pull_request`/`push` su `main`: diventano `CI verde` quando quel workflow ha girato sul branch.
