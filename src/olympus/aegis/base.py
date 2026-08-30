@@ -9,7 +9,15 @@ from abc import ABC, abstractmethod
 from dataclasses import replace
 
 from olympus.aegis.model import MAX_RAW_EVIDENCE, Dependency, ScanRequest, ScanResult
-from olympus.aegis.runner import CommandError, CommandOutput, CommandTimeout, run_command, which
+from olympus.aegis.runner import (
+    CommandError,
+    CommandOutput,
+    CommandTimeout,
+    TerminationCause,
+    TerminationReport,
+    run_command,
+    which,
+)
 from olympus.aegis.scope import ensure_allowed, resolve_and_validate, socket_resolver
 from olympus.aegis.states import ExecutionState
 from olympus.core.execution import ExecutionPolicy, redact_url
@@ -218,6 +226,7 @@ class ScannerAdapter(ABC):
                 resolved_addresses=addresses,
                 version=version,
                 error=str(exc),
+                termination=_termination_of(exc),
                 duration_seconds=time.monotonic() - started,
             )
         duration = time.monotonic() - started
@@ -230,8 +239,9 @@ class ScannerAdapter(ABC):
                 resolved_addresses=addresses,
                 version=version,
                 raw_evidence=evidence,
-                error=f"{self.name} exited with non-success status {output.exit_code}",
+                error=_exit_error(self.name, output),
                 exit_code=output.exit_code,
+                termination=output.termination,
                 duration_seconds=duration,
             )
         try:
@@ -246,6 +256,7 @@ class ScannerAdapter(ABC):
                 raw_evidence=evidence,
                 error=f"parse failed: {exc}",
                 exit_code=output.exit_code,
+                termination=output.termination,
                 duration_seconds=duration,
             )
         if len(findings) > request.max_findings:
@@ -257,6 +268,7 @@ class ScannerAdapter(ABC):
                 version=version,
                 error=f"parsed findings exceed the {request.max_findings} finding limit",
                 exit_code=output.exit_code,
+                termination=output.termination,
                 duration_seconds=duration,
             )
         return ScanResult(
@@ -269,8 +281,32 @@ class ScannerAdapter(ABC):
             assets=[self.build_asset(host, request_with_addresses)],
             raw_evidence=evidence,
             exit_code=output.exit_code,
+            termination=output.termination,
             duration_seconds=duration,
         )
+
+
+def _termination_of(exc: BaseException) -> TerminationReport:
+    """Return the structured reason a failed execution carries, or derive one."""
+    report = getattr(exc, "report", None)
+    if isinstance(report, TerminationReport):
+        return report
+    # The only remaining case is the adapter's own overall-deadline TimeoutError,
+    # raised before the process was started rather than by the runner.
+    cause = (
+        TerminationCause.TIMEOUT
+        if isinstance(exc, TimeoutError)
+        else TerminationCause.START_FAILED
+    )
+    return TerminationReport(cause=cause, detail=str(exc), limit="deadline_seconds")
+
+
+def _exit_error(scanner: str, output: CommandOutput) -> str:
+    """Explain a non-success exit, naming the signal or limit when there was one."""
+    report = output.termination
+    if report is not None and report.cause is not TerminationCause.COMPLETED and report.detail:
+        return f"{scanner} did not complete: {report.detail}"
+    return f"{scanner} exited with non-success status {output.exit_code}"
 
 
 _SECRET_ASSIGNMENT = re.compile(

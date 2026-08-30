@@ -531,7 +531,30 @@ def aegis_doctor() -> None:
             f"{binaries}/{len(scanner_registry.REGISTRY)} scanner binaries on PATH",
         )
     )
+    report.add(sandbox_check())
     _emit_report(report)
+
+
+def sandbox_check() -> Check:
+    """Report how confined scanner processes will be (see docs/aegis-sandbox.md)."""
+    import os
+
+    from olympus.aegis.sandbox import SandboxError, SandboxPolicy
+
+    try:
+        policy = SandboxPolicy.from_environment()
+        identity = policy.resolve_identity()
+    except SandboxError as exc:
+        return Check("sandbox:isolation", False, str(exc), optional=True)
+    privileged_parent = os.name == "posix" and os.geteuid() == 0
+    if identity is not None:
+        confined, detail = True, f"scanners drop to {identity.name} (uid {identity.uid})"
+    elif privileged_parent:
+        confined, detail = False, "AEGIS_SANDBOX_ALLOW_ROOT is set: scanners would run as ROOT"
+    else:
+        confined, detail = True, "parent process is already unprivileged"
+    limits = ", ".join(f"{name}={value}" for name, value in sorted(policy.describe().items()))
+    return Check("sandbox:isolation", confined, f"{detail}; limits {limits}", optional=True)
 
 
 def _redis_host_port(url: str) -> tuple[str, int]:

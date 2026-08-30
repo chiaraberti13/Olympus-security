@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from olympus.aegis.runner import TerminationReport
 from olympus.aegis.states import ExecutionState
 from olympus.core.execution import Cancellation, NeverCancelled, redact_url
 from olympus.core.models import Asset, Finding
@@ -89,7 +90,9 @@ class AegisResultDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_name: Literal["olympus.aegis-result"] = "olympus.aegis-result"
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    # 1.1.0 adds the optional `termination` object; every 1.0.0 field is
+    # unchanged, so a 1.0.0 reader still understands a 1.1.0 document.
+    schema_version: Literal["1.1.0"] = "1.1.0"
     scanner: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
     state: ExecutionState
     real_execution: bool
@@ -105,6 +108,9 @@ class AegisResultDocument(BaseModel):
     error: str | None = Field(default=None, max_length=2_000)
     dependency: dict[str, object] | None = None
     exit_code: int | None = None
+    #: Structured reason the scanner process ended: timeout, cancellation,
+    #: output budget, a kernel-enforced resource limit, or a clean exit.
+    termination: dict[str, object] | None = None
     duration_seconds: float = Field(ge=0, le=86_400)
 
     @model_validator(mode="after")
@@ -135,6 +141,7 @@ class ScanResult:
     error: str | None = None
     dependency: Dependency | None = None
     exit_code: int | None = None
+    termination: TerminationReport | None = None
     duration_seconds: float = 0.0
 
     def to_document(self) -> AegisResultDocument:
@@ -157,6 +164,7 @@ class ScanResult:
             error=self.error[:2_000] if self.error else None,
             dependency=self.dependency.to_dict() if self.dependency else None,
             exit_code=self.exit_code,
+            termination=self.termination.to_dict() if self.termination else None,
             duration_seconds=round(self.duration_seconds, 3),
         )
 

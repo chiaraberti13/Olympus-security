@@ -64,12 +64,12 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 
 ### Isolamento esecuzioni
 
-- [ ] Eseguire scanner come utente non privilegiato.
-- [ ] Limitare CPU, RAM, PID, file descriptor, output e spazio temporaneo.
-- [ ] Usare process group e escalation terminate → kill.
-- [ ] Applicare seccomp/AppArmor, filesystem read-only e directory temporanee isolate.
+- [x] Eseguire scanner come utente non privilegiato.
+- [x] Limitare CPU, RAM, PID, file descriptor, output e spazio temporaneo.
+- [x] Usare process group e escalation terminate → kill.
+- [ ] Applicare seccomp/AppArmor e filesystem read-only (directory temporanee isolate: fatto).
 - [ ] Separare rete di controllo e rete di scansione.
-- [ ] Registrare cause strutturate per timeout, kill e violazioni di risorse.
+- [x] Registrare cause strutturate per timeout, kill e violazioni di risorse.
 
 ### Job AEGIS e API
 
@@ -198,4 +198,5 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
 | 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
 | 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
-| 2026-08-29 | P0 SSRF e decompressione | in verifica | IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
+| 2026-08-29 | P0 SSRF e decompressione | verificato | Ruff pulito e 859 test verdi su `main@d94bbf4`: IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
+| 2026-08-30 | P1 isolamento esecuzioni | in verifica | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |

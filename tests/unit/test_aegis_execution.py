@@ -264,9 +264,11 @@ def test_state_live_runs_real_process() -> None:
     assert result.findings and result.findings[0].title == "live finding"
     document = result.to_dict()
     assert document["schema_name"] == "olympus.aegis-result"
-    assert document["schema_version"] == "1.0.0"
+    assert document["schema_version"] == "1.1.0"
     assert document["real_execution"] is True
     assert document["resolved_addresses"] == ["127.0.0.1"]
+    termination = document["termination"]
+    assert isinstance(termination, dict) and termination["cause"] == "completed"
 
 
 def test_nonzero_process_is_failed_before_parser() -> None:
