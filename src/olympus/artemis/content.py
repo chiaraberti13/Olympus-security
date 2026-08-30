@@ -14,23 +14,39 @@ Safety is structural, not cosmetic:
 * requests go through the DNS-pinned :func:`fetch_scoped` transport, are
   GET-only and bounded (timeout + max body), and never send a payload — this
   is discovery, not exploitation;
-* it is rate-limited and capped, so it is not a stress/flood tool.
+* it is rate-limited (with jitter) and capped, so it is not a stress/flood
+  tool, and it stops at one overall deadline rather than per-request timeouts
+  that add up.
 
 Discovered paths become ``core.Finding`` records; a curated set of
 sensitive names (``.git``, ``.env``, backups, admin panels…) is raised to
 ``LOW`` with remediation, everything else stays informational.
+
+Candidates that could not be checked are **counted, not dropped**. A run whose
+requests all failed used to return an empty list that reads exactly like "this
+target has nothing hidden"; it now reports ``FAILED`` coverage with the reason,
+so an operator can tell "nothing is there" from "we never looked".
 """
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, replace
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from olympus.artemis.http import HttpClientError, Resolver, Transport, fetch_scoped
 from olympus.artemis.scope import OutOfScopeError, ScopeError
+from olympus.core.coverage import Coverage, CoverageTracker, FailureKind, RunStatus
 from olympus.core.enums import Severity, Source
-from olympus.core.execution import Cancellation, ExecutionPolicy, NeverCancelled
+from olympus.core.execution import (
+    Cancellation,
+    CancellationRequested,
+    Deadline,
+    ExecutionPolicy,
+    NeverCancelled,
+    RandomSource,
+    interruptible_sleep,
+)
 from olympus.core.models import Finding
 
 # Response statuses that mean "this path exists / is worth reporting".
@@ -103,6 +119,39 @@ def _candidate_url(base_url: str, word: str) -> str:
     return f"{base_url.rstrip('/')}/{word}"
 
 
+@dataclass(frozen=True)
+class ContentDiscoveryReport:
+    """Everything one discovery run found, and everything it could not check."""
+
+    discovered: tuple[DiscoveredPath, ...] = ()
+    coverage: Coverage = field(default_factory=Coverage)
+
+    @property
+    def status(self) -> RunStatus:
+        """How much of the wordlist this run can actually speak for."""
+        return self.coverage.status(len(self.discovered))
+
+
+def classify_fetch_error(exc: Exception) -> FailureKind:
+    """Map a scoped-fetch failure onto the shared coverage vocabulary."""
+    if isinstance(exc, OutOfScopeError):
+        return FailureKind.SCOPE_DENIED
+    if isinstance(exc, ScopeError):
+        return FailureKind.POLICY_DENIED
+    if isinstance(exc, HttpClientError):
+        message = str(exc).lower()
+        if "dns" in message or "resolution" in message:
+            return FailureKind.DNS_FAILURE
+        if "timed out" in message or "timeout" in message:
+            return FailureKind.TIMEOUT
+        if "limit" in message or "exceeds" in message or "too large" in message:
+            return FailureKind.LIMIT_EXCEEDED
+        if "redirect" in message or "decoded" in message:
+            return FailureKind.PROTOCOL_ERROR
+        return FailureKind.TRANSPORT_ERROR
+    return FailureKind.ERROR
+
+
 def discover_content(
     base_url: str,
     words: list[str],
@@ -114,38 +163,35 @@ def discover_content(
     policy: ExecutionPolicy,
     max_bytes: int = 1_000_000,
     cancellation: Cancellation | None = None,
-) -> list[DiscoveredPath]:
-    """Request each candidate path under ``base_url`` and collect existing ones.
+    random_source: RandomSource | None = None,
+) -> ContentDiscoveryReport:
+    """Request each candidate path under ``base_url`` and report what was learned.
 
-    Out-of-scope candidates and transport errors are skipped (scope blocks are
-    audited by :func:`fetch_scoped`). ``min_interval`` throttles requests for
-    politeness. Returns the interesting paths in wordlist order.
+    Every candidate is accounted for: one that returned a status is
+    ``completed``, one whose request failed is ``failed`` with the reason, and
+    one the run never reached — because the deadline ran out — is ``skipped``.
+    ``min_interval_seconds`` throttles requests for politeness and
+    ``jitter_ratio`` spreads that pacing so the traffic is not a metronome.
     """
     policy.require_authorization("Artemis content discovery")
     token = cancellation or NeverCancelled()
-    deadline = time.monotonic() + policy.deadline_seconds
+    deadline = Deadline(policy.deadline_seconds)
+    tracker = CoverageTracker(len(words))
     discovered: list[DiscoveredPath] = []
-    last_request = 0.0
-    for word in words:
-        policy.check_cancellation(token)
-        if time.monotonic() >= deadline:
+
+    for index, word in enumerate(words):
+        if token.is_cancelled():
+            tracker.skip(FailureKind.CANCELLED, "cancelled", units=len(words) - index)
+            raise CancellationRequested("operation cancelled")
+        if not _wait_for_turn(index, policy, token, deadline, random_source):
+            remaining = len(words) - index
+            if token.is_cancelled():
+                tracker.skip(FailureKind.CANCELLED, "cancelled", units=remaining)
+                raise CancellationRequested("operation cancelled")
+            tracker.skip(FailureKind.DEADLINE_EXCEEDED, "run deadline reached", units=remaining)
             break
-        if policy.min_interval_seconds > 0.0:
-            wait = policy.min_interval_seconds - (time.monotonic() - last_request)
-            if wait > 0:
-                policy.check_cancellation(token)
-                if wait >= deadline - time.monotonic():
-                    break
-                time.sleep(wait)
-                policy.check_cancellation(token)
         url = _candidate_url(base_url, word)
-        remaining = deadline - time.monotonic()
-        if remaining < 0.05:
-            break
-        request_policy = replace(
-            policy,
-            deadline_seconds=min(policy.deadline_seconds, remaining),
-        )
+        request_policy = replace(policy, deadline_seconds=max(0.05, deadline.remaining))
         try:
             result = fetch_scoped(
                 url,
@@ -157,10 +203,10 @@ def discover_content(
                 policy=request_policy,
                 cancellation=token,
             )
-        except (HttpClientError, ScopeError, OutOfScopeError, ValueError):
+        except (HttpClientError, ScopeError, OutOfScopeError, ValueError) as exc:
+            tracker.fail(classify_fetch_error(exc), f"/{word}: {exc}")
             continue
-        finally:
-            last_request = time.monotonic()
+        tracker.complete()
         if result.response.status in _INTERESTING_STATUSES:
             discovered.append(
                 DiscoveredPath(
@@ -170,10 +216,27 @@ def discover_content(
                     length=len(result.response.body),
                 )
             )
-    return discovered
+    return ContentDiscoveryReport(tuple(discovered), tracker.build())
 
 
-def discoveries_to_findings(asset_id: str, discovered: list[DiscoveredPath]) -> list[Finding]:
+def _wait_for_turn(
+    index: int,
+    policy: ExecutionPolicy,
+    token: Cancellation,
+    deadline: Deadline,
+    random_source: RandomSource | None,
+) -> bool:
+    """Honor the jittered rate limit; return whether there is still time to request."""
+    if index > 0:
+        wait = policy.next_interval(random_source)
+        if wait > 0.0 and not interruptible_sleep(wait, token, deadline):
+            return False
+    return deadline.remaining >= 0.05
+
+
+def discoveries_to_findings(
+    asset_id: str, discovered: Sequence[DiscoveredPath]
+) -> list[Finding]:
     """Turn discovered paths into findings; sensitive names are raised to LOW."""
     findings: list[Finding] = []
     for item in discovered:

@@ -102,7 +102,9 @@ def test_cli_fingerprint_reports_detected_stack(
             str(out),
         ],
     )
-    assert result.exit_code == 0, result.output
+    # Fingerprints are findings, so this exits 1 like every other Artemis command.
+    assert result.exit_code == 1, result.output
+    assert "status=findings" in result.output
     findings = json.loads(out.read_text(encoding="utf-8"))
     products = {f["title"] for f in findings}
     assert any("nginx" in p for p in products)
@@ -122,7 +124,9 @@ def test_cli_fingerprint_blocks_out_of_scope(tmp_path: Path) -> None:
             str(tmp_path / "blocked.log"),
         ],
     )
-    assert result.exit_code == 2  # scope/transport failure is surfaced, no network
+    # An out-of-scope target is exit 3, never conflated with a usage error.
+    assert result.exit_code == 3
+    assert "out of scope" in result.output
 
 
 def test_cli_fingerprint_requires_explicit_authorization() -> None:

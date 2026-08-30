@@ -4,10 +4,10 @@ import json
 from pathlib import Path
 
 from olympus.artemis.http import HttpClientError, HttpResponse
-from olympus.artemis.metabase import CVE_ID, detect_metabase
+from olympus.artemis.metabase import CVE_ID, MetabaseReport, detect_metabase
+from olympus.core.coverage import FailureKind, RunStatus
 from olympus.core.enums import Severity
 from olympus.core.execution import ExecutionPolicy
-from olympus.core.models import Finding
 
 ASSET = "AST-2026-00001"
 BASE = "https://target.example"
@@ -64,7 +64,7 @@ def _properties(url_base: str, tag: str) -> dict[str, HttpResponse]:
     }
 
 
-def _run(tmp_path: Path, transport: _Transport) -> list[Finding]:
+def _run(tmp_path: Path, transport: _Transport) -> MetabaseReport:
     return detect_metabase(
         ASSET,
         BASE,
@@ -77,43 +77,79 @@ def _run(tmp_path: Path, transport: _Transport) -> list[Finding]:
 
 
 def test_flags_affected_version_as_critical(tmp_path: Path) -> None:
-    findings = _run(tmp_path, _Transport(_properties(BASE, "v0.60.10")))
-    assert len(findings) == 1
-    assert findings[0].severity is Severity.CRITICAL
-    assert CVE_ID in findings[0].title
-    assert findings[0].cvss == 9.8
-    assert any("reset_password" in e for e in findings[0].evidence)
+    report = _run(tmp_path, _Transport(_properties(BASE, "v0.60.10")))
+    assert len(report.findings) == 1
+    assert report.findings[0].severity is Severity.CRITICAL
+    assert CVE_ID in report.findings[0].title
+    assert report.findings[0].cvss == 9.8
+    assert any("reset_password" in e for e in report.findings[0].evidence)
+    assert report.status is RunStatus.FINDINGS
+    assert report.coverage.complete is True
 
 
 def test_patched_version_is_low_severity(tmp_path: Path) -> None:
-    findings = _run(tmp_path, _Transport(_properties(BASE, "v0.60.17")))
-    assert findings[0].severity is Severity.LOW
+    report = _run(tmp_path, _Transport(_properties(BASE, "v0.60.17")))
+    assert report.findings[0].severity is Severity.LOW
 
 
 def test_boundary_highest_affected_is_critical(tmp_path: Path) -> None:
-    findings = _run(tmp_path, _Transport(_properties(BASE, "v0.62.8")))
-    assert findings[0].severity is Severity.CRITICAL
+    report = _run(tmp_path, _Transport(_properties(BASE, "v0.62.8")))
+    assert report.findings[0].severity is Severity.CRITICAL
 
 
-def test_non_metabase_endpoint_yields_nothing(tmp_path: Path) -> None:
+def test_non_metabase_endpoint_is_a_clean_answer(tmp_path: Path) -> None:
+    """The host answered and is not Metabase: full coverage, no findings."""
     transport = _Transport(
         {"/api/session/properties": HttpResponse(f"{BASE}/api/session/properties", 200, {}, b"hi")}
     )
-    assert _run(tmp_path, transport) == []
+    report = _run(tmp_path, transport)
+
+    assert report.findings == ()
+    assert report.identified is False
+    assert report.coverage.complete is True
+    assert report.status is RunStatus.CLEAN
 
 
-def test_missing_endpoint_yields_nothing(tmp_path: Path) -> None:
+def test_missing_endpoint_is_a_clean_answer(tmp_path: Path) -> None:
     transport = _Transport(
         {"/api/session/properties": HttpResponse(f"{BASE}/api/session/properties", 404, {}, b"")}
     )
-    assert _run(tmp_path, transport) == []
+    report = _run(tmp_path, transport)
+
+    assert report.findings == ()
+    assert report.status is RunStatus.CLEAN
 
 
-def test_transport_error_yields_nothing(tmp_path: Path) -> None:
-    assert _run(tmp_path, _Transport({}, error=True)) == []
+def test_transport_error_is_reported_as_failed_not_clean(tmp_path: Path) -> None:
+    """An unreachable target must never produce the same output as a safe one."""
+    report = _run(tmp_path, _Transport({}, error=True))
+
+    assert report.findings == ()
+    assert report.identified is False
+    assert report.status is RunStatus.FAILED
+    assert report.coverage.reasons == {FailureKind.TRANSPORT_ERROR: 1}
+    assert report.coverage.errors and "boom" in report.coverage.errors[0]
+
+
+def test_unreachable_vulnerable_endpoint_is_partial(tmp_path: Path) -> None:
+    """The instance was identified but the second probe failed: partial, not clean."""
+
+    class _HalfBroken(_Transport):
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            if url.endswith("/api/session/reset_password"):
+                raise HttpClientError("connection reset")
+            return super().get(url, addresses, timeout, max_bytes)
+
+    report = _run(tmp_path, _HalfBroken(_properties(BASE, "v0.60.17")))
+
+    assert report.identified is True
+    assert report.status is RunStatus.PARTIAL
+    assert report.coverage.reasons == {FailureKind.TRANSPORT_ERROR: 1}
 
 
 def test_unparseable_version_is_low_severity(tmp_path: Path) -> None:
-    findings = _run(tmp_path, _Transport(_properties(BASE, "nightly")))
-    assert len(findings) == 1
-    assert findings[0].severity is Severity.LOW
+    report = _run(tmp_path, _Transport(_properties(BASE, "nightly")))
+    assert len(report.findings) == 1
+    assert report.findings[0].severity is Severity.LOW

@@ -1,11 +1,20 @@
 """Olympus Core — the shared data contract for every module.
 
-Exposes the canonical models, enumerations, traceable ID generator and
-structured validation errors that all Olympus tools rely on.
+Exposes the canonical models, enumerations, traceable ID generator, run
+status/coverage vocabulary, exit codes and structured validation errors that
+all Olympus tools rely on.
 """
 
 from __future__ import annotations
 
+from olympus.core.coverage import (
+    Coverage,
+    CoverageTracker,
+    FailureKind,
+    RunStatus,
+    exit_code_for,
+    summarize,
+)
 from olympus.core.enums import (
     AlertStatus,
     AssetType,
@@ -20,11 +29,14 @@ from olympus.core.execution import (
     AuthorizationRequiredError,
     CancellationRequested,
     CancellationToken,
+    Deadline,
     ExecutionPolicy,
     ExecutionPolicyError,
     StructuredAuditRecord,
     append_structured_audit,
+    interruptible_sleep,
 )
+from olympus.core.exit_codes import ExitCode
 from olympus.core.ids import IdGenerator, new_id
 from olympus.core.models import (
     Alert,
@@ -47,11 +59,16 @@ __all__ = [
     "AuthorizationRequiredError",
     "CancellationRequested",
     "CancellationToken",
+    "Coverage",
+    "CoverageTracker",
     "Criticality",
+    "Deadline",
     "Event",
     "Evidence",
     "ExecutionPolicy",
     "ExecutionPolicyError",
+    "ExitCode",
+    "FailureKind",
     "Finding",
     "FindingStatus",
     "IdGenerator",
@@ -59,6 +76,7 @@ __all__ = [
     "IncidentStatus",
     "Observation",
     "OlympusModel",
+    "RunStatus",
     "ScanJob",
     "SecurityReport",
     "Severity",
@@ -66,6 +84,9 @@ __all__ = [
     "StructuredAuditRecord",
     "ValidationReport",
     "append_structured_audit",
+    "exit_code_for",
     "format_validation_error",
+    "interruptible_sleep",
     "new_id",
+    "summarize",
 ]

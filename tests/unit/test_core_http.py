@@ -311,6 +311,41 @@ def test_raises_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> Non
         UrllibHttpClient(retries=1).get("https://olympusdemocorp.example/")
 
 
+def test_backoff_is_capped_and_optionally_jittered(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retries must not stampede: the wait is capped and can be spread out."""
+    import urllib.error
+
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda seconds: slept.append(seconds))
+
+    def _fail(request: Any, timeout: float = 0.0) -> Any:
+        del request, timeout
+        raise urllib.error.URLError("temporary")
+
+    monkeypatch.setattr("urllib.request.urlopen", _fail)
+
+    with pytest.raises(HttpRequestError):
+        UrllibHttpClient(timeout=1.0, retries=3, backoff=1.0).get(
+            "https://olympusdemocorp.example/"
+        )
+    # Exponential and unjittered: the slices sum to 1, 2 and 4 seconds.
+    assert sum(slept) == pytest.approx(7.0)
+
+    slept.clear()
+    with pytest.raises(HttpRequestError):
+        UrllibHttpClient(timeout=1.0, retries=3, backoff=1.0, jitter=0.5).get(
+            "https://olympusdemocorp.example/"
+        )
+    # Each of the three waits lands inside its own +/-50% band: [0.5,1.5],
+    # [1,3] and [2,6], so the total stays strictly inside (3.5, 10.5).
+    assert 3.5 <= sum(slept) <= 10.5
+
+
+def test_jitter_outside_zero_to_one_is_refused() -> None:
+    with pytest.raises(ExecutionPolicyError, match="jitter_ratio"):
+        UrllibHttpClient(jitter=2.0)
+
+
 def test_overall_deadline_caps_retries_backoff_and_request_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -285,6 +285,9 @@ table above, here they are explained once:
 | `--asset-id <id>` | `core.Asset` id to attach the produced findings to, so they land on the same asset in Vulcan | Helios, Artemis, Argus fronting |
 | `--concurrency <n>` | how many checks to run in parallel (bulk enumeration) | `argus accounts` |
 | `--rate <sec>` | minimum seconds between requests, out of politeness toward the target | `argus accounts`, `artemis content` |
+| `--jitter <ratio>` | fraction of `--rate` to randomize each wait by, so pacing is not a metronome | `artemis content` |
+| `--deadline <sec>` | overall budget for the whole run, instead of per-request timeouts that add up | `artemis content`, `helios scan` |
+| `--banner` | read (never send) the greeting of services that speak first, to identify them | `helios scan` |
 | `--min-severity <lvl>` | only include findings from this severity up (`info`…`critical`) in the report | `vulcan report` |
 | `--baseline` / `--write-baseline` | ignore already-accepted fingerprints / save the current ones as a baseline | `hermes scan` |
 
@@ -293,11 +296,17 @@ command stopped, not just to the fact that it did:
 
 | Code | Meaning |
 |---|---|
-| `0` | all good |
+| `0` | all good: full coverage, nothing to report |
 | `1` | found something you may want to look at (a secret, a finding, an alert…) |
 | `2` | usage or input error (bad flag, unreadable or malformed file) |
 | `3` | **blocked**: the target is outside the authorized scope (and was logged) |
 | `4` | **refused**: an explicit authorization flag (`--i-am-authorized`) was required and missing |
+| `5` | **partial**: the run lost coverage, so its findings are not exhaustive |
+| `6` | **failed**: nothing completed, so the result carries no information |
+| `7` | **cancelled**: the run stopped on request before finishing |
+
+Codes `5` and `6` are what let a pipeline tell "we looked everywhere and found
+nothing" from "we could not look" — see [run status and coverage](run-status.md).
 
 **Configuration file** (optional) — to stop repeating the same flags, create `olympus.toml` in
 the folder you run commands from (or `~/.olympus.toml`, or point `$OLYMPUS_CONFIG` at a
@@ -308,6 +317,8 @@ path):
 timeout = 15.0
 retries = 3
 rate = 0.25
+backoff = 0.5
+jitter = 0.2   # spread each retry wait by +/- this fraction (0 = off)
 ```
 
 **Where Olympus writes** — two kinds of file, two different homes:
@@ -650,11 +661,18 @@ un comando si è fermato, non solo al fatto che si sia fermato:
 
 | Codice | Significato |
 |---|---|
-| `0` | tutto ok |
+| `0` | tutto ok: copertura completa, niente da segnalare |
 | `1` | trovato qualcosa che potresti voler guardare (secret, finding, alert…) |
 | `2` | errore d'uso o d'input (flag sbagliato, file illeggibile o malformato) |
 | `3` | **bloccato**: il target è fuori dallo scope autorizzato (ed è stato loggato) |
 | `4` | **rifiutato**: serviva un flag di autorizzazione esplicito (`--i-am-authorized`) e non c'era |
+| `5` | **parziale**: l'esecuzione ha perso copertura, quindi i finding non sono esaustivi |
+| `6` | **fallito**: nulla è stato completato, il risultato non porta informazione |
+| `7` | **annullato**: l'esecuzione si è fermata su richiesta prima di finire |
+
+I codici `5` e `6` sono ciò che permette di distinguere "abbiamo guardato ovunque e non
+c'era niente" da "non siamo riusciti a guardare" — vedi
+[stato e copertura](run-status.md).
 
 **File di configurazione** (opzionale) — per non ripetere sempre gli stessi flag, crea
 `olympus.toml` nella cartella da cui lanci i comandi (oppure `~/.olympus.toml`, oppure indica
@@ -665,6 +683,8 @@ un percorso con `$OLYMPUS_CONFIG`):
 timeout = 15.0
 retries = 3
 rate = 0.25
+backoff = 0.5
+jitter = 0.2   # distribuisce ogni attesa di retry di +/- questa frazione (0 = off)
 ```
 
 **Dove scrive Olympus** — due tipi di file, due destinazioni diverse:

@@ -141,6 +141,12 @@ class UrllibHttpClient:
     exponential backoff on transient failures (network errors and 429/5xx),
     and an optional client-side rate limit (a minimum interval between
     requests) so bulk lookups stay polite.
+
+    ``jitter`` (0-1, off by default) spreads each backoff wait over that
+    fraction of its computed value. Without it every client that hits the same
+    struggling endpoint retries on the same tick and keeps it struggling; with
+    it the retries spread out. Backoff is always capped at
+    ``MAX_BACKOFF_SECONDS`` on top of the overall deadline.
     """
 
     def __init__(
@@ -149,6 +155,7 @@ class UrllibHttpClient:
         *,
         retries: int = 2,
         backoff: float = 0.5,
+        jitter: float = 0.0,
         min_interval: float = 0.0,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         max_response_headers: int = DEFAULT_MAX_RESPONSE_HEADERS,
@@ -171,10 +178,10 @@ class UrllibHttpClient:
             retries=retries,
             backoff_seconds=backoff,
             min_interval_seconds=min_interval,
+            jitter_ratio=jitter,
         )
         self._timeout = self._policy.timeout_seconds
         self._retries = self._policy.retries
-        self._backoff = self._policy.backoff_seconds
         self._min_interval = self._policy.min_interval_seconds
         if not isinstance(max_response_bytes, int) or isinstance(max_response_bytes, bool):
             raise ValueError("max_response_bytes must be an integer")
@@ -249,6 +256,7 @@ class UrllibHttpClient:
             policy.timeout_seconds,
             retries=policy.retries,
             backoff=policy.backoff_seconds,
+            jitter=policy.jitter_ratio,
             min_interval=policy.min_interval_seconds,
             max_response_bytes=max_response_bytes,
             max_response_headers=max_response_headers,
@@ -284,6 +292,7 @@ class UrllibHttpClient:
             timeout,
             retries=config.get("http", "retries", 2, data),
             backoff=config.get("http", "backoff", 0.5, data),
+            jitter=config.get("http", "jitter", 0.0, data),
             min_interval=rate,
             max_response_bytes=config.get(
                 "http", "max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES, data
@@ -500,7 +509,7 @@ class UrllibHttpClient:
                     return response  # out of retries: hand back the last response
             if attempt < self._retries:
                 self._sleep_interruptibly(
-                    self._backoff * (2**attempt), deadline_at=deadline_at
+                    self._policy.next_backoff(attempt + 1), deadline_at=deadline_at
                 )
 
         raise last_error or HttpRequestError(f"HTTP GET failed for {url}")

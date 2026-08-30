@@ -136,8 +136,10 @@ olympus athena run examples/input/athena-plan.json --storage ./.athena --report
 olympus athena status <ASSESSMENT_ID> --storage ./.athena
 ```
 
-Athena exits `0` (clean), `1` (findings/partial), `2` (invalid input),
-`3` (scope denial) or `4` (execution failure), so it scripts cleanly in CI.
+Athena uses the same canonical exit codes as every other module — `0` clean,
+`1` findings, `2` invalid input, `3` scope denial, `5` partial, `6` execution
+failure, `7` cancelled — so it scripts cleanly in CI. A partial run is never
+reported as a clean one; see [run status and coverage](docs/run-status.md).
 
 ## ⚙️ Configuration
 

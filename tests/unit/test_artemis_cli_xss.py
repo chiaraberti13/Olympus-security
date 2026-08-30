@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from olympus.artemis import cli as artemis_cli
-from olympus.artemis.http import HttpResponse
+from olympus.artemis.http import HttpClientError, HttpResponse
 from olympus.artemis.xss import MARKER
 from olympus.cli import app
 
@@ -49,10 +49,35 @@ def test_xss_flags_reflected_param(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     result = runner.invoke(
         app, ["artemis", "xss", "--url", URL, "--i-am-authorized", "--output", str(out)]
     )
-    assert result.exit_code == 0, result.output
+    # Uniform across every Artemis command: findings exit 1, not 0.
+    assert result.exit_code == 1, result.output
+    assert "status=findings" in result.output
     findings = json.loads(out.read_text(encoding="utf-8"))
     assert len(findings) == 1
     assert findings[0]["severity"] == "high"
+
+
+def test_xss_probe_failure_exits_failed_not_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _Broken:
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del url, addresses, timeout, max_bytes
+            raise HttpClientError("connection reset by peer")
+
+    monkeypatch.setattr(artemis_cli, "SocketResolver", _Resolver)
+    monkeypatch.setattr(artemis_cli, "PinnedTransport", _Broken)
+    out = tmp_path / "findings.json"
+
+    result = runner.invoke(
+        app, ["artemis", "xss", "--url", URL, "--i-am-authorized", "--output", str(out)]
+    )
+
+    assert result.exit_code == 6, result.output
+    assert "status=failed" in result.output
+    assert json.loads(out.read_text(encoding="utf-8")) == []
 
 
 def test_xss_no_param_errors(monkeypatch: pytest.MonkeyPatch) -> None:

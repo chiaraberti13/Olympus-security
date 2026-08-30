@@ -1,4 +1,11 @@
-"""Command-line interface for scope-safe Artemis web reconnaissance."""
+"""Command-line interface for scope-safe Artemis web reconnaissance.
+
+Every command that touches a live target reports the same three things: the
+findings, the *coverage* behind them, and an exit code derived from both. A
+command that could not complete its work exits ``5`` (partial) or ``6``
+(failed) rather than ``0``, because an empty findings list from a run that
+never reached the target is the most misleading output a scanner can produce.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +18,7 @@ import typer
 from olympus.artemis.application import ScopedFetchRequest, ScopedFetchService
 from olympus.artemis.content import (
     WordlistError,
+    classify_fetch_error,
     discover_content,
     discoveries_to_findings,
     load_wordlist,
@@ -24,12 +32,21 @@ from olympus.artemis.http import (
 from olympus.artemis.metabase import detect_metabase
 from olympus.artemis.scope import OutOfScopeError, ScopeError, enforce_scope
 from olympus.artemis.xss import check_reflected_xss
+from olympus.core.coverage import (
+    Coverage,
+    CoverageTracker,
+    FailureKind,
+    exit_code_for,
+    summarize,
+)
 from olympus.core.enums import AssetType, Source
 from olympus.core.execution import (
     AuthorizationRequiredError,
+    CancellationRequested,
     ExecutionPolicy,
     ExecutionPolicyError,
 )
+from olympus.core.exit_codes import ExitCode
 from olympus.core.models import Asset, Finding
 from olympus.core.paths import audit_log_path
 
@@ -61,8 +78,26 @@ def _require_active_authorization(authorized: bool) -> ExecutionPolicy:
         policy.require_authorization("Artemis live web probe")
     except AuthorizationRequiredError as exc:
         typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4) from exc
+        raise typer.Exit(code=ExitCode.NOT_AUTHORIZED) from exc
     return policy
+
+
+def _emit(findings: list[Finding], output: Path | None) -> None:
+    """Print findings and, when asked, export the same document to disk."""
+    rendered = _render_findings(findings)
+    typer.echo(rendered)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered, encoding="utf-8")
+
+
+def _finish(command: str, findings: list[Finding], coverage: Coverage) -> None:
+    """Report coverage on stderr and exit with the status the run earned."""
+    status = coverage.status(len(findings))
+    typer.echo(f"artemis: {command} {summarize(status, coverage, len(findings))}", err=True)
+    for sample in coverage.errors:
+        typer.echo(f"artemis: {command} could not check {sample}", err=True)
+    raise typer.Exit(code=exit_code_for(status))
 
 
 @app.command()
@@ -90,10 +125,21 @@ def fetch(
         )
     except AuthorizationRequiredError as exc:
         typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4) from exc
-    except (ScopeError, OutOfScopeError, HttpClientError, ValueError) as exc:
-        typer.echo(f"artemis: fetch blocked or failed: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=ExitCode.NOT_AUTHORIZED) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"artemis: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=ExitCode.OUT_OF_SCOPE) from exc
+    except ScopeError as exc:
+        typer.echo(f"artemis: scope error: {exc}", err=True)
+        raise typer.Exit(code=ExitCode.USAGE) from exc
+    except CancellationRequested as exc:
+        typer.echo("artemis: fetch cancelled", err=True)
+        raise typer.Exit(code=ExitCode.CANCELLED) from exc
+    except (HttpClientError, ValueError) as exc:
+        # The single request this command exists to make did not happen, so the
+        # run failed; it is not a usage mistake by the operator.
+        typer.echo(f"artemis: fetch failed: {exc}", err=True)
+        raise typer.Exit(code=ExitCode.FAILED) from exc
     metadata = {
         "body_bytes": len(result.response.body),
         "final_url": result.response.url,
@@ -132,19 +178,30 @@ def fingerprint(
         )
     except AuthorizationRequiredError as exc:
         typer.echo(f"artemis: {_ACTIVE_DISCLAIMER}", err=True)
-        raise typer.Exit(code=4) from exc
-    except (ScopeError, OutOfScopeError, HttpClientError, ValueError) as exc:
-        typer.echo(f"artemis: fingerprint blocked or failed: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=ExitCode.NOT_AUTHORIZED) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"artemis: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=ExitCode.OUT_OF_SCOPE) from exc
+    except ScopeError as exc:
+        typer.echo(f"artemis: scope error: {exc}", err=True)
+        raise typer.Exit(code=ExitCode.USAGE) from exc
+    except CancellationRequested as exc:
+        typer.echo("artemis: fingerprint cancelled", err=True)
+        raise typer.Exit(code=ExitCode.CANCELLED) from exc
+    except (HttpClientError, ValueError) as exc:
+        typer.echo(f"artemis: fingerprint failed: {exc}", err=True)
+        tracker = CoverageTracker(1)
+        tracker.fail(classify_fetch_error(exc), str(exc))
+        _finish("fingerprint", [], tracker.build())
 
     fingerprints = fingerprint_response(result.response)
     findings = fingerprints_to_findings(asset_id, result.response.url, fingerprints)
-    typer.echo(_render_findings(findings))
-    if output is not None:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(_render_findings(findings), encoding="utf-8")
+    _emit(findings, output)
     products = ", ".join(f.product for f in fingerprints) or "no known technology"
     typer.echo(f"artemis: fingerprint identified {products}", err=True)
+    tracker = CoverageTracker(1)
+    tracker.complete()
+    _finish("fingerprint", findings, tracker.build())
 
 
 @app.command()
@@ -158,6 +215,15 @@ def content(
     rate: float = typer.Option(
         0.0, "--rate", help="Minimum seconds between requests (politeness throttle)."
     ),
+    jitter: float = typer.Option(
+        0.2,
+        "--jitter",
+        help="Fraction of --rate to randomize each wait by (0 disables), so pacing is "
+        "not a metronome.",
+    ),
+    deadline: float | None = typer.Option(
+        None, "--deadline", help="Overall budget for the whole run, in seconds."
+    ),
     asset_id: str = typer.Option(
         "AST-ARTEMIS-CONTENT-1", "--asset-id", help="core.Asset id to attach findings to."
     ),
@@ -169,24 +235,27 @@ def content(
     """Discover existing paths/files under an authorized base URL (real dirbusting).
 
     Every candidate is re-checked against scope before the request, so discovery
-    only ever touches authorized origins/path-prefixes. GET-only, bounded and
-    rate-limited — it discovers, it never exploits.
+    only ever touches authorized origins/path-prefixes. GET-only, bounded,
+    rate-limited with jitter, and stopped by one overall deadline — it
+    discovers, it never exploits. Candidates that could not be checked are
+    reported, so a failed run never looks like a clean one.
     """
     _require_active_authorization(i_am_authorized)
     try:
         words = load_wordlist(wordlist)
     except WordlistError as exc:
         typer.echo(f"artemis: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=ExitCode.USAGE) from exc
 
     try:
         policy = ExecutionPolicy(
             authorized=i_am_authorized,
             timeout_seconds=timeout,
-            deadline_seconds=min(86_400.0, max(timeout * max(len(words), 1), timeout)),
+            deadline_seconds=_content_deadline(deadline, timeout, rate, len(words)),
             min_interval_seconds=rate,
+            jitter_ratio=jitter,
         )
-        discovered = discover_content(
+        report = discover_content(
             url,
             words,
             scope,
@@ -198,17 +267,34 @@ def content(
         )
     except ExecutionPolicyError as exc:
         typer.echo(f"artemis: invalid execution policy: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-    findings = discoveries_to_findings(asset_id, discovered)
-    typer.echo(_render_findings(findings))
-    if output is not None:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(_render_findings(findings), encoding="utf-8")
+        raise typer.Exit(code=ExitCode.USAGE) from exc
+    except CancellationRequested as exc:
+        typer.echo("artemis: content discovery cancelled", err=True)
+        raise typer.Exit(code=ExitCode.CANCELLED) from exc
+    findings = discoveries_to_findings(asset_id, report.discovered)
+    _emit(findings, output)
     typer.echo(
-        f"artemis: content discovery tried {len(words)} path(s), found {len(discovered)}", err=True
+        f"artemis: content discovery tried {len(words)} path(s), "
+        f"found {len(report.discovered)}",
+        err=True,
     )
-    if discovered:
-        raise typer.Exit(code=1)
+    _finish("content", findings, report.coverage)
+
+
+def _content_deadline(
+    requested: float | None, timeout: float, rate: float, words: int
+) -> float:
+    """Derive one overall budget for a discovery run.
+
+    The old default multiplied the per-request timeout by the wordlist length,
+    so a 5000-word list authorized a seven-hour run. The derived default still
+    scales with the work but stays inside a bound an operator can predict, and
+    ``--deadline`` overrides it outright.
+    """
+    if requested is not None:
+        return requested
+    estimated = (timeout + rate) * max(words, 1)
+    return min(3600.0, max(timeout, estimated))
 
 
 @app.command("check-scope")
@@ -222,10 +308,10 @@ def check_scope(
         approved = enforce_scope(url, scope, log)
     except ScopeError as exc:
         typer.echo(f"artemis: scope error: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=ExitCode.USAGE) from exc
     except OutOfScopeError as exc:
         typer.echo(f"artemis: blocked, out of scope: {exc}", err=True)
-        raise typer.Exit(code=3) from exc
+        raise typer.Exit(code=ExitCode.OUT_OF_SCOPE) from exc
     typer.echo(f"artemis: authorized {approved.url} (no network request performed)")
 
 
@@ -251,7 +337,7 @@ def metabase(
         source=Source.ARTEMIS,
         tags=["artemis", "metabase"],
     )
-    findings = detect_metabase(
+    report = detect_metabase(
         asset.asset_id,
         url,
         scope,
@@ -260,11 +346,12 @@ def metabase(
         PinnedTransport(),
         policy=policy,
     )
-    typer.echo(_render_findings(findings))
-    if output is not None:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(_render_findings(findings), encoding="utf-8")
+    findings = list(report.findings)
+    _emit(findings, output)
     typer.echo(f"artemis: metabase check produced {len(findings)} finding(s)", err=True)
+    if report.coverage.complete and not report.identified:
+        typer.echo("artemis: the target answered and is not a Metabase instance", err=True)
+    _finish("metabase", findings, report.coverage)
 
 
 def _target_params(url: str, param: str | None) -> list[str]:
@@ -298,7 +385,7 @@ def xss(
         typer.echo(
             "artemis: no query parameter to test (add one to the URL or use --param)", err=True
         )
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=ExitCode.USAGE)
     asset = Asset(
         asset_type=AssetType.WEB_SERVER,
         hostname=url,
@@ -306,24 +393,26 @@ def xss(
         tags=["artemis", "xss"],
     )
     resolver, transport = SocketResolver(), PinnedTransport()
+    tracker = CoverageTracker(len(params))
     findings: list[Finding] = []
     for target in params:
-        findings.extend(
-            check_reflected_xss(
-                asset.asset_id,
-                url,
-                target,
-                scope,
-                log,
-                resolver,
-                transport,
-                policy=policy,
-            )
+        probe = check_reflected_xss(
+            asset.asset_id,
+            url,
+            target,
+            scope,
+            log,
+            resolver,
+            transport,
+            policy=policy,
         )
-    typer.echo(_render_findings(findings))
-    if output is not None:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(_render_findings(findings), encoding="utf-8")
+        if probe.completed:
+            tracker.complete()
+            findings.extend(probe.findings)
+        else:
+            tracker.fail(probe.failure or FailureKind.ERROR, probe.detail)
+    _emit(findings, output)
     typer.echo(
         f"artemis: xss check tested {len(params)} param(s), {len(findings)} finding(s)", err=True
     )
+    _finish("xss", findings, tracker.build())

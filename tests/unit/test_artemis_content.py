@@ -1,6 +1,7 @@
 """Tests for Artemis authorized content/directory discovery."""
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -14,9 +15,14 @@ from olympus.artemis.content import (
     discoveries_to_findings,
     load_wordlist,
 )
-from olympus.artemis.http import HttpResponse
+from olympus.artemis.http import HttpClientError, HttpResponse
 from olympus.cli import app
-from olympus.core.execution import ExecutionPolicy
+from olympus.core.coverage import FailureKind, RunStatus
+from olympus.core.execution import (
+    CancellationRequested,
+    CancellationToken,
+    ExecutionPolicy,
+)
 
 runner = CliRunner()
 
@@ -80,7 +86,7 @@ def test_load_wordlist_rejects_empty(tmp_path: Path) -> None:
 
 def test_discover_reports_only_existing_paths(tmp_path: Path) -> None:
     scope = _write_scope(tmp_path / "scope.json")
-    found = discover_content(
+    report = discover_content(
         BASE,
         ["admin", "login", ".env", "missing"],
         scope,
@@ -89,8 +95,11 @@ def test_discover_reports_only_existing_paths(tmp_path: Path) -> None:
         _Transport(),
         policy=_policy(),
     )
-    paths = {d.path: d.status for d in found}
+    paths = {d.path: d.status for d in report.discovered}
     assert paths == {"admin": 200, ".env": 200}
+    assert report.coverage.planned == 4
+    assert report.coverage.completed == 4
+    assert report.status is RunStatus.FINDINGS
 
 
 def test_sensitive_paths_are_escalated_to_low() -> None:
@@ -104,11 +113,12 @@ def test_sensitive_paths_are_escalated_to_low() -> None:
     assert env_finding.remediation  # sensitive paths carry remediation
 
 
-def test_out_of_scope_base_yields_nothing(tmp_path: Path) -> None:
+def test_out_of_scope_base_is_reported_as_failed_not_clean(tmp_path: Path) -> None:
+    """Every candidate blocked is a run that covered nothing, not a clean one."""
     scope = _write_scope(tmp_path / "scope.json")
     log = tmp_path / "blocked.log"
     # /admin-area is outside the authorized /app prefix -> every candidate blocked.
-    found = discover_content(
+    report = discover_content(
         "https://portal.olympusdemocorp.example/admin-area",
         ["admin", ".env"],
         scope,
@@ -117,8 +127,104 @@ def test_out_of_scope_base_yields_nothing(tmp_path: Path) -> None:
         _Transport(),
         policy=_policy(),
     )
-    assert found == []
+    assert report.discovered == ()
+    assert report.coverage.completed == 0
+    assert report.coverage.reasons == {FailureKind.SCOPE_DENIED: 2}
+    assert report.status is RunStatus.FAILED
     assert log.exists()  # blocked candidates are audited
+
+
+def test_transport_failures_are_counted_not_dropped(tmp_path: Path) -> None:
+    class _Flaky:
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del addresses, timeout, max_bytes
+            if url.endswith("/admin"):
+                return HttpResponse(url, 200, {}, b"admin console")
+            raise HttpClientError("connection reset by peer")
+
+    report = discover_content(
+        BASE,
+        ["admin", "login", "backup"],
+        _write_scope(tmp_path / "scope.json"),
+        tmp_path / "blocked.log",
+        _Resolver(),
+        _Flaky(),
+        policy=_policy(),
+    )
+
+    assert [d.path for d in report.discovered] == ["admin"]
+    assert report.coverage.completed == 1
+    assert report.coverage.failed == 2
+    assert report.coverage.reasons == {FailureKind.TRANSPORT_ERROR: 2}
+    # A finding was produced, but coverage was lost: partial outranks findings.
+    assert report.status is RunStatus.PARTIAL
+    assert any("connection reset" in sample for sample in report.coverage.errors)
+
+
+def test_deadline_records_the_candidates_never_tried(tmp_path: Path) -> None:
+    class _Slow:
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del addresses, timeout, max_bytes
+            time.sleep(0.15)
+            return HttpResponse(url, 404, {}, b"")
+
+    report = discover_content(
+        BASE,
+        ["a", "b", "c", "d", "e"],
+        _write_scope(tmp_path / "scope.json"),
+        tmp_path / "blocked.log",
+        _Resolver(),
+        _Slow(),
+        policy=ExecutionPolicy(authorized=True, timeout_seconds=1.0, deadline_seconds=0.3),
+    )
+
+    assert report.coverage.skipped > 0
+    assert report.coverage.reasons[FailureKind.DEADLINE_EXCEEDED] == report.coverage.skipped
+    assert report.status is not RunStatus.CLEAN
+
+
+def test_cancellation_stops_discovery_and_is_raised(tmp_path: Path) -> None:
+    token = CancellationToken()
+
+    class _CancelAfterFirst:
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del addresses, timeout, max_bytes
+            token.cancel()
+            return HttpResponse(url, 404, {}, b"")
+
+    with pytest.raises(CancellationRequested):
+        discover_content(
+            BASE,
+            ["a", "b", "c"],
+            _write_scope(tmp_path / "scope.json"),
+            tmp_path / "blocked.log",
+            _Resolver(),
+            _CancelAfterFirst(),
+            policy=_policy(),
+            cancellation=token,
+        )
+
+
+def test_rate_limit_jitter_stays_within_the_configured_band() -> None:
+    policy = ExecutionPolicy(
+        authorized=True,
+        timeout_seconds=1.0,
+        min_interval_seconds=1.0,
+        jitter_ratio=0.25,
+    )
+
+    assert policy.next_interval(lambda: 0.0) == pytest.approx(0.75)
+    assert policy.next_interval(lambda: 1.0) == pytest.approx(1.25)
+    assert policy.next_interval(lambda: 0.5) == pytest.approx(1.0)
+    # Without jitter the interval is exactly what the operator asked for.
+    plain = ExecutionPolicy(authorized=True, min_interval_seconds=2.0)
+    assert plain.next_interval(lambda: 0.0) == 2.0
 
 
 def test_cli_content_requires_authorization(tmp_path: Path) -> None:
@@ -130,6 +236,45 @@ def test_cli_content_requires_authorization(tmp_path: Path) -> None:
     )
     assert result.exit_code == 4
     assert "AUTHORIZED USE ONLY" in result.output
+
+
+def test_cli_content_reports_partial_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run whose requests failed must not exit 0 with an empty findings list."""
+
+    class _Broken:
+        def get(
+            self, url: str, addresses: tuple[str, ...], timeout: float, max_bytes: int
+        ) -> HttpResponse:
+            del url, addresses, timeout, max_bytes
+            raise HttpClientError("connection reset by peer")
+
+    monkeypatch.setattr(artemis_cli, "SocketResolver", _Resolver)
+    monkeypatch.setattr(artemis_cli, "PinnedTransport", _Broken)
+    scope = _write_scope(tmp_path / "scope.json")
+    wl = _wordlist(tmp_path / "w.txt", ["admin", "login"])
+
+    result = runner.invoke(
+        app,
+        [
+            "artemis",
+            "content",
+            "--url",
+            BASE,
+            "--wordlist",
+            str(wl),
+            "--scope",
+            str(scope),
+            "--log",
+            str(tmp_path / "b.log"),
+            "--i-am-authorized",
+        ],
+    )
+
+    assert result.exit_code == 6, result.output
+    assert "status=failed" in result.output
+    assert "transport_error=2" in result.output
 
 
 def test_cli_content_finds_paths_with_exit_1(
@@ -159,6 +304,7 @@ def test_cli_content_finds_paths_with_exit_1(
         ],
     )
     assert result.exit_code == 1, result.output
+    assert "status=findings" in result.output
     findings = json.loads(out.read_text(encoding="utf-8"))
     titles = " ".join(f["title"] for f in findings)
     assert "/admin" in titles
