@@ -139,7 +139,8 @@ def test_cli_requires_secret_and_tls_for_remote_bind(tmp_path: Path) -> None:
     scopes.mkdir()
     missing = runner.invoke(app, ["aegis", "api", "--scope-directory", str(scopes)])
     assert missing.exit_code == 2
-    assert "environment variable is not set" in missing.output
+    assert "OLYMPUS_AEGIS_API_KEY" in missing.output
+    assert "--identities" in missing.output
     remote = runner.invoke(
         app,
         ["aegis", "api", "--scope-directory", str(scopes), "--host", "0.0.0.0"],  # noqa: S104

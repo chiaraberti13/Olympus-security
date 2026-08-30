@@ -50,6 +50,16 @@ _READ_ONLY_INPUTS = frozenset(
     }
 )
 
+#: Defaults naming durable deployment state: not a deliverable the operator
+#: asked for, and not a log, but state a server must keep across working
+#: directories (credential registers, queues). Listed explicitly so a report
+#: default cannot be moved out of the working directory unnoticed.
+_STATE_FILES = frozenset(
+    {
+        ("olympus.integrations.cli", "DEFAULT_IDENTITY_REGISTER"),
+    }
+)
+
 #: The tree a write default must never point into.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -90,6 +100,7 @@ def test_the_read_only_allowlist_is_neither_stale_nor_overbroad() -> None:
     by_key = {(module, name): value for module, name, value in _all_defaults()}
 
     assert set(by_key) >= _READ_ONLY_INPUTS, "the allowlist names defaults that no longer exist"
+    assert set(by_key) >= _STATE_FILES, "the state-file list names defaults that no longer exist"
     for key in _READ_ONLY_INPUTS:
         assert by_key[key].is_relative_to(Path("examples/input")), (
             f"{key[0]}.{key[1]} is allowlisted as a sample input but does not read one"
@@ -126,6 +137,10 @@ def test_reports_default_to_a_plain_name_in_the_working_directory(
 ) -> None:
     """A deliverable belongs where the operator ran the command."""
     if value.suffix in _LOG_SUFFIXES:
+        return
+    if (module_name, name) in _STATE_FILES:
+        assert value.is_absolute(), f"{module_name}.{name} is a relative state-file default"
+        assert value.is_relative_to(state_dir())
         return
 
     assert not value.is_absolute(), f"{module_name}.{name} is an absolute report default"

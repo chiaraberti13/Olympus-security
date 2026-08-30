@@ -18,7 +18,7 @@ import sys
 
 import typer
 
-from olympus.core.paths import audit_log_path
+from olympus.core.paths import audit_log_path, state_file_path
 from olympus.integrations import scanners as scanner_registry
 from olympus.integrations.capabilities import inventory_document
 from olympus.integrations.diagnostics import (
@@ -52,7 +52,17 @@ jobs_app = typer.Typer(
     no_args_is_help=True,
     help="Durable native AEGIS job queue (SQLite, no Redis/Celery required).",
 )
+identities_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="API identities: scoped credentials with rotation, expiry and revocation.",
+)
 aegis_app.add_typer(jobs_app, name="jobs")
+aegis_app.add_typer(identities_app, name="identities")
+
+#: Credential hashes are deployment state, not a report: they follow the
+#: state directory rather than the working directory.
+DEFAULT_IDENTITY_REGISTER = str(state_file_path("aegis-api-identities.json"))
 
 #: AEGIS writes this audit log whether or not the operator asked for it, so it
 #: defaults to the per-user state directory rather than the working directory.
@@ -70,13 +80,20 @@ def aegis_api(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8443, "--port", min=1, max=65_535),
     api_key_env: str = typer.Option("OLYMPUS_AEGIS_API_KEY", "--api-key-env"),
+    identities: str = typer.Option(
+        "", "--identities", help="Identity register with scoped, revocable credentials."
+    ),
+    audit: str = typer.Option(
+        DEFAULT_AEGIS_AUDIT_LOG, "--audit", help="Redacted per-request audit log."
+    ),
     ssl_certfile: str = typer.Option("", "--ssl-certfile"),
     ssl_keyfile: str = typer.Option("", "--ssl-keyfile"),
 ) -> None:
     """Serve the authenticated native AEGIS API.
 
-    Non-loopback binds require both a TLS certificate and key. The API secret is
-    read from an environment variable and is never accepted on the command line.
+    Non-loopback binds require both a TLS certificate and key. Credentials come
+    from an identity register or a single environment variable, never from the
+    command line.
     """
     import ipaddress
     import os
@@ -93,9 +110,9 @@ def aegis_api(
         )
         raise typer.Exit(code=2)
     api_key = os.environ.get(api_key_env, "")
-    if not api_key:
+    if not api_key and not identities:
         typer.echo(
-            f"olympus: required API key environment variable is not set: {api_key_env}",
+            f"olympus: set {api_key_env} or pass --identities with a credential register",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -110,6 +127,8 @@ def aegis_api(
                 database=Path(database),
                 scope_directory=Path(scope_directory),
                 api_key=api_key,
+                identities_path=Path(identities) if identities else None,
+                audit_path=Path(audit) if audit else None,
             )
         )
     except (ImportError, OSError, ValueError) as exc:
@@ -439,6 +458,148 @@ def aegis_jobs_recover(
             indent=2,
             sort_keys=True,
             default=str,
+        )
+    )
+
+
+def _identity_register(path: str, *, create: bool = False) -> object:
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityRegister, load_register
+
+    location = Path(path)
+    if not location.exists():
+        if create:
+            return IdentityRegister()
+        typer.echo(f"olympus: identity register not found: {location}", err=True)
+        raise typer.Exit(code=2)
+    return load_register(location)
+
+
+@identities_app.command("init")
+def aegis_identities_init(
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Create an empty identity register (owner-only)."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityRegister, save_register
+
+    location = Path(register_path)
+    if location.exists():
+        typer.echo(f"olympus: identity register already exists: {location}", err=True)
+        raise typer.Exit(code=2)
+    save_register(location, IdentityRegister())
+    typer.echo(json.dumps({"register": str(location), "identities": 0}, indent=2))
+
+
+@identities_app.command("add")
+def aegis_identities_add(
+    identity_id: str = typer.Argument(..., help="Identity name, e.g. 'ops-console'."),
+    scopes: str = typer.Option(
+        "jobs:read", "--scopes", help="Comma-separated scopes granted to this identity."
+    ),
+    rate_limit: int = typer.Option(120, "--rate-limit", min=1, max=100_000),
+    expires_in_days: int = typer.Option(
+        0, "--expires-in-days", min=0, max=3_650, help="0 keeps the credential open-ended."
+    ),
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Add one scoped identity and print its secret exactly once."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityError, add_identity, save_register
+
+    register = _identity_register(register_path, create=True)
+    try:
+        updated, secret = add_identity(
+            register,  # type: ignore[arg-type]
+            identity_id=identity_id,
+            scopes=[item.strip() for item in scopes.split(",") if item.strip()],
+            rate_limit_per_minute=rate_limit,
+            expires_in_days=expires_in_days or None,
+        )
+    except IdentityError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    save_register(Path(register_path), updated)
+    _emit_secret(identity_id, secret, "created")
+
+
+@identities_app.command("rotate")
+def aegis_identities_rotate(
+    identity_id: str = typer.Argument(...),
+    overlap_seconds: int = typer.Option(
+        300,
+        "--overlap-seconds",
+        min=0,
+        max=604_800,
+        help="How long the previous secret keeps working; 0 revokes it immediately.",
+    ),
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Issue a new secret, keeping the old one valid for a bounded overlap."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityError, rotate_identity, save_register
+
+    try:
+        updated, secret = rotate_identity(
+            _identity_register(register_path),  # type: ignore[arg-type]
+            identity_id,
+            overlap_seconds=overlap_seconds,
+        )
+    except IdentityError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    save_register(Path(register_path), updated)
+    _emit_secret(identity_id, secret, "rotated")
+
+
+@identities_app.command("revoke")
+def aegis_identities_revoke(
+    identity_id: str = typer.Argument(...),
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """Revoke an identity immediately, including any secret still rotating."""
+    from pathlib import Path
+
+    from olympus.aegis.identity import IdentityError, revoke_identity, save_register
+
+    try:
+        updated = revoke_identity(
+            _identity_register(register_path), identity_id  # type: ignore[arg-type]
+        )
+    except IdentityError as exc:
+        typer.echo(f"olympus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    save_register(Path(register_path), updated)
+    typer.echo(json.dumps({"identity_id": identity_id, "revoked": True}, indent=2))
+
+
+@identities_app.command("list")
+def aegis_identities_list(
+    register_path: str = typer.Option(DEFAULT_IDENTITY_REGISTER, "--file", "-f"),
+) -> None:
+    """List identities, their scopes and status. Secrets are never stored."""
+    register = _identity_register(register_path)
+    identities = register.public_view()  # type: ignore[attr-defined]
+    typer.echo(
+        json.dumps({"count": len(identities), "identities": identities}, indent=2, sort_keys=True)
+    )
+
+
+def _emit_secret(identity_id: str, secret: str, action: str) -> None:
+    """Print a credential once; only its SHA-256 is written to the register."""
+    typer.echo(
+        json.dumps(
+            {
+                "identity_id": identity_id,
+                "action": action,
+                "secret": secret,
+                "notice": "store this secret now: only its hash is kept on disk",
+            },
+            indent=2,
         )
     )
 

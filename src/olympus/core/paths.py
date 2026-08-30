@@ -10,6 +10,9 @@ source tree:
 * **Reports and exports** are the deliverable the operator asked for, so their
   default is a plain filename in the current directory — where the command was
   run, and where they will be looked for.
+* **Registers and other durable state** belong to the deployment rather than to
+  a run. Like logs they go to the state directory, so a server does not lose
+  its credentials because it was started from a different directory.
 
 Defaults used to be ``examples/output/...``: paths relative to the process's
 working directory that pointed straight into this repository's sample dataset.
@@ -48,6 +51,18 @@ def audit_log_path(name: str) -> Path:
     if not name or "/" in name or "\\" in name or name in {".", ".."}:
         raise ValueError(f"audit log name must be a plain filename: {name!r}")
     return state_dir() / "audit" / name
+
+
+def state_file_path(name: str) -> Path:
+    """Return the default path for durable state Olympus keeps for itself.
+
+    A credential register or a queue is not a deliverable and not a log: it is
+    the deployment's own state, and it must not depend on the working directory
+    the operator happened to be in.
+    """
+    if not name or "/" in name or "\\" in name or name in {".", ".."}:
+        raise ValueError(f"state file name must be a plain filename: {name!r}")
+    return state_dir() / name
 
 
 def output_path(name: str) -> Path:
