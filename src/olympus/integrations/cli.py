@@ -18,6 +18,7 @@ import sys
 
 import typer
 
+from olympus.core.paths import audit_log_path
 from olympus.integrations import scanners as scanner_registry
 from olympus.integrations.capabilities import inventory_document
 from olympus.integrations.diagnostics import (
@@ -52,6 +53,10 @@ jobs_app = typer.Typer(
     help="Durable native AEGIS job queue (SQLite, no Redis/Celery required).",
 )
 aegis_app.add_typer(jobs_app, name="jobs")
+
+#: AEGIS writes this audit log whether or not the operator asked for it, so it
+#: defaults to the per-user state directory rather than the working directory.
+DEFAULT_AEGIS_AUDIT_LOG = str(audit_log_path("aegis-audit.ndjson"))
 
 
 def _emit_report(report: Report) -> None:
@@ -623,7 +628,7 @@ def aegis_run(
     max_findings: int = typer.Option(10_000, "--max-findings"),
     output: str = typer.Option("", "--output", help="Optional private versioned result JSON."),
     audit: str = typer.Option(
-        "examples/output/aegis-audit.ndjson", "--audit", help="Redacted structured audit log."
+        DEFAULT_AEGIS_AUDIT_LOG, "--audit", help="Redacted structured audit log."
     ),
     i_am_authorized: bool = typer.Option(
         False, "--i-am-authorized", help="Confirm documented authorization for a real scan."

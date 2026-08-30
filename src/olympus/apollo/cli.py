@@ -21,9 +21,10 @@ from olympus.apollo.rules import DEFAULT_MAX_RULE_BYTES, DEFAULT_MAX_RULES
 from olympus.core.contracts import ContractCompatibilityError
 from olympus.core.execution import CancellationRequested, ExecutionPolicyError
 from olympus.core.output import OutputFormat, render
+from olympus.core.paths import output_path
 
 app = typer.Typer(help="Apollo — detection engineering and testing.", no_args_is_help=True)
-DEFAULT_OUTPUT = Path("examples/output/apollo-alerts.json")
+DEFAULT_OUTPUT = output_path("apollo-alerts.json")
 DEFAULT_RULES_DIR = Path("examples/input/apollo-ad")
 
 

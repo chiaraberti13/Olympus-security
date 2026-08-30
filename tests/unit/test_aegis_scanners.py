@@ -72,8 +72,19 @@ def test_diagnostics_tcp_unreachable() -> None:
 
 
 def test_diagnostics_writable_dir(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    check = check_writable_dir(str(tmp_path / "sub"))
+    missing = tmp_path / "sub"
+    check = check_writable_dir(str(missing))
     assert check.ok is True
+    # A diagnostic reports; it must not create the directory it asks about.
+    assert not missing.exists()
+
+    existing = check_writable_dir(str(tmp_path))
+    assert existing.ok is True
+    assert list(tmp_path.iterdir()) == []  # the write probe cleans up after itself
+
+    a_file = tmp_path / "file"
+    a_file.write_text("x", encoding="utf-8")
+    assert check_writable_dir(str(a_file)).ok is False
 
 
 def test_diagnostics_env_secret_never_prints_value(monkeypatch) -> None:  # type: ignore[no-untyped-def]

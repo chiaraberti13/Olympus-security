@@ -18,6 +18,27 @@ htmlcov/
 # OS
 .DS_Store
 
+# Default report names. Reports default to a plain filename in the working
+# directory, so running the CLI from a checkout drops them at the repo root.
+# They are outputs of a demo run, never sources.
+/apollo-alerts.json
+/argus-assets.json
+/argus-dns.json
+/argus-email.json
+/argus-fronting.json
+/argus-investigation.json
+/argus-web.json
+/argus-whois.json
+/helios-findings.json
+/hermes-results.sarif
+/minerva-custody.json
+/minerva-incident.json
+/proteus-campaign.json
+/proteus-training.html
+/vulcan-report.json
+/vulcan-report.md
+/vulcan-report.html
+
 # Vendored-tool runtime artifacts (source is committed; runtime state is not)
 vendor/**/vap.db
 vendor/**/vap.db-*

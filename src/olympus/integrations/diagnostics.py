@@ -89,18 +89,39 @@ def check_tcp(host: str, port: int, *, name: str = "", optional: bool = True) ->
 
 
 def check_writable_dir(path: str, *, optional: bool = False) -> Check:
-    """Check that a directory exists (creatable) and is writable."""
+    """Check that a directory is writable, or could be created writable.
+
+    A diagnostic reports; it does not change the system. This used to
+    ``mkdir(parents=True)`` the target, so merely asking ``doctor`` how things
+    looked created a ``reports/`` directory in whatever directory the command
+    ran from. A missing directory is now reported against the nearest existing
+    ancestor instead, and nothing is created.
+    """
+    import tempfile
     from pathlib import Path
 
     target = Path(path)
+    if not target.exists():
+        ancestor = next((parent for parent in target.parents if parent.exists()), None)
+        if ancestor is None:
+            return Check(f"dir:{path}", False, "does not exist (no reachable parent)", optional)
+        if os.access(ancestor, os.W_OK | os.X_OK):
+            return Check(
+                f"dir:{path}", True, f"does not exist yet (creatable under {ancestor})", optional
+            )
+        return Check(
+            f"dir:{path}", False, f"does not exist and {ancestor} is not writable", optional
+        )
+    if not target.is_dir():
+        return Check(f"dir:{path}", False, "exists but is not a directory", optional)
     try:
-        target.mkdir(parents=True, exist_ok=True)
-        probe = target / ".olympus-doctor-write-test"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
-        return Check(f"dir:{path}", True, "writable", optional)
+        # Probe rather than trust the mode bits: read-only mounts and ACLs both
+        # make os.access optimistic. The probe file cleans itself up.
+        with tempfile.NamedTemporaryFile(dir=target, prefix=".olympus-doctor-"):
+            pass
     except OSError as exc:
         return Check(f"dir:{path}", False, f"not writable ({exc.__class__.__name__})", optional)
+    return Check(f"dir:{path}", True, "writable", optional)
 
 
 def check_env_set(var: str, *, optional: bool = True, secret: bool = False) -> Check:

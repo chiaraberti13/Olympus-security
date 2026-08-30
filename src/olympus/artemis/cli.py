@@ -31,10 +31,11 @@ from olympus.core.execution import (
     ExecutionPolicyError,
 )
 from olympus.core.models import Asset, Finding
+from olympus.core.paths import audit_log_path
 
 app = typer.Typer(help="Artemis — authorized web reconnaissance.", no_args_is_help=True)
 DEFAULT_SCOPE = Path("examples/input/artemis-scope.json")
-DEFAULT_LOG = Path("examples/output/artemis-blocked.log")
+DEFAULT_LOG = audit_log_path("artemis-blocked.log")
 DEFAULT_METABASE_SCOPE = Path("examples/input/artemis-metabase-scope.json")
 
 # Shown before an active web test that sends requests to a live target.
