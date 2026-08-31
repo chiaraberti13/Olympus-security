@@ -72,3 +72,36 @@ def test_export_schemas_writes_directory(tmp_path) -> None:  # type: ignore[no-u
     assert result.exit_code == 0
     payload = json.loads((out / "schemas.json").read_text())
     assert "olympus.asset" in payload
+
+
+def test_config_validate_reports_redacted_effective_values(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    cfg = tmp_path / "olympus.toml"
+    cfg.write_text(
+        '[http]\ntimeout = 12.0\n[service]\napi_token = "must-not-leak"\n',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["config", "validate", "--file", str(cfg)],
+        env={"OLYMPUS_HTTP_RETRIES": "4"},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "valid"
+    assert payload["effective"]["http"]["timeout"] == 12.0
+    assert payload["effective"]["http"]["retries"] == 4
+    assert payload["effective"]["service"]["api_token"] == "[REDACTED]"  # noqa: S105
+    assert "must-not-leak" not in result.stdout
+
+
+def test_config_validate_fails_closed_without_traceback(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    cfg = tmp_path / "invalid.toml"
+    cfg.write_text("[http]\nretries = 999\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["config", "validate", "--file", str(cfg)])
+
+    assert result.exit_code == 2
+    assert "invalid configuration" in result.output
+    assert "Traceback" not in result.output

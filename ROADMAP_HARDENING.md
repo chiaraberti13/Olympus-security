@@ -119,8 +119,8 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [ ] Definire chiaramente gli extra `dev`, `api`, `aegis` e `vap`.
 - [ ] Introdurre lock/constraints con hash e verificare metadata/licenze/file inclusi.
 - [x] Rendere TOML malformato, config esplicita assente e valori invalidi errori bloccanti.
-- [ ] Documentare e testare precedenza CLI → environment → file → default.
-- [ ] Aggiungere `olympus config validate` con redazione dei segreti.
+- [x] Documentare e testare precedenza CLI → environment → file → default.
+- [x] Aggiungere `olympus config validate` con redazione dei segreti.
 
 ### Output ed evidenze
 
@@ -199,11 +199,12 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 | 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
 | 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
 | 2026-08-29 | P0 SSRF e decompressione | verificato | Ruff pulito e 859 test verdi su `main@d94bbf4`: IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
-| 2026-08-30 | P1 isolamento esecuzioni | in verifica | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |
-| 2026-08-30 | P1 job plane AEGIS | in verifica | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |
-| 2026-08-30 | P1 identità API AEGIS | in verifica | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
-| 2026-08-30 | P1 retention AEGIS | in verifica | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
+| 2026-08-30 | P1 isolamento esecuzioni | CI verde | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |
+| 2026-08-30 | P1 job plane AEGIS | CI verde | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |
+| 2026-08-30 | P1 identità API AEGIS | CI verde | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
+| 2026-08-30 | P1 retention AEGIS | CI verde | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
 | 2026-08-30 | Wheel senza vendor | verificato | Smoke del wheel esteso a `doctor` e a `aegis doctor`, `deps`, `info`, `scanners`, `capabilities` più i nuovi gruppi CLI: la diagnostica non richiede più l'albero `vendor/` e i comandi che lo richiedono escono con codice 2 |
-| 2026-08-30 | P1 stati e copertura Artemis/Helios | in verifica | `olympus.core.coverage`: stati `CLEAN`/`FINDINGS`/`PARTIAL`/`FAILED`, contatori planned/completed/failed/skipped con motivo strutturato ed errori redatti; exit code canonici estesi (`5` parziale, `6` fallito, `7` annullato) e adottati da Artemis, Helios e Athena; Helios distingue closed/filtered/unreachable/dns_failure/denied con concorrenza limitata, deadline unica e banner opzionale in sola lettura; Artemis conta ogni candidato con rate limit jitterato e deadline globale |
+| 2026-08-30 | P1 stati e copertura Artemis/Helios | CI verde | `olympus.core.coverage`: stati `CLEAN`/`FINDINGS`/`PARTIAL`/`FAILED`, contatori planned/completed/failed/skipped con motivo strutturato ed errori redatti; exit code canonici estesi (`5` parziale, `6` fallito, `7` annullato) e adottati da Artemis, Helios e Athena; Helios distingue closed/filtered/unreachable/dns_failure/denied con concorrenza limitata, deadline unica e banner opzionale in sola lettura; Artemis conta ogni candidato con rate limit jitterato e deadline globale |
+| 2026-08-30 | P2 configurazione | CI verde | Run `#137`: precedenza CLI/environment/TOML/default, `config validate` redatto, 1040 test e wheel smoke |
 
-**Nota sulle evidenze.** Le righe `in verifica` sono state validate localmente su `claude/hardening-roadmap-check-21qouj` (ruff pulito, 978 test, build del wheel e smoke CLI in ambiente pulito). La CI di repository gira su `pull_request`/`push` su `main`: diventano `CI verde` quando quel workflow ha girato sul branch.
+**Nota sulle evidenze.** Le tranche P1 confluite sono state riconfermate da `main` run `#135` (Ruff, 1033 test, gitleaks e wheel smoke). La tranche configurazione è stata verificata dalla PR run `#137` (Ruff, 1040 test, gitleaks e wheel smoke).

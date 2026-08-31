@@ -19,6 +19,8 @@ from olympus.argus.pipeline import PipelineDocument, PipelinePreset
 from olympus.artemis.cli import app as artemis_app
 from olympus.athena.cli import app as athena_app
 from olympus.athena.domain.contracts import AssessmentPlan, AssessmentResult
+from olympus.core import config as core_config
+from olympus.core.execution import redact_mapping
 from olympus.core.models import (
     Alert,
     Asset,
@@ -70,6 +72,38 @@ def _main(
 
 
 core_app = typer.Typer(help="Core data-contract utilities.", no_args_is_help=True)
+config_app = typer.Typer(help="Validate and inspect effective configuration.", no_args_is_help=True)
+
+
+@config_app.command("validate")
+def validate_config(
+    file: Path | None = typer.Option(
+        None,
+        "--file",
+        help="Validate this TOML file instead of automatic discovery.",
+    ),
+) -> None:
+    """Validate configuration and print only redacted effective values."""
+    try:
+        data, source = core_config.load_config_with_source(file)
+        effective = redact_mapping(core_config.effective_config(data))
+    except core_config.ConfigError as exc:
+        typer.echo(f"olympus: invalid configuration: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(
+        json.dumps(
+            {
+                "schema_name": "olympus.config-validation",
+                "schema_version": "1.0.0",
+                "status": "valid",
+                "source": str(source) if source is not None else None,
+                "environment_overrides": core_config.active_environment_overrides(),
+                "effective": effective,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 @core_app.command("export-schemas")
@@ -108,6 +142,7 @@ def export_schemas(
 
 
 app.add_typer(core_app, name="core")
+app.add_typer(config_app, name="config")
 app.add_typer(argus_app, name="argus")
 app.add_typer(athena_app, name="athena")
 app.add_typer(helios_app, name="helios")

@@ -50,6 +50,7 @@ jobs:
           OLYMPUS=/tmp/olympus-wheel-smoke/bin/olympus
           "$OLYMPUS" --help
           "$OLYMPUS" version
+          "$OLYMPUS" config validate
           for module in core argus athena helios artemis proteus hermes apollo minerva vulcan metis aegis; do
             "$OLYMPUS" "$module" --help
           done
