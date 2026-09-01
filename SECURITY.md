@@ -1,60 +1,48 @@
-# Security Policy
+<p align="center">
+  <img src="assets/banner.svg" alt="Olympus Security" width="100%">
+</p>
 
-## Supported versions
+<p align="center"><a href="#-english">🇬🇧 English</a> · <a href="#-italiano">🇮🇹 Italiano</a></p>
 
-Security fixes are applied to the latest version on the default branch. Older
-commits, forks and unofficial builds are not supported unless explicitly
-documented.
+<p align="center">
+  <img src="https://img.shields.io/badge/security-scope--safe-22D3EE?style=flat-square" alt="Scope safe">
+  <img src="https://img.shields.io/badge/disclosure-private-F2C94C?style=flat-square" alt="Private disclosure">
+</p>
 
-## Reporting a vulnerability
+<p align="center"><a href="README.md">Project README</a> · <a href="LICENSE">Primary licence</a> · <a href="THIRD_PARTY_NOTICES.md">Third-party notices</a></p>
 
-Please report suspected vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/chiaraberti13/Olympus-security/security/advisories/new).
+---
 
-Do not open a public issue for an unpatched vulnerability. Include, when
-possible:
+## 🇬🇧 English
 
-- the affected version or commit;
-- a clear description of the impact;
-- reproducible steps or a minimal proof of concept;
-- suggested mitigations, if known;
-- any relevant logs with credentials and personal data removed.
+### Supported versions
 
-Please allow reasonable time for investigation and remediation before public
-disclosure.
+Security fixes target the latest version on the default branch. Vendored or integrated components follow their own upstream support and licence terms.
 
-## Scope
+### Reporting a vulnerability
 
-This policy covers vulnerabilities in Olympus Security. Vulnerabilities in external
-dependencies or third-party services should also be reported to their
-maintainers. A dependency report may still be submitted here when it directly
-affects this project.
+Report suspected vulnerabilities privately through [GitHub Security Advisories](https://github.com/chiaraberti13/Olympus-security/security/advisories/new). Do not open a public issue for an unpatched vulnerability.
 
-Testing must be performed only on systems and data you own or are explicitly
-authorized to test. Do not perform denial-of-service testing, access third-party
-data, degrade services, or use social engineering.
+Include the affected module and commit, impact, reproducible steps, execution mode, sanitized logs and possible mitigations. Never include credentials, API keys, personal data or live target information.
 
-## Secret scanning
+### Authorization and scope
 
-Every push and pull request runs gitleaks as a blocking CI check:
+Olympus is intended exclusively for systems and data owned by the operator or covered by documented authorization. This policy does not authorize testing of third-party infrastructure. Denial of service, social engineering, persistence and access outside the declared scope are excluded.
 
-- the checked-out working tree is scanned on every run;
-- the complete Git history is scanned on pushes to `main` and on manual runs;
-- a **canary step runs first** and plants a synthetic credential outside the
-  repository. If gitleaks fails to flag it the job fails immediately, because a
-  scanner that cannot find a known secret proves nothing when it later reports a
-  clean tree.
+---
 
-Both scans run with `--redact`, so the SARIF reports carry rule names and file
-locations but never secret values. They are published on every run — including
-failed ones — to GitHub code scanning and as the `gitleaks-sarif` build
-artifact.
+## 🇮🇹 Italiano
 
-If a real secret is ever committed, rotate it first: removing it from history
-does not undo the disclosure.
+### Versioni supportate
 
-## Responsible use
+Le correzioni di sicurezza riguardano la versione più recente del branch predefinito. I componenti integrati o inclusi seguono i rispettivi termini di supporto e licenza a monte.
 
-This policy does not grant authorization to test third-party infrastructure.
-Users remain responsible for complying with applicable laws, licences and
-written scopes of authorization.
+### Segnalazione di una vulnerabilità
+
+Segnala privatamente le vulnerabilità sospette tramite [GitHub Security Advisories](https://github.com/chiaraberti13/Olympus-security/security/advisories/new). Non aprire issue pubbliche per vulnerabilità non ancora corrette.
+
+Indica modulo e commit interessati, impatto, passaggi riproducibili, modalità di esecuzione, log privati di dati sensibili e possibili mitigazioni. Non includere credenziali, chiavi API, dati personali o informazioni su target reali.
+
+### Autorizzazione e ambito
+
+Olympus è destinato esclusivamente a sistemi e dati dell’operatore o coperti da autorizzazione documentata. Questa policy non autorizza test su infrastrutture di terzi. Sono esclusi denial of service, social engineering, persistenza e accessi esterni allo scope dichiarato.
