@@ -2,7 +2,7 @@
   <img src="assets/banner.svg" alt="Olympus-security" width="100%">
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.it.md">Italiano</a></p>
+<p align="center"><a href="README.md">🇬🇧 English</a> · <a href="README.it.md">🇮🇹 Italiano</a></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-active-F2C94C?style=flat-square" alt="Project status: active">
@@ -14,7 +14,7 @@
 
 > Un’unica CLI con controllo dello scope per assessment, rilevamento, raccolta delle evidenze e reporting di sicurezza.
 
-<p align="center"><a href="https://github.com/chiaraberti13/Olympus-security/issues">Report an issue</a> · <a href="https://github.com/chiaraberti13/Olympus-security">Repository</a></p>
+<p align="center"><a href="SECURITY.md">Sicurezza</a> · <a href="LICENSE">Licenza principale</a> · <a href="THIRD_PARTY_NOTICES.md">Licenze di terze parti</a></p>
 
 ---
 
