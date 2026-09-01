@@ -1,37 +1,20 @@
-<div align="center">
-
-```
-  ___  _  _   _ __  __ ___ _   _ ___
- / _ \| || | | |  \/  | _ \ | | / __|
-| (_) | || |_| | |\/| |  _/ |_| \__ \
- \___/|____\__, |_|  |_|_|  \___/|___/
-           |___/
-```
-
-# 🏛️ Olympus Security
-
-**One CLI for the whole engagement — recon, assessment, exploitation support, detection and reporting.**
-*A single binary, one shared data contract, offline-first and scope-safe by design.*
-
 <p align="center">
-  <a href="README.md">🇬🇧 English</a> | <a href="README-IT.md">🇮🇹 Italiano</a>
+  <img src="assets/banner.svg" alt="Olympus-security" width="100%">
 </p>
 
+<p align="center"><a href="README.md">English</a> · <a href="README.it.md">Italiano</a></p>
+
 <p align="center">
-  <a href="https://github.com/chiaraberti13/olympus-security/actions"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue?style=for-the-badge" alt="CI"></a>
-  <a href="THIRD_PARTY_NOTICES.md"><img src="https://img.shields.io/badge/license-multi--licence-green?style=for-the-badge" alt="Licences"></a>
-  <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge" alt="Python 3.11+">
-  <img src="https://img.shields.io/badge/modules-11-blue?style=for-the-badge" alt="11 modules">
+  <img src="https://img.shields.io/badge/status-active-F2C94C?style=flat-square" alt="Project status: active">
+  <img src="https://img.shields.io/badge/category-CYBERSECURITY-22D3EE?style=flat-square" alt="CYBERSECURITY">
+  <img src="https://img.shields.io/badge/stack-Python%203.11%2B-8B949E?style=flat-square" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/languages-EN%20%7C%20IT-8B5CF6?style=flat-square" alt="English and Italian">
+  <img src="https://img.shields.io/badge/licence-Multi-licence-2EA043?style=flat-square" alt="Multi-licence">
 </p>
 
-</div>
+> One scope-safe CLI for security assessment, detection, evidence collection and reporting.
 
-> [!IMPORTANT]
-> **For authorized security testing, research and education only.**
-> Every network-active command validates its target against an explicit
-> engagement scope and blocks (and audits) anything outside it. You are solely
-> responsible for using Olympus **lawfully and with documented authorization**.
-> Read the **[legal notice](#-legal--ethical-use)** before use.
+<p align="center"><a href="https://github.com/chiaraberti13/Olympus-security/issues">Report an issue</a> · <a href="https://github.com/chiaraberti13/Olympus-security">Repository</a></p>
 
 ---
 
