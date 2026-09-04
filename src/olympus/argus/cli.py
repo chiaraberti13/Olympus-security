@@ -26,10 +26,14 @@ from olympus.argus.application import (
     DnsLookupService,
     DomainScanRequest,
     DomainScanService,
+    DorkGenerationRequest,
+    DorkGenerationService,
     EmailAnalysisRequest,
     EmailAnalysisService,
     FrontingAssessmentRequest,
     FrontingAssessmentService,
+    IdentityGenerationRequest,
+    IdentityGenerationService,
     InvalidWebTargetError,
     InvestigationRequest,
     InvestigationService,
@@ -56,6 +60,13 @@ from olympus.argus.dns_records import (
     build_dns_asset,
     export_dns_report,
 )
+from olympus.argus.dorks import (
+    DorkCategory,
+    DorkEngine,
+    DorkGenerationError,
+    export_dork_intel,
+    export_dork_queries,
+)
 from olympus.argus.email_osint import (
     EmailParseError,
     export_email_intel,
@@ -71,6 +82,12 @@ from olympus.argus.fronting import (
     report_to_findings,
 )
 from olympus.argus.graph import EntityType, export_investigation
+from olympus.argus.identities import (
+    IdentityGenerationError,
+    IdentityInput,
+    export_identity_intel,
+    export_identity_list,
+)
 from olympus.argus.ip_osint import (
     IpParseError,
     IpWhoisClient,
@@ -147,6 +164,12 @@ _AUTH_DISCLAIMER = (
     "third-party services about a real person's number. Run them only with documented "
     "authorization/consent (pentest engagement, your own number, or study on numbers you "
     "control). Re-run with --i-am-authorized to confirm."
+)
+
+_IDENTITIES_DISCLAIMER = (
+    "AUTHORIZED USE ONLY — generating a real person's likely usernames and email addresses "
+    "is privacy-sensitive OSINT. Run it only with documented authorization/consent (pentest "
+    "engagement or your own accounts). Re-run with --i-am-authorized to confirm."
 )
 
 
@@ -928,3 +951,151 @@ def pipeline_command(
     else:
         export_pipeline(document, output)
         typer.echo(f"argus: wrote pipeline result to {output}", err=True)
+
+
+DEFAULT_DORKS_PATH = Path("examples/output/argus-dorks.json")
+
+
+def _parse_dork_categories(values: list[str]) -> tuple[DorkCategory, ...] | None:
+    """Map ``--category`` strings to :class:`DorkCategory`, or ``None`` for all."""
+    if not values:
+        return None
+    parsed: list[DorkCategory] = []
+    for value in values:
+        try:
+            parsed.append(DorkCategory(value))
+        except ValueError as exc:
+            allowed = ", ".join(item.value for item in DorkCategory)
+            typer.echo(f"argus: unknown category {value!r} (choose from: {allowed})", err=True)
+            raise typer.Exit(code=2) from exc
+    return tuple(parsed)
+
+
+def _parse_dork_engines(values: list[str]) -> tuple[DorkEngine, ...] | None:
+    """Map ``--engine`` strings to :class:`DorkEngine`, or ``None`` for all."""
+    if not values:
+        return None
+    parsed: list[DorkEngine] = []
+    for value in values:
+        try:
+            parsed.append(DorkEngine(value))
+        except ValueError as exc:
+            allowed = ", ".join(item.value for item in DorkEngine)
+            typer.echo(f"argus: unknown engine {value!r} (choose from: {allowed})", err=True)
+            raise typer.Exit(code=2) from exc
+    return tuple(parsed)
+
+
+@app.command()
+def dorks(
+    domain: str = typer.Option(..., "--domain", help="In-scope domain to build recon queries for."),
+    scope: Path = typer.Option(
+        DEFAULT_SCOPE_PATH, "--scope", help="JSON scope file (domain must be in scope)."
+    ),
+    log: Path = typer.Option(
+        DEFAULT_BLOCK_LOG_PATH, "--log", help="Path to the out-of-scope audit log."
+    ),
+    category: list[str] = typer.Option(
+        [], "--category", help="Restrict to a category (repeatable). Omit for all."
+    ),
+    engine: list[str] = typer.Option(
+        [], "--engine", help="Restrict to an engine (repeatable). Omit for all."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the dork-intel bundle as JSON to this path."
+    ),
+    queries_out: Path | None = typer.Option(
+        None, "--queries-out", help="If set, write the engine-grouped query list as text here."
+    ),
+) -> None:
+    """Generate a scoped, offline search-engine reconnaissance (dork) catalog.
+
+    The queries are only *built*, never run: open them yourself, under documented
+    authorization, on each engine.
+    """
+    categories = _parse_dork_categories(category)
+    engines = _parse_dork_engines(engine)
+    try:
+        intel = DorkGenerationService().run(
+            DorkGenerationRequest(
+                domain=domain,
+                scope_path=scope,
+                audit_log_path=log,
+                categories=categories,
+                engines=engines,
+            )
+        )
+    except DorkGenerationError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except ScopeError as exc:
+        typer.echo(f"argus: scope error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except OutOfScopeError as exc:
+        typer.echo(f"argus: blocked, out of scope: {exc}", err=True)
+        raise typer.Exit(code=3) from exc
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    if output is not None:
+        export_dork_intel(intel, output)
+        typer.echo(f"argus: wrote dork intel to {output}", err=True)
+    if queries_out is not None:
+        export_dork_queries(intel.catalog, queries_out)
+        typer.echo(f"argus: wrote dork query list to {queries_out}", err=True)
+
+
+@app.command()
+def identities(
+    first: str = typer.Option(..., "--first", help="Given (first) name."),
+    last: str = typer.Option(..., "--last", help="Family (last) name."),
+    middle: str | None = typer.Option(None, "--middle", help="Optional middle name."),
+    nickname: str | None = typer.Option(None, "--nickname", help="Optional nickname/handle."),
+    year: str | None = typer.Option(None, "--year", help="Optional year suffix (e.g. birth year)."),
+    domain: str | None = typer.Option(
+        None, "--domain", help="If set, also derive <username>@<domain> email candidates."
+    ),
+    i_am_authorized: bool = typer.Option(
+        False, "--i-am-authorized", help="Confirm authorization for this privacy-sensitive OSINT."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="If set, export the identity-intel bundle as JSON to this path."
+    ),
+    usernames_out: Path | None = typer.Option(
+        None, "--usernames-out", help="If set, write candidate usernames, one per line, here."
+    ),
+    emails_out: Path | None = typer.Option(
+        None, "--emails-out", help="If set, write candidate emails, one per line, here."
+    ),
+) -> None:
+    """Generate candidate usernames/emails from a name (offline permutations).
+
+    Feed the output into ``argus accounts`` (username enumeration) or
+    ``argus email`` (address validation).
+    """
+    try:
+        identity = IdentityInput(
+            first=first,
+            last=last,
+            middle=middle,
+            nickname=nickname,
+            year=year,
+            domain=domain,
+        )
+        intel = IdentityGenerationService().run(
+            IdentityGenerationRequest(identity=identity, authorized=i_am_authorized)
+        )
+    except IdentityGenerationError as exc:
+        typer.echo(f"argus: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except AuthorizationRequiredError as exc:
+        typer.echo(f"argus: {_IDENTITIES_DISCLAIMER}", err=True)
+        raise typer.Exit(code=4) from exc
+    typer.echo(json.dumps(intel.to_dict(), indent=2, sort_keys=True))
+    if output is not None:
+        export_identity_intel(intel, output)
+        typer.echo(f"argus: wrote identity intel to {output}", err=True)
+    if usernames_out is not None:
+        export_identity_list(intel.profile, usernames_out, emails=False)
+        typer.echo(f"argus: wrote candidate usernames to {usernames_out}", err=True)
+    if emails_out is not None:
+        export_identity_list(intel.profile, emails_out, emails=True)
+        typer.echo(f"argus: wrote candidate emails to {emails_out}", err=True)

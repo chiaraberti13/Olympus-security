@@ -22,6 +22,14 @@ from olympus.argus.accounts_scope import AccountOutOfScopeError, enforce_account
 from olympus.argus.ct import CertificateTransparencyClient
 from olympus.argus.diff import AssetDiff, diff_snapshots
 from olympus.argus.dns_records import RECORD_TYPES, DnsRecordReport, resolve_records
+from olympus.argus.dorks import (
+    DorkCategory,
+    DorkEngine,
+    DorkIntel,
+    build_dork_asset,
+    build_dork_findings,
+    generate_dorks,
+)
 from olympus.argus.email_osint import (
     EmailIntel,
     analyze_email,
@@ -38,6 +46,12 @@ from olympus.argus.enrichment import (
 )
 from olympus.argus.fronting import FrontingReport, assess_fronting
 from olympus.argus.graph import Entity, EntityType, Investigation
+from olympus.argus.identities import (
+    IdentityInput,
+    IdentityIntel,
+    build_identity_asset,
+    build_identity_profile,
+)
 from olympus.argus.ip_osint import (
     IpGeo,
     IpGeoClient,
@@ -766,3 +780,59 @@ class WebReconService:
             asset=asset,
             findings=build_web_findings(asset.asset_id, report),
         )
+
+
+@dataclass(frozen=True)
+class DorkGenerationRequest:
+    """Command-independent input for offline search-engine dork generation."""
+
+    domain: str
+    scope_path: Path
+    audit_log_path: Path
+    categories: tuple[DorkCategory, ...] | None = None
+    engines: tuple[DorkEngine, ...] | None = None
+
+
+@dataclass(frozen=True)
+class DorkGenerationService:
+    """Generate a scoped, offline dork catalog for one authorized domain."""
+
+    def run(self, request: DorkGenerationRequest) -> DorkIntel:
+        """Enforce scope, then build the catalog and its shared contracts.
+
+        Generation never touches the network, but the target domain is still
+        checked against the engagement scope first: out-of-scope domains are
+        blocked and audited, never quietly turned into reconnaissance queries.
+        """
+        catalog = generate_dorks(
+            request.domain,
+            categories=request.categories,
+            engines=request.engines,
+        )
+        enforce_scope(catalog.domain, request.scope_path, request.audit_log_path)
+        asset = build_dork_asset(catalog)
+        return DorkIntel(
+            catalog=catalog,
+            asset=asset,
+            findings=build_dork_findings(asset.asset_id, catalog),
+        )
+
+
+@dataclass(frozen=True)
+class IdentityGenerationRequest:
+    """Command-independent input for offline username/email permutation."""
+
+    identity: IdentityInput
+    authorized: bool = False
+
+
+@dataclass(frozen=True)
+class IdentityGenerationService:
+    """Derive candidate identities for one person behind an authorization gate."""
+
+    def run(self, request: IdentityGenerationRequest) -> IdentityIntel:
+        """Require authorization, then build candidate handles and addresses."""
+        _require_authorization(request.authorized, "identity permutation")
+        profile = build_identity_profile(request.identity)
+        asset = build_identity_asset(profile)
+        return IdentityIntel(profile=profile, asset=asset)
