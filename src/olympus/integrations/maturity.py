@@ -97,7 +97,13 @@ class MaturityRecord:
 
 
 _OFFLINE_EVIDENCE = "tests/unit/test_aegis_execution.py"
+_OFFLINE_EVIDENCE_PD = "tests/unit/test_aegis_adapters_projectdiscovery.py"
 _LIVE_EVIDENCE = "docs/aegis-execution-evidence.md"
+
+#: Where parser tests live. Adapters are grouped by family rather than piled
+#: into one module, so the check scans the whole unit suite instead of pinning
+#: a single file and forcing every future adapter into it.
+_TEST_ROOT = "tests/unit"
 
 #: The declared ledger. Every entry above ``catalog-only`` is cross-checked by
 #: :func:`verify_declarations` against what the repository actually contains.
@@ -145,6 +151,30 @@ DECLARED: dict[str, MaturityRecord] = {
         "No authorized live run yet: the captured run failed on a broken Ruby "
         "environment, so the adapter has never parsed real engine output.",
     ),
+    "httpx": MaturityRecord(
+        "httpx",
+        Maturity.LIVE_TESTED,
+        _LIVE_EVIDENCE,
+        "Definition of Done incomplete: no per-adapter evidence manifest or SBOM.",
+    ),
+    "nuclei": MaturityRecord(
+        "nuclei",
+        Maturity.LIVE_TESTED,
+        _LIVE_EVIDENCE,
+        "Definition of Done incomplete: no per-adapter evidence manifest or SBOM.",
+    ),
+    "katana": MaturityRecord(
+        "katana",
+        Maturity.LIVE_TESTED,
+        _LIVE_EVIDENCE,
+        "Definition of Done incomplete: no per-adapter evidence manifest or SBOM.",
+    ),
+    "dalfox": MaturityRecord(
+        "dalfox",
+        Maturity.LIVE_TESTED,
+        _LIVE_EVIDENCE,
+        "Definition of Done incomplete: no per-adapter evidence manifest or SBOM.",
+    ),
 }
 
 
@@ -187,13 +217,18 @@ def parser_test_is_present(name: str) -> bool | None:
     ``offline-tested`` means "a regression in this parser fails the build", so
     the claim is only worth making if such a test is really there. The project
     convention is one ``test_<scanner>_parser*`` function per adapter, which is
-    cheap to verify and hard to satisfy by accident.
+    cheap to verify and hard to satisfy by accident. The whole unit suite is
+    scanned, so adapters can be grouped by family without the check pinning
+    them all to one module.
     """
     root = _repository_root()
-    evidence = root / _OFFLINE_EVIDENCE
-    if not (root / "pyproject.toml").exists() or not evidence.exists():
+    tests = root / _TEST_ROOT
+    if not (root / "pyproject.toml").exists() or not tests.is_dir():
         return None
-    return f"def test_{name}_parser" in evidence.read_text(encoding="utf-8")
+    needle = f"def test_{name}_parser"
+    return any(
+        needle in module.read_text(encoding="utf-8") for module in tests.glob("test_*.py")
+    )
 
 
 def verify_declarations() -> list[str]:

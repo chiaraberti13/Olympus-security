@@ -357,7 +357,10 @@ def test_out_of_scope_raises() -> None:
 def test_registry() -> None:
     from olympus.aegis.registry import UnknownScannerError, get_adapter, implemented
 
-    assert set(implemented()) == {"nmap", "nikto", "wafw00f", "sqlmap", "whatweb", "testssl"}
+    assert set(implemented()) == {
+        "nmap", "nikto", "wafw00f", "sqlmap", "whatweb", "testssl",
+        "httpx", "nuclei", "katana", "dalfox",
+    }
     assert get_adapter("nmap").name == "nmap"
     with pytest.raises(UnknownScannerError):
         get_adapter("subfinder")

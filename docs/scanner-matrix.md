@@ -4,6 +4,11 @@ _Generated from `olympus.integrations.scanners` (registry) and `olympus.aegis.re
 
 > **Correction:** OWASP **ZAP** and **OpenVAS/GVM** are open-source (Apache-2.0 / GPL-2.0) and are classified as `containerised-oss-service`, NOT commercial. Only Nessus, Burp, and Acunetix are proprietary.
 
+> **Beware the `httpx` name collision.** The Python HTTP-client library ships a
+> console script also called `httpx`, so a PATH lookup cannot tell it from the
+> ProjectDiscovery probe. The adapter refuses non-probe output with an error
+> naming the collision rather than reporting a clean scan.
+
 > **Simulation is opt-in.** `olympus aegis run` never fabricates findings: a missing binary → `unavailable`, live-off → `disabled`, explicit `--simulate` → `simulation`.
 
 | Scanner | Category | Kind | Binary / API | Licence | Auto-install | In image | Native adapter | Live-verified here |
@@ -12,14 +17,14 @@ _Generated from `olympus.integrations.scanners` (registry) and `olympus.aegis.re
 | zap | web | containerised-oss-service | `API/daemon` | Apache-2.0 | yes | no | — pending | n/a |
 | arjun | web | local-oss-binary | `arjun` | AGPL-3.0 | yes | yes | — pending | n/a |
 | commix | web | local-oss-binary | `commix` | GPL-3.0 | yes | yes | — pending | n/a |
-| dalfox | web | local-oss-binary | `dalfox` | MIT | yes | yes | — pending | n/a |
+| dalfox | web | local-oss-binary | `dalfox` | MIT | yes | yes | ✅ implemented | ✅ yes |
 | dirsearch | web | local-oss-binary | `dirsearch` | GPL-2.0 | yes | yes | — pending | n/a |
-| httpx | web | local-oss-binary | `httpx` | MIT | yes | yes | — pending | n/a |
-| katana | web | local-oss-binary | `katana` | MIT | yes | yes | — pending | n/a |
+| httpx | web | local-oss-binary | `httpx` | MIT | yes | yes | ✅ implemented | ✅ yes |
+| katana | web | local-oss-binary | `katana` | MIT | yes | yes | ✅ implemented | ✅ yes |
 | nikto | web | local-oss-binary | `nikto` | GPL-2.0 | yes | yes | ✅ implemented | ✅ yes |
 | nmap | network | local-oss-binary | `nmap` | GPL-2.0 | yes | yes | ✅ implemented | ✅ yes |
 | nosqlmap | web | local-oss-binary | `nosqlmap` | GPL-3.0 | yes | yes | — pending | n/a |
-| nuclei | web | local-oss-binary | `nuclei` | MIT | yes | yes | — pending | n/a |
+| nuclei | web | local-oss-binary | `nuclei` | MIT | yes | yes | ✅ implemented | ✅ yes |
 | sqlmap | web | local-oss-binary | `sqlmap` | GPL-2.0 | yes | yes | ✅ implemented | ✅ yes |
 | subfinder | dns | local-oss-binary | `subfinder` | MIT | yes | yes | — pending | n/a |
 | testssl | tls | local-oss-binary | `testssl.sh` | GPL-2.0 | yes | yes | ✅ implemented | parser only |
@@ -43,8 +48,8 @@ _Generated from `olympus.integrations.scanners` (registry) and `olympus.aegis.re
 - **Auto-installable / redistributable**: 20/24
 - **Bundled in `docker/Dockerfile.scanners`**: 19/24
 - **Proprietary (commercial licence)**: 3/24 (nessus, acunetix, burp)
-- **Native AEGIS execution adapters implemented**: 6/24 (nikto, nmap, sqlmap, testssl, wafw00f, whatweb)
-- **Live end-to-end verified in this environment**: 4/24 (nikto, nmap, sqlmap, wafw00f) — see evidence doc
+- **Native AEGIS execution adapters implemented**: 10/24 (dalfox, httpx, katana, nikto, nmap, nuclei, sqlmap, testssl, wafw00f, whatweb)
+- **Live end-to-end verified in this environment**: 8/24 (dalfox, httpx, katana, nikto, nmap, nuclei, sqlmap, wafw00f) — see evidence doc
 - **Production-ready**: **0/24** — no adapter meets the full Definition of Done
   (per-adapter evidence manifest with digests, SBOM, vulnerability scan,
   documented version compatibility)

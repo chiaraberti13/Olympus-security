@@ -9,8 +9,12 @@ returns a clear error, never a fabricated result.
 
 from __future__ import annotations
 
+from olympus.aegis.adapters.dalfox import DalfoxAdapter
+from olympus.aegis.adapters.httpx import HttpxAdapter
+from olympus.aegis.adapters.katana import KatanaAdapter
 from olympus.aegis.adapters.nikto import NiktoAdapter
 from olympus.aegis.adapters.nmap import NmapAdapter
+from olympus.aegis.adapters.nuclei import NucleiAdapter
 from olympus.aegis.adapters.sqlmap import SqlmapAdapter
 from olympus.aegis.adapters.testssl import TestsslAdapter
 from olympus.aegis.adapters.wafw00f import Wafw00fAdapter
@@ -24,6 +28,10 @@ _ADAPTERS: dict[str, type[ScannerAdapter]] = {
     "sqlmap": SqlmapAdapter,
     "whatweb": WhatwebAdapter,
     "testssl": TestsslAdapter,
+    "httpx": HttpxAdapter,
+    "nuclei": NucleiAdapter,
+    "katana": KatanaAdapter,
+    "dalfox": DalfoxAdapter,
 }
 
 
