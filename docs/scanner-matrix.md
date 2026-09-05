@@ -45,6 +45,23 @@ _Generated from `olympus.integrations.scanners` (registry) and `olympus.aegis.re
 - **Proprietary (commercial licence)**: 3/24 (nessus, acunetix, burp)
 - **Native AEGIS execution adapters implemented**: 6/24 (nikto, nmap, sqlmap, testssl, wafw00f, whatweb)
 - **Live end-to-end verified in this environment**: 4/24 (nikto, nmap, sqlmap, wafw00f) — see evidence doc
+- **Production-ready**: **0/24** — no adapter meets the full Definition of Done
+  (per-adapter evidence manifest with digests, SBOM, vulnerability scan,
+  documented version compatibility)
+
+## Maturity, not just presence
+
+The "Native adapter" and "Live-verified" columns above are a snapshot maintained
+by hand. The machine-readable, self-checking version is the maturity ladder in
+`olympus.integrations.maturity` — `catalog-only` → `adapter-ready` →
+`offline-tested` → `live-tested` → `production-ready` — reported per engine by
+`olympus aegis capabilities` and cross-checked against the repository on every
+test run. See [`docs/scanner-maturity.md`](scanner-maturity.md).
+
+Readiness and maturity are different questions: readiness is about *this host*
+(is the binary installed, is the API configured), maturity is about *the project*
+(does an adapter exist, is its parser tested, was it ever run live). An engine
+installed on your machine that Olympus has no adapter for stays `catalog-only`.
 
 ## Per-scanner service/licence notes
 

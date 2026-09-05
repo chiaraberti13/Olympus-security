@@ -19,9 +19,10 @@ from pathlib import Path
 
 import typer
 
+from olympus.core.exit_codes import ExitCode
 from olympus.core.paths import audit_log_path, state_file_path
 from olympus.integrations import scanners as scanner_registry
-from olympus.integrations.capabilities import inventory_document
+from olympus.integrations.capabilities import count_at_least, inventory_document
 from olympus.integrations.diagnostics import (
     Check,
     Report,
@@ -31,6 +32,7 @@ from olympus.integrations.diagnostics import (
     check_tcp,
     check_writable_dir,
 )
+from olympus.integrations.maturity import LADDER, Maturity, verify_declarations
 from olympus.integrations.vendored import (
     VAP_DIR,
     VendoredToolNotFoundError,
@@ -307,17 +309,63 @@ def aegis_capabilities(
         "--strict",
         help="Exit non-zero when no scanner integration is ready for a live job.",
     ),
+    min_maturity: str | None = typer.Option(
+        None,
+        "--min-maturity",
+        help=(
+            "Exit non-zero unless at least --count integrations reach this stage: "
+            + " | ".join(stage.value for stage in LADDER)
+        ),
+    ),
+    count: int = typer.Option(
+        1,
+        "--count",
+        min=1,
+        help="How many integrations must reach --min-maturity.",
+    ),
 ) -> None:
-    """Report what AEGIS can actually execute in the current environment.
+    """Report what AEGIS can actually execute, and how far each engine is proven.
 
     Unlike ``scanners``, which is a product catalogue, this command distinguishes
-    registered adapters, installed engines, configured APIs and live readiness.
-    It never contacts a target or treats a catalogue entry as working.
+    registered adapters, installed engines, configured APIs and live readiness —
+    and reports each integration's **maturity**, so the catalogue never promises
+    more than it executes. It never contacts a target.
+
+    ``--min-maturity`` turns that into a CI gate: it fails the build when the
+    project claims less validation than a release requires.
     """
     document = inventory_document()
     typer.echo(json.dumps(document, indent=2, sort_keys=True))
+
+    # A drifted ledger is a reporting bug, not a readiness result: say so on
+    # stderr and fail with a usage code rather than a readiness one.
+    drift = verify_declarations()
+    if drift:
+        for problem in drift:
+            typer.echo(f"olympus: maturity declaration drift: {problem}", err=True)
+        raise typer.Exit(code=int(ExitCode.USAGE))
+
+    if min_maturity is not None:
+        try:
+            minimum = Maturity(min_maturity)
+        except ValueError as exc:
+            typer.echo(
+                f"olympus: unknown maturity stage {min_maturity!r}; expected one of "
+                + ", ".join(stage.value for stage in LADDER),
+                err=True,
+            )
+            raise typer.Exit(code=int(ExitCode.USAGE)) from exc
+        reached = count_at_least(minimum)
+        if reached < count:
+            typer.echo(
+                f"olympus: {reached} integration(s) reach {minimum.value}, "
+                f"{count} required",
+                err=True,
+            )
+            raise typer.Exit(code=int(ExitCode.NOT_AUTHORIZED))
+
     if strict and document["ready"] == 0:
-        raise typer.Exit(code=4)
+        raise typer.Exit(code=int(ExitCode.NOT_AUTHORIZED))
 
 
 def _emit_job(job: object) -> None:

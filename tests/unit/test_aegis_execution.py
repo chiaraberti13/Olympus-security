@@ -22,6 +22,7 @@ from olympus.aegis.adapters.nmap import NmapAdapter
 from olympus.aegis.adapters.sqlmap import SqlmapAdapter
 from olympus.aegis.adapters.testssl import TestsslAdapter
 from olympus.aegis.adapters.wafw00f import Wafw00fAdapter
+from olympus.aegis.adapters.whatweb import WhatwebAdapter
 from olympus.aegis.application import (
     AegisApplicationService,
     AegisRunRequest,
@@ -76,6 +77,13 @@ WAFW00F_NONE = '[{"detected": false, "firewall": "None", "url": "http://x"}]'
 SQLMAP_VULN = "[INFO] GET parameter 'id' is vulnerable. Do you want to keep testing?"
 SQLMAP_SAFE = "[WARNING] GET parameter 'id' does not seem to be injectable"
 TESTSSL_JSON = '[{"id":"BEAST","severity":"LOW","finding":"VULNERABLE (CVE-2011-3389)"}]'
+# whatweb --color=never --quiet: one fingerprint line per target.
+WHATWEB_LINE = (
+    "http://127.0.0.1:8000 [200 OK] Apache[2.4.29], Country[RESERVED][ZZ], "
+    "HTTPServer[Ubuntu Linux][Apache/2.4.29 (Ubuntu)], IP[127.0.0.1], "
+    "Title[Directory listing for /]\n"
+)
+WHATWEB_NO_DETAIL = "http://127.0.0.1:8000 [200 OK] Country[RESERVED][ZZ], IP[127.0.0.1]\n"
 
 
 def _out(stdout: str = "", stderr: str = "", code: int = 0) -> CommandOutput:
@@ -218,6 +226,26 @@ def test_sqlmap_parser_vuln_vs_safe() -> None:
 def test_testssl_parser() -> None:
     findings = TestsslAdapter().parse(_out(TESTSSL_JSON), "x", _req())
     assert findings and findings[0].severity == Severity.LOW
+
+
+def test_whatweb_parser_keeps_only_interesting_plugins() -> None:
+    findings = WhatwebAdapter().parse(_out(WHATWEB_LINE), "127.0.0.1", _req())
+    titles = " ".join(f.title for f in findings)
+    assert "Apache (2.4.29)" in titles
+    assert "HTTPServer (Ubuntu Linux)" in titles
+    # Noise plugins carry no security signal and must not become findings.
+    assert "Country" not in titles and "Title" not in titles and "IP (" not in titles
+    assert all(f.severity == Severity.INFO for f in findings)
+
+
+def test_whatweb_parser_ignores_plugins_without_a_detail() -> None:
+    assert WhatwebAdapter().parse(_out(WHATWEB_NO_DETAIL), "127.0.0.1", _req()) == []
+
+
+def test_whatweb_parser_rejects_output_without_a_fingerprint_line() -> None:
+    """A silent engine must fail loudly, never report a clean target."""
+    with pytest.raises(ParseError):
+        WhatwebAdapter().parse(_out("whatweb: command not found\n"), "127.0.0.1", _req())
 
 
 # --- base orchestration (explicit states) ---------------------------------- #
