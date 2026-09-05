@@ -132,6 +132,14 @@ reported as a clean one; see [run status and coverage](docs/run-status.md).
   [`examples/input/`](examples/input).
 - **`olympus.toml`** (optional) sets shared HTTP defaults; resolution order is
   `OLYMPUS_CONFIG` → `./olympus.toml` → `~/.olympus.toml`.
+- **`olympus.policy.toml`** (optional) makes the execution bounds editable per
+  engagement — timeout, deadline, concurrency, retries, backoff, interval,
+  jitter — plus named profiles and an opt-in `lab` allowlist for private ranges
+  you declare you own. Resolution order is `OLYMPUS_POLICY` →
+  `./olympus.policy.toml` → `~/.olympus/policy.toml`. A policy may only *lower*
+  a compiled-in ceiling; a file that exceeds one is rejected, never clamped.
+  Inspect it with `olympus policy show|validate|diff|edit` — see
+  [`docs/policy.md`](docs/policy.md).
 - **Secrets** are read only from environment variables (e.g.
   `OLYMPUS_NUMVERIFY_KEY`) and are **never** logged, exported, or placed in
   reports.
@@ -142,7 +150,7 @@ reported as a clean one; see [run status and coverage](docs/run-status.md).
 src/olympus/
 ├── cli.py            # unified `olympus` entry point
 ├── tui/              # unified keyboard-first terminal interface
-├── core/             # shared data contract: models, enums, http, config, ids
+├── core/             # shared contract: models, enums, http, config, policy, ids
 ├── argus/            # OSINT & passive recon (incl. ARGUS integration)
 ├── athena/           # assessment orchestration (VAP integration)
 │   ├── domain/       # immutable plans, jobs, state machines, audit

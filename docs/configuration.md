@@ -39,3 +39,16 @@ Le opzioni HTTP riconosciute sono `timeout`, `deadline`, `retries`, `backoff`,
 `jitter`, `rate`, `max_response_bytes`, `max_response_headers`,
 `max_response_header_bytes`, `max_redirects`, `max_decompressed_bytes` e
 `max_expansion_ratio`.
+
+## Due file, due scopi
+
+`olympus.toml` (questo documento) configura il **client HTTP** condiviso.
+I **bound di esecuzione** — timeout, deadline, concorrenza, retry, backoff,
+intervallo minimo, jitter — e il profilo `lab` vivono invece in un file
+separato, `olympus.policy.toml`, con una propria catena di discovery
+(`OLYMPUS_POLICY` → `./olympus.policy.toml` → `~/.olympus/policy.toml`) e i
+propri comandi `olympus policy show|validate|diff|edit`.
+
+La separazione è voluta: un file descrive *come si parla HTTP*, l'altro
+descrive *quanto lavoro è autorizzato in questo engagement e verso quale
+perimetro*. Vedi [policy di esecuzione editabile](policy.md).

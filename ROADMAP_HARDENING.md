@@ -1,188 +1,286 @@
-# Olympus Security — roadmap di completamento e hardening
+# Olympus Security — roadmap: correzioni, potenziamenti e nuovi tool
 
-Baseline dell'analisi: `main@8a9cc70dbe37bdaa08e34e102298b045208f737f`.
+Baseline: `main@8a9cc70` (206 commit · 13 moduli CLI + `core` + `tui` · versione `0.2.0`).
 
-Questo documento è il registro operativo del lavoro. Una voce può essere spuntata solo
-quando codice, test e documentazione collegata sono presenti e i controlli CI pertinenti
-sono verdi. Le funzionalità parziali restano non spuntate.
+Registro operativo del lavoro. Una voce si spunta solo quando **codice, test e documentazione**
+sono presenti e i controlli CI pertinenti sono verdi. Le funzionalità parziali restano non spuntate.
+
+Ordine del documento, pensato per essere azionabile:
+
+1. **Correzioni** — cosa non torna o è a metà, da sistemare.
+2. **Potenziamenti** — rendere più forti i moduli che già esistono.
+3. **Nuovi tool** — cosa aggiungere all'ecosistema e come.
+4. **Regole configurabili** — bound di esecuzione e profilo lab editabili da un unico file.
+5. **Hardening residuo** — voci della roadmap precedente non assorbite da §1–§4.
+6. **Definition of Done** + **Registro avanzamento**.
 
 ## Legenda
 
-- `[ ]` da iniziare o incompleto
-- `[x]` completato e verificato
-- `P0` blocco di sicurezza; `P1` affidabilità; `P2` supply chain; `P3` qualità/prodotto
+- `[ ]` da fare · `[x]` fatto e verificato
+- Priorità: `P0` sicurezza · `P1` affidabilità · `P2` supply chain · `P3` qualità/prodotto
 
-## P0 — Sicurezza immediata
+---
 
-### Web VAP legacy
+# 1 — Correzioni (grounded sul codice attuale)
 
-- [x] Quarantenare il comando legacy dietro opt-in esplicito e bind solo loopback.
-- [ ] Proteggere tutte le route HTML, incluse `/`, `/scans` e `/scans/{scan_id}`.
-- [ ] Rendere autenticazione e JWT fail-closed; nessun ruolo admin implicito.
-- [ ] Rifiutare l'avvio non locale senza TLS e segreti validi.
-- [ ] Eliminare API key da query string, redirect e link di download.
-- [ ] Implementare RBAC per admin, operator, reviewer e read-only.
-- [ ] Rendere obbligatoria l'allowlist target in produzione.
-- [ ] Sostituire le approvazioni didattiche predefinite con riferimenti verificabili.
-- [ ] Migrare UI/API necessarie sul backend AEGIS nativo e ritirare il vendor.
+## 1.1 — Adapter scanner incompleti (il buco più grande)
 
-### SSRF, redirect e DNS
+Il registro `src/olympus/integrations/scanners.py` dichiara **24 scanner**, ma in
+`src/olympus/aegis/adapters/` esistono solo **6 adapter nativi**: `nikto`, `nmap`,
+`sqlmap`, `testssl`, `wafw00f`, `whatweb`. Gli altri 18 sono a catalogo ma non eseguibili
+nativamente. Inoltre `testssl` e `whatweb` hanno solo il parser, non il test live.
 
-- [x] In Athena web, risolvere gli hostname e rifiutare l'intero set se contiene IP non globali.
-- [x] In Athena web, rivalidare scope, DNS e destinazione prima di ogni redirect.
-- [x] In Athena web, bloccare loopback, private, link-local, multicast e reserved IPv4/IPv6.
-- [x] Eliminare il DNS-rebinding TOCTOU negli scanner tramite IP pinning o egress policy.
-- [ ] Applicare egress allowlist a container/processi di scansione.
-- [x] Aggiungere test per DNS rebinding, record misti, redirect SSRF e IPv4-mapped IPv6.
-- [ ] Correggere le richieste VAP che seguono redirect senza rivalidazione.
+- [ ] `P1` Completare i 18 adapter mancanti (dettaglio in §3.1).
+- [ ] `P1` Test live autorizzati per `whatweb` e `testssl` (oggi "parser only").
+- [ ] `P1` `olympus aegis capabilities` deve esporre lo stato reale per ogni scanner
+      (`catalog-only` / `adapter-ready` / `offline-tested` / `live-tested` / `production-ready`),
+      così il catalogo non promette più di quel che esegue.
 
-### HTTP e input remoti
+## 1.2 — Coerenza README ↔ realtà
 
-- [x] Applicare un limite rigido ai body HTTP normali e di errore, incluso `Content-Length`.
-- [x] Convertire la lettura bounded in streaming incrementale a chunk.
-- [x] Rendere retry/backoff/throttling interrompibili dalla cancellazione.
-- [x] Limitare decompressione e rapporto di espansione.
-- [x] Applicare limiti a header, numero redirect e durata complessiva.
+- [ ] `P3` Il README parla di "native ARGUS and AEGIS" come se AEGIS fosse completo, ma la
+      migrazione dal VAP vendored è ancora in corso (`aegis serve/migrate/workers` richiedono
+      ancora `vendor/`). Allineare il testo allo stato effettivo.
+- [ ] `P3` Dichiarare esplicitamente nel README quanti adapter sono `production-ready`
+      (oggi 4/24 verificati live), invece di lasciarlo solo in `docs/scanner-matrix.md`.
+- [ ] `P3` Documentare OS/Python realmente testati, exit code e stati parziali.
 
-### Secret scanning
+## 1.3 — Dipendenze e supply chain
 
-- [x] Scansionare sempre il working tree con gitleaks e fallire su finding.
-- [x] Scansionare l'intera history su `main`, manualmente e prima delle release.
-- [x] Eliminare `continue-on-error` e intervalli Git che possono produrre scansioni a zero byte.
-- [x] Pubblicare report redatti/SARIF e testare il workflow con un secret fittizio.
+- [ ] `P2` Il VAP vendored trascina dipendenze datate (nella sua `requirements.txt`, es.
+      `python-jose 3.3.0`, `passlib`, `bleach`): pianificare la sostituzione o l'isolamento.
+- [ ] `P2` Introdurre lock/constraints con hash sugli extra `dev`/`api`/`aegis`.
+- [ ] `P2` Fissare le immagini Docker per digest ed eliminare `@latest` / `|| true` sui
+      componenti obbligatori.
+- [ ] `P2` Generare SBOM e scansione vulnerabilità in CI (vedi §3.5, Syft/Grype/Trivy).
 
-## P1 — Affidabilità operativa
+## 1.4 — Runtime `vendor/`
 
-### AEGIS scanner plane
+- [ ] `P2` `aegis serve`, `migrate` e `workers` dipendono ancora da un path relativo `vendor/`.
+      Decidere: pacchetto separato, container-only, o control-plane nativo (obiettivo finale).
 
-- [ ] Pubblicare stati `catalog-only`, `adapter-ready`, `offline-tested`, `live-tested`, `production-ready`.
-- [ ] Completare adapter, parser, fixture e test per i 18 scanner non nativi.
-- [ ] Completare i test live autorizzati per `whatweb` e `testssl`.
-- [ ] Implementare adapter API con auth/TLS/health per ZAP, OpenVAS, Nessus, Burp e Acunetix.
-- [ ] Aggiungere `aegis doctor --scanner` con verifica binario, versione e dipendenze.
-- [ ] Generare la capability matrix dal registro eseguibile.
+## 1.5 — P0 di sicurezza ancora aperti (Web VAP legacy)
 
-### Isolamento esecuzioni
+- [ ] `P0` Proteggere tutte le route HTML (`/`, `/scans`, `/scans/{id}`).
+- [ ] `P0` Auth/JWT fail-closed; nessun ruolo admin implicito; RBAC (admin/operator/reviewer/read-only).
+- [ ] `P0` Rifiutare avvio non locale senza TLS + segreti validi.
+- [ ] `P0` Eliminare API key da query string, redirect e link di download.
+- [ ] `P0` Allowlist target obbligatoria in produzione.
+- [ ] `P0` Applicare egress allowlist ai container/processi di scansione.
+- [ ] `P0` Correggere le richieste VAP che seguono redirect senza rivalidare scope e DNS.
 
-- [x] Eseguire scanner come utente non privilegiato.
-- [x] Limitare CPU, RAM, PID, file descriptor, output e spazio temporaneo.
-- [x] Usare process group e escalation terminate → kill.
-- [ ] Applicare seccomp/AppArmor e filesystem read-only (directory temporanee isolate: fatto).
-- [ ] Separare rete di controllo e rete di scansione.
-- [x] Registrare cause strutturate per timeout, kill e violazioni di risorse.
+_(I P0 già chiusi — SSRF guard, IP pinning, limiti HTTP/decompressione, secret scanning —
+restano invariati e verificati; vedi Registro.)_
 
-### Job AEGIS e API
+---
 
-- [x] Aggiungere lease, heartbeat, worker ownership e recupero dei job `RUNNING` orfani.
-- [x] Implementare retry con limite, backoff e idempotency key.
-- [x] Versionare lo schema SQLite e introdurre migrazioni, WAL e busy timeout.
-- [x] Separare `FAILED`, `PARTIAL`, `CANCELLED`, `TIMED_OUT` e `POLICY_DENIED`.
-- [x] Redigere eccezioni persistite e non esporre path assoluti via API.
-- [x] Applicare il limite body durante lo streaming, anche senza `Content-Length`.
-- [x] Supportare identità API multiple, scope, rotazione, revoca e rate limiting.
-- [x] Imporre TLS per bind non-loopback e aggiungere correlation/request/audit ID.
-- [x] Aggiungere retention e cancellazione sicura di log e artefatti.
+# 2 — Potenziamenti dei moduli esistenti
 
-### Athena
+| Modulo | Potenziamento | Prio |
+|---|---|---|
+| **Argus** (OSINT/recon) | Grafo investigativo più ricco, correlazione entità, arricchimento IOC | `P1` |
+| **Athena** (orchestrazione) | Cancellazione effettiva su operazioni non cooperative; backoff con jitter e budget massimo; adapter reali verso gli altri moduli; event contract versionato | `P1` |
+| **Helios** (scanning) | Fingerprinting sicuro più esteso (già distingue closed/filtered/unreachable/dns_failure/denied) | `P2` |
+| **Artemis** (web probing) | Coverage report per endpoint; più check web dietro scope | `P2` |
+| **Hermes** (secret scan) | Baseline, allowlist, entropy detection, output SARIF, hook pre-commit/CI | `P1` |
+| **Apollo** (detection) | Import regole **Sigma**, normalizzazione **ECS/OCSF**, connettori SIEM | `P1` |
+| **Minerva** (IR/chain-of-custody) | Ledger firmato **Ed25519/HMAC**, trusted timestamp, anchor append-only | `P1` |
+| **Vulcan** (aggregazione/report) | Arricchimento **CVSS + EPSS + CISA KEV**, template report versionati e firmati (PDF/HTML/SARIF/JSON) | `P1` |
+| **Metis** (CTI) | **STIX/TAXII 2.1**, **MISP**, backup/restore, cifratura campi sensibili | `P1` |
+| **Proteus** (SE simulato) | Minimizzazione PII, retention, lifecycle campagne, audit | `P2` |
+| **TUI** | Kill del process group, risultati parziali/errori visibili, test resize/focus/no-color, accessibilità | `P1` |
+| **AEGIS** (control plane) | Control-plane nativo completo (ritiro `vendor/`), `aegis doctor --scanner`, capability matrix generata dal registro | `P1` |
 
-- [x] Correggere deadline complessiva e timeout per job senza attese sequenziali cumulative.
-- [ ] Rendere la cancellazione effettiva anche per operazioni non cooperative.
-- [ ] Aggiungere backoff con jitter e budget massimo.
-- [ ] Integrare adapter per AEGIS, Helios, Artemis, Hermes, Apollo, Minerva e Vulcan.
-- [ ] Versionare un event contract condiviso.
+Task trasversali di qualità:
 
-### Artemis e Helios
+- [ ] `P3` Separare domain/service logic dagli handler Typer in tutti i moduli.
+- [ ] `P3` Unificare errori, output JSON/SARIF/console, deadline e cancellazione.
+- [ ] `P3` Property-based testing e fuzzing su parser/normalizzatori.
+- [ ] `P3` Coverage per modulo con soglia progressiva; mypy/pyright bloccante.
 
-- [x] Non trasformare errori Artemis in risultati apparentemente puliti.
-- [x] Esporre copertura e stati `CLEAN`, `FINDINGS`, `PARTIAL`, `FAILED`.
-- [x] Uniformare gli exit code e il comportamento quando esistono finding.
-- [x] Applicare rate limit, jitter e deadline globale alla discovery Artemis.
-- [x] Distinguere in Helios porta chiusa, timeout, DNS failure, routing failure e policy denial.
-- [x] Aggiungere concorrenza limitata, cancellazione e deadline a Helios.
-- [x] Sostituire il solo mapping porta-servizio con fingerprinting opzionale sicuro.
+---
 
-### TUI
+# 3 — Nuovi tool da aggiungere
 
-- [ ] Terminare l'intero process group e applicare escalation terminate → kill.
-- [ ] Mostrare processi residui, risultati parziali e cause di errore.
-- [ ] Testare resize, focus, tastiera, cancellazione, errori e modalità senza colore.
-- [ ] Verificare accessibilità e contrasto.
+## 3.0 — Come si aggiunge uno scanner (meccanismo esistente)
 
-## P2 — Packaging, integrità e supply chain
+Ogni scanner è una `ScannerSpec` (dataclass frozen) in
+`src/olympus/integrations/scanners.py`; l'esecuzione nativa è un adapter in
+`src/olympus/aegis/adapters/<nome>.py`. Aggiungere un tool = **1)** registrare la
+`ScannerSpec` (nome, categoria, kind, binario/licenza) + **2)** scrivere l'adapter con
+parser + **3)** fixture offline, unit/contract test e test live. Nessuna nuova architettura:
+si riusa quella dei 6 adapter già funzionanti.
 
-### Packaging e configurazione
+## 3.1 — Completare gli scanner già a catalogo (18 mancanti)
 
-- [x] Costruire wheel/sdist e installare il wheel in ambiente pulito in CI.
-- [x] Eseguire smoke test di tutte le superfici CLI dal wheel installato.
-- [ ] Decidere se VAP sarà pacchetto separato, container-only o ritirato.
-- [ ] Eliminare la dipendenza runtime da un path relativo `vendor/` (diagnostica e comandi nativi ora funzionano senza `vendor/`; `aegis serve`, `migrate` e `workers` lo richiedono ancora).
-- [ ] Definire chiaramente gli extra `dev`, `api`, `aegis` e `vap`.
-- [ ] Introdurre lock/constraints con hash e verificare metadata/licenze/file inclusi.
-- [x] Rendere TOML malformato, config esplicita assente e valori invalidi errori bloccanti.
-- [x] Documentare e testare precedenza CLI → environment → file → default.
-- [x] Aggiungere `olympus config validate` con redazione dei segreti.
+Web OSS: `arjun`, `commix`, `dalfox`, `dirsearch`, `httpx`, `katana`, `nosqlmap`, `nuclei`, `wapiti`, `xsstrike`.
+DNS/recon OSS: `subfinder`, `theharvester`.
+WordPress: `wpscan` (gestione token API vuln DB).
+Servizi OSS via API: `zap` (Apache-2.0), `openvas`/GVM (GPL-2.0) — adapter con auth/TLS/health.
+Commerciali via API (opzionali, dietro config): `nessus`, `burp`, `acunetix` — stato `unavailable` finché non configurati.
 
-### Output ed evidenze
+- [ ] `P1` Adapter + parser + test per ciascuno, fino a `production-ready`.
 
-- [ ] Usare scrittura atomica, owner-only e no-follow in tutti i moduli.
-- [ ] Validare path, collisioni, overwrite e traversal.
-- [ ] Calcolare digest al momento della creazione degli artefatti.
-- [ ] Firmare ledger/checkpoint Minerva con Ed25519 o HMAC.
-- [ ] Aggiungere key rotation, trusted timestamp e anchor append-only esterno.
-- [ ] Testare truncation, reorder, fork e riscrittura completa del ledger.
+## 3.2 — Nuovi tool NON ancora nel registro (recon)
 
-### Container e dipendenze
+Assenti oggi dal registro, da aggiungere come nuove `ScannerSpec` + adapter:
 
-- [ ] Fissare immagini per digest e dipendenze per commit/versione/hash.
-- [ ] Eliminare `@latest` e `|| true` per componenti obbligatori.
-- [ ] Usare build multi-stage e runtime senza toolchain.
-- [ ] Eseguire container come non-root con `read_only`, `cap_drop`, `no-new-privileges` e limiti.
-- [ ] Proteggere l'API ZAP e segmentare le reti Compose.
-- [ ] Aggiungere health/capability gate che fallisca se mancano scanner dichiarati.
-- [ ] Generare SBOM, scansione vulnerabilità, firma immagini e provenance.
-- [ ] Sostituire `python-jose==3.3.0`, riesaminare `passlib` e rimuovere `bleach` obsoleto.
+- [ ] `P1` **naabu** — port scanner veloce (ProjectDiscovery). MIT. → https://github.com/projectdiscovery/naabu
+- [ ] `P1` **dnsx** — toolkit DNS (ProjectDiscovery). MIT. → https://github.com/projectdiscovery/dnsx
+- [ ] `P1` **OWASP Amass** — attack-surface mapping. Apache-2.0. → https://github.com/owasp-amass/amass
+- [ ] `P2` Profilo "recon automation" ispirato a **reconftw** (pipeline recon→web→vuln, sempre scope-gated). → https://github.com/six2dez/reconftw
+- Docs ProjectDiscovery: https://docs.projectdiscovery.io
 
-## P3 — Qualità, prodotto e governance
+## 3.3 — Detection & Blue Team
 
-### CI/CD e release
+- [ ] `P1` Import/conversione regole **Sigma** verso i backend SIEM (in Apollo). → https://github.com/SigmaHQ/sigma · https://sigmahq.io
+- [ ] `P1` Validazione detection con **Atomic Red Team** in lab autorizzato. → https://github.com/redcanaryco/atomic-red-team
+- [ ] `P1` Mappatura finding/detection su **MITRE ATT&CK**. → https://attack.mitre.org
 
-- [ ] Testare Python 3.11–3.14 o restringere formalmente le versioni supportate.
-- [ ] Testare core/CLI su Ubuntu, Windows e macOS.
-- [ ] Aggiungere coverage per modulo con soglia progressiva.
-- [ ] Rendere mypy/pyright bloccante.
-- [ ] Integrare SAST, SCA/OSV, license compliance, CodeQL e SBOM.
-- [ ] Verificare Docker Compose, build immagini e laboratorio e2e autorizzato.
-- [ ] Separare suite unit, contract, integration, offline-e2e e live-e2e.
-- [x] Aggiornare le GitHub Actions al runtime supportato.
-- [ ] Introdurre CHANGELOG, SemVer, tag/release firmati, migrazioni e rollback.
+## 3.4 — Threat Intelligence (Metis)
 
-### Manutenibilità e moduli
+- [ ] `P1` **STIX/TAXII 2.1** + integrazione **MISP**. → https://github.com/MISP/MISP · https://oasis-open.github.io/cti-documentation
+- [ ] `P2` Connettore **OpenCTI** per correlazione IOC/campagne. → https://github.com/OpenCTI-Platform/opencti
 
-- [ ] Separare domain/service logic dagli handler Typer.
-- [ ] Ridurre le funzioni estese in AEGIS, Argus, Hermes e API wiring.
-- [ ] Definire interfacce per rete, persistence, subprocess e third-party adapter.
-- [ ] Unificare errori, output JSON/SARIF/console, deadline e cancellazione.
-- [ ] Aggiungere property-based testing e fuzzing per parser/normalizzatori.
-- [ ] Hermes: pre-commit/CI, baseline, allowlist, entropy detection e SARIF.
-- [ ] Apollo: Sigma, ECS/OCSF, connettori SIEM e test prestazionali.
-- [ ] Metis: STIX/TAXII, MISP, migrazioni, backup/restore e cifratura campi.
-- [ ] Vulcan: CVSS, EPSS, CISA KEV, template versionati e report firmati.
-- [ ] Proteus: minimizzazione PII, retention, lifecycle e audit.
+## 3.5 — Vulnerability, cloud, container, SBOM
 
-### Documentazione e governance GitHub
+- [ ] `P1` Arricchimento automatico **EPSS** + **CISA KEV** su ogni finding (Vulcan). → https://www.first.org/epss · https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+- [ ] `P2` Export verso gestore vulnerabilità stile **DefectDojo**. → https://github.com/DefectDojo/django-DefectDojo
+- [ ] `P2` Cloud posture: **Prowler** (AWS/Azure/GCP), **ScoutSuite**. → https://github.com/prowler-cloud/prowler · https://github.com/nccgroup/ScoutSuite
+- [ ] `P2` Container/IaC/dependency: **Trivy**, **Grype**. → https://github.com/aquasecurity/trivy · https://github.com/anchore/grype
+- [ ] `P2` **SBOM** con **Syft** su ogni immagine/artefatto rilasciato. → https://github.com/anchore/syft
 
-- [ ] Generare e testare documentazione CLI ed esempi README.
-- [ ] Correggere il conteggio/lessico dei moduli e le dichiarazioni di completezza.
-- [ ] Documentare OS/Python supportati, exit code, stati parziali e installation modes.
-- [ ] Pubblicare threat model, security architecture e deployment hardening guide.
-- [ ] Proteggere `main`, richiedere PR/review/CI e impedire force-push.
-- [ ] Aggiungere CODEOWNERS e mantenere SECURITY.md/disclosure policy.
-- [ ] Pulire branch temporanei e obsoleti.
+## 3.6 — Nuovo modulo proposto
 
-## Definition of Done per tool/adapter
+- [ ] `P3` `hephaestus` — hardening/benchmark **CIS** su host e config. → https://www.cisecurity.org/cis-benchmarks
 
-- [ ] Scope e autorizzazione verificati.
-- [ ] Timeout, deadline, cancellazione e limiti risorse reali.
+> **Regola per tutte le integrazioni**: governate, non copiate. Olympus rileva la versione
+> installata, valida la config, esegue entro scope autorizzato, normalizza l'output e registra
+> l'evidenza. Licenze e canali d'installazione dei tool di terze parti restano autoritativi
+> (`THIRD_PARTY_NOTICES.md`).
+
+---
+
+# 4 — Regole di esecuzione configurabili
+
+Obiettivo: rendere **editabile da un unico file** ciò che oggi è hardcoded, senza toccare
+codice a ogni engagement. Riguarda i **bound operativi** e un **profilo lab** per il tuo
+ambiente di test.
+
+## 4.1 — Bound editabili
+
+Oggi i limiti sono costanti in `src/olympus/core/execution.py`
+(`MAX_TIMEOUT_SECONDS`, `MAX_DEADLINE_SECONDS`, `MAX_CONCURRENCY`, `MAX_RETRIES`,
+`MAX_BACKOFF_SECONDS`, `MAX_MIN_INTERVAL_SECONDS`, `MAX_JITTER_RATIO`).
+
+- [x] `P1` Introdurre `olympus.core.policy` con `PolicyRuleset` versionato (Pydantic v2) che
+      legge timeout/deadline/concorrenza/retry/backoff/interval/jitter da un file.
+- [x] `P1` I valori attuali diventano i **default** e restano i **tetti di sicurezza** massimi:
+      un file che supera un `MAX_*` viene **rifiutato**, non riportato in silenzio al massimo.
+- [x] `P1` Precedenza: `CLI → env → file policy → default`; risoluzione `OLYMPUS_POLICY` →
+      `./olympus.policy.toml` → `~/.olympus/policy.toml`.
+- [x] `P1` CLI: `olympus policy show|validate|diff|edit` (segreti redatti; `validate` bloccante,
+      exit code `2`). Documentazione: [`docs/policy.md`](docs/policy.md).
+
+Esempio (`olympus.policy.toml`):
+
+```toml
+schema_version = "1.0.0"
+engagement     = "demo-2026"
+
+[bounds.default]
+timeout_seconds  = 10
+deadline_seconds = 600
+max_concurrency  = 4
+retries          = 1
+backoff_seconds  = 0.5
+jitter_ratio     = 0.2
+
+[bounds.aggressive]        # selezionabile con --profile aggressive
+max_concurrency = 16
+retries         = 3
+
+[scope.domains]
+allowed  = ["example.com"]
+excluded = ["vpn.example.com"]
+```
+
+Cambiare un limite = modificare una riga e rilanciare. Nessun codice da toccare.
+
+## 4.2 — Profilo `lab`
+
+Per testare comodamente nel tuo ambiente isolato senza combattere con lo scope:
+
+- [x] `P1` Profilo `lab` che autorizza esplicitamente i **tuoi** range privati dichiarati
+      (es. `10.10.0.0/16`), altrimenti bloccati dalla SSRF guard. `is_globally_routable` resta
+      puro; il nuovo `is_authorized_destination` è l'unico predicato che legge la policy.
+- [x] `P1` Attivazione esplicita e tracciata: `enabled = true` esige `allowed_networks`,
+      `activated_by` e `activated_at`, e produce un record con digest del documento, firmato
+      in HMAC-SHA256 quando è configurata `OLYMPUS_POLICY_LAB_KEY`.
+
+```toml
+[lab]
+enabled          = true
+allowed_networks = ["10.10.0.0/16"]   # range che dichiari di possedere
+activated_by     = "operator@example.com"
+activated_at     = 2026-01-01T00:00:00Z
+```
+
+Lo scope-check, i gate di autorizzazione sulle operazioni sensibili e la protezione SSRF
+restano attivi come guardrail: quello che cambi è **cosa dichiari come autorizzato**, con la
+lista interamente in mano tua.
+
+---
+
+# 5 — Hardening residuo (ereditato dalla roadmap precedente)
+
+Voci già tracciate e ancora aperte che §1–§4 non assorbono. Restano qui per non perderle:
+la riorganizzazione del documento non chiude lavoro.
+
+## 5.1 — Isolamento e segmentazione
+
+- [ ] `P1` Applicare seccomp/AppArmor e filesystem read-only agli scanner
+      (le scratch directory isolate e i rlimit sono già in `olympus.aegis.sandbox`).
+- [ ] `P1` Separare rete di controllo e rete di scansione.
+
+## 5.2 — Output ed evidenze
+
+- [ ] `P2` Scrittura atomica, owner-only e no-follow in **tutti** i moduli, non solo in `core.fileio`.
+- [ ] `P2` Validare path, collisioni, overwrite e traversal prima di scrivere.
+- [ ] `P2` Calcolare i digest al momento della creazione dell'artefatto, non a posteriori.
+- [ ] `P2` Testare truncation, reorder, fork e riscrittura completa del ledger Minerva.
+
+## 5.3 — Container e immagini
+
+- [ ] `P2` Build multi-stage con runtime privo di toolchain.
+- [ ] `P2` Eseguire i container non-root con `read_only`, `cap_drop`, `no-new-privileges` e limiti.
+- [ ] `P2` Proteggere l'API ZAP e segmentare le reti Compose.
+- [ ] `P2` Health/capability gate che fallisce se mancano gli scanner dichiarati.
+- [ ] `P2` Firma delle immagini e provenance, oltre a SBOM e vulnerability scan (§1.3).
+
+## 5.4 — CI/CD e release
+
+- [ ] `P3` Matrice Python 3.11–3.14 oppure restrizione formale delle versioni supportate.
+- [ ] `P3` Test di core/CLI su Ubuntu, Windows e macOS.
+- [ ] `P3` Separare le suite `unit`, `contract`, `integration`, `offline-e2e`, `live-e2e`.
+- [ ] `P3` Integrare SAST, SCA/OSV, license compliance e CodeQL.
+- [ ] `P3` Verificare Docker Compose, build delle immagini e laboratorio e2e autorizzato.
+- [ ] `P3` Introdurre CHANGELOG, SemVer, tag/release firmati, migrazioni e rollback.
+
+## 5.5 — Governance del repository
+
+- [ ] `P3` Proteggere `main`: PR obbligatoria, review, CI verde, niente force-push.
+- [ ] `P3` Aggiungere CODEOWNERS e mantenere SECURITY.md e la disclosure policy.
+- [ ] `P3` Pubblicare threat model, security architecture e deployment hardening guide.
+- [ ] `P3` Sostituire le approvazioni didattiche predefinite del VAP con riferimenti verificabili.
+- [ ] `P3` Pulire branch temporanei e obsoleti.
+
+---
+
+# Definition of Done per tool/adapter/integrazione
+
+- [ ] Scope e autorizzazione verificati prima di ogni traffico.
+- [ ] Bound (timeout/deadline/cancellazione/limiti risorse) applicati dalla policy.
 - [ ] Parser strutturato e output redatto/atomico.
 - [ ] Fixture offline, unit test, contract test e test live autorizzato.
 - [ ] Versioni compatibili e dipendenze documentate.
@@ -190,21 +288,32 @@ sono verdi. Le funzionalità parziali restano non spuntate.
 - [ ] Documentazione generata, SBOM e vulnerability scan.
 - [ ] Evidence manifest con digest e cleanup/rollback verificati.
 
-## Registro avanzamento
+---
+
+# Registro avanzamento
 
 | Data | Tranche | Stato | Evidenza |
 |---|---|---|---|
 | 2026-08-29 | P0 foundations | CI verde | Run `#119`: Ruff, 687 test, gitleaks e wheel smoke |
-| 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa della history su `main` |
-| 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP e deadline Athena |
-| 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline complessiva bounded |
-| 2026-08-29 | P0 SSRF e decompressione | verificato | Ruff pulito e 859 test verdi su `main@d94bbf4`: IP pinning per hop, policy indirizzi condivisa, limiti di decompressione, SARIF gitleaks con canary |
-| 2026-08-30 | P1 isolamento esecuzioni | CI verde | `olympus.aegis.sandbox`: drop a utente non privilegiato, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL sul process group, cause strutturate nel contratto `1.1.0`, check `aegis doctor` |
-| 2026-08-30 | P1 job plane AEGIS | CI verde | Lease/heartbeat/ownership con recupero orfani, retry con backoff e idempotency key, schema SQLite versionato (`user_version=2`) con migrazione e WAL, stati `PARTIAL`/`TIMED_OUT`/`POLICY_DENIED` distinti, errori e path redatti nel contratto `2.0.0` |
-| 2026-08-30 | P1 identità API AEGIS | CI verde | Register `olympus.aegis-api-identities` con scope per route, rotazione con overlap, revoca immediata, scadenza e rate limit per identità; request/correlation ID echeggiati e audit redatto per ogni richiesta |
-| 2026-08-30 | P1 retention AEGIS | CI verde | `olympus.core.retention`: budget età/numero/dimensione, sovrascrittura best-effort documentata, rotazione log append-only, prune dei job terminali con `secure_delete`, VACUUM e troncamento WAL |
-| 2026-08-30 | Wheel senza vendor | verificato | Smoke del wheel esteso a `doctor` e a `aegis doctor`, `deps`, `info`, `scanners`, `capabilities` più i nuovi gruppi CLI: la diagnostica non richiede più l'albero `vendor/` e i comandi che lo richiedono escono con codice 2 |
-| 2026-08-30 | P1 stati e copertura Artemis/Helios | CI verde | `olympus.core.coverage`: stati `CLEAN`/`FINDINGS`/`PARTIAL`/`FAILED`, contatori planned/completed/failed/skipped con motivo strutturato ed errori redatti; exit code canonici estesi (`5` parziale, `6` fallito, `7` annullato) e adottati da Artemis, Helios e Athena; Helios distingue closed/filtered/unreachable/dns_failure/denied con concorrenza limitata, deadline unica e banner opzionale in sola lettura; Artemis conta ogni candidato con rate limit jitterato e deadline globale |
-| 2026-08-30 | P2 configurazione | CI verde | Run `#137`: precedenza CLI/environment/TOML/default, `config validate` redatto, 1040 test e wheel smoke |
+| 2026-08-29 | Secret history | CI verde | Run `#121`: scansione completa history su `main` |
+| 2026-08-29 | P0 runtime limits | CI verde | Run `#122`: body streaming, cancellazione HTTP, deadline Athena |
+| 2026-08-29 | P0 HTTP policy | CI verde | Run `#125`: header, redirect e deadline bounded |
+| 2026-08-29 | P0 SSRF e decompressione | verificato | 859 test verdi su `main@d94bbf4`: IP pinning per hop, limiti decompressione, SARIF gitleaks con canary |
+| 2026-08-30 | P1 isolamento esecuzioni | CI verde | `aegis.sandbox`: drop utente, rlimit CPU/RAM/NPROC/NOFILE/FSIZE/CORE, scratch dir privata, escalation SIGTERM→SIGKILL |
+| 2026-08-30 | P1 job plane AEGIS | CI verde | Lease/heartbeat/ownership, retry+idempotency, schema SQLite versionato+WAL, stati distinti, path redatti |
+| 2026-08-30 | P1 identità API AEGIS | CI verde | Scope per route, rotazione con overlap, revoca, rate limit, audit redatto |
+| 2026-08-30 | P1 retention AEGIS | CI verde | Budget età/numero/dimensione, log append-only, prune con `secure_delete`, VACUUM |
+| 2026-08-30 | Wheel senza vendor | verificato | Diagnostica non richiede più `vendor/`; comandi che lo richiedono escono con codice 2 |
+| 2026-08-30 | P1 stati/coverage Artemis/Helios | CI verde | `core.coverage`: stati CLEAN/FINDINGS/PARTIAL/FAILED, exit code 5/6/7 |
+| 2026-08-30 | P2 configurazione | CI verde | Run `#137`: precedenza CLI/env/TOML/default, `config validate` redatto, 1040 test |
+| _(prossima)_ | **Correzioni §1** | da iniziare | 18 adapter, coerenza README, dipendenze VAP, ritiro `vendor/` |
+| _(prossima)_ | **Nuovi tool §3** | da iniziare | naabu/dnsx/amass, Sigma/ATT&CK, STIX/MISP, EPSS/KEV, Trivy/Grype/Syft |
+| 2026-09-05 | **Policy editabile §4** | test locali verdi, CI da confermare | `olympus.core.policy`: `PolicyRuleset` Pydantic v2 versionato, profili come overlay di `[bounds.default]`, `MAX_*` come tetti rifiutati-non-clampati, precedenza CLI/env/file/default, `olympus policy show\|validate\|diff\|edit`, profilo `lab` con record di attivazione firmato e `is_authorized_destination` nella SSRF guard. Ruff pulito, mypy pulito sui moduli toccati, 1108 test |
 
-**Nota sulle evidenze.** Le tranche P1 confluite sono state riconfermate da `main` run `#135` (Ruff, 1033 test, gitleaks e wheel smoke). La tranche configurazione è stata verificata dalla PR run `#137` (Ruff, 1040 test, gitleaks e wheel smoke).
+**Nota evidenze.** Tranche P1 riconfermate da `main` run `#135` (Ruff, 1033 test, gitleaks, wheel smoke);
+configurazione da PR run `#137` (1040 test). Nessuna voce nuova si spunta senza codice, test e —
+per i tool — evidenza live.
+
+La tranche **§4** è stata verificata in locale (Ruff pulito, mypy pulito su
+`core/policy.py`, `core/addresses.py` e `athena/scope.py`, 1108 test verdi): la conferma in CI
+è la condizione per considerarla chiusa secondo la Definition of Done.

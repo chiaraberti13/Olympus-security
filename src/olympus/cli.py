@@ -8,6 +8,7 @@ scan``). ``olympus core`` groups data-contract utilities.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import typer
@@ -20,7 +21,9 @@ from olympus.artemis.cli import app as artemis_app
 from olympus.athena.cli import app as athena_app
 from olympus.athena.domain.contracts import AssessmentPlan, AssessmentResult
 from olympus.core import config as core_config
+from olympus.core import policy as core_policy
 from olympus.core.execution import redact_mapping
+from olympus.core.exit_codes import ExitCode
 from olympus.core.models import (
     Alert,
     Asset,
@@ -73,6 +76,10 @@ def _main(
 
 core_app = typer.Typer(help="Core data-contract utilities.", no_args_is_help=True)
 config_app = typer.Typer(help="Validate and inspect effective configuration.", no_args_is_help=True)
+policy_app = typer.Typer(
+    help="Inspect and validate the editable execution policy.",
+    no_args_is_help=True,
+)
 
 
 @config_app.command("validate")
@@ -104,6 +111,138 @@ def validate_config(
             sort_keys=True,
         )
     )
+
+
+_PROFILE_OPTION = typer.Option(
+    core_policy.DEFAULT_PROFILE,
+    "--profile",
+    help="Bounds profile to resolve; named profiles overlay [bounds.default].",
+)
+_POLICY_FILE_OPTION = typer.Option(
+    None,
+    "--file",
+    help="Use this policy file instead of automatic discovery.",
+)
+
+
+def _load_policy_or_exit(
+    file: Path | None,
+) -> tuple[core_policy.PolicyRuleset, Path | None]:
+    """Load the selected policy, turning any policy failure into exit code 2."""
+    try:
+        return core_policy.load_policy_with_source(file)
+    except core_policy.PolicyError as exc:
+        typer.echo(f"olympus: invalid policy: {exc}", err=True)
+        raise typer.Exit(code=int(ExitCode.USAGE)) from exc
+
+
+@policy_app.command("show")
+def show_policy(
+    profile: str = _PROFILE_OPTION,
+    file: Path | None = _POLICY_FILE_OPTION,
+) -> None:
+    """Print the effective, redacted policy for one profile as JSON."""
+    ruleset, source = _load_policy_or_exit(file)
+    try:
+        document = core_policy.effective_document(profile, ruleset, source)
+    except core_policy.PolicyError as exc:
+        typer.echo(f"olympus: invalid policy: {exc}", err=True)
+        raise typer.Exit(code=int(ExitCode.USAGE)) from exc
+    typer.echo(json.dumps(redact_mapping(document), indent=2, sort_keys=True))
+
+
+@policy_app.command("validate")
+def validate_policy(
+    profile: str = _PROFILE_OPTION,
+    file: Path | None = _POLICY_FILE_OPTION,
+) -> None:
+    """Validate the policy document and every bound it resolves. Blocking."""
+    ruleset, source = _load_policy_or_exit(file)
+    try:
+        bounds = core_policy.resolve_bounds(profile, ruleset)
+    except core_policy.PolicyError as exc:
+        typer.echo(f"olympus: invalid policy: {exc}", err=True)
+        raise typer.Exit(code=int(ExitCode.USAGE)) from exc
+    typer.echo(
+        json.dumps(
+            redact_mapping(
+                {
+                    "schema_name": "olympus.policy-validation",
+                    "schema_version": core_policy.POLICY_SCHEMA_VERSION,
+                    "status": "valid",
+                    "source": str(source) if source is not None else None,
+                    "profile": profile,
+                    "profiles": list(ruleset.profile_names()),
+                    "environment_overrides": core_policy.active_environment_overrides(),
+                    "bounds": bounds,
+                    "lab_enabled": ruleset.lab.enabled,
+                }
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@policy_app.command("diff")
+def diff_policy(
+    profile: str = _PROFILE_OPTION,
+    file: Path | None = _POLICY_FILE_OPTION,
+) -> None:
+    """Show only the bounds this policy changes, and which layer changed them."""
+    ruleset, source = _load_policy_or_exit(file)
+    try:
+        changes = core_policy.diff_bounds(profile, ruleset)
+    except core_policy.PolicyError as exc:
+        typer.echo(f"olympus: invalid policy: {exc}", err=True)
+        raise typer.Exit(code=int(ExitCode.USAGE)) from exc
+    typer.echo(
+        json.dumps(
+            {
+                "schema_name": "olympus.policy-diff",
+                "schema_version": core_policy.POLICY_SCHEMA_VERSION,
+                "source": str(source) if source is not None else None,
+                "profile": profile,
+                "changed": changes,
+                "unchanged_count": len(core_policy.BOUND_CEILINGS) - len(changes),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@policy_app.command("edit")
+def edit_policy(
+    file: Path | None = _POLICY_FILE_OPTION,
+    open_editor: bool = typer.Option(
+        True,
+        "--open/--no-open",
+        help="Launch $VISUAL/$EDITOR after ensuring the file exists.",
+    ),
+) -> None:
+    """Create the policy file from a commented template, then open it.
+
+    An existing file is never overwritten: the command only ensures one exists
+    and hands it to the operator's editor.
+    """
+    target = file if file is not None else Path(core_policy.PROJECT_POLICY_FILE)
+    created = False
+    if not target.exists():
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(core_policy.TEMPLATE, encoding="utf-8")
+        except OSError as exc:
+            typer.echo(f"olympus: cannot create policy file {target}: {exc}", err=True)
+            raise typer.Exit(code=int(ExitCode.USAGE)) from exc
+        created = True
+    core_policy.reset_active_policy_cache()
+    typer.echo(
+        f"olympus: {'created' if created else 'using'} policy file {target}", err=True
+    )
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+    if open_editor and editor:
+        typer.launch(str(target))
 
 
 @core_app.command("export-schemas")
@@ -143,6 +282,7 @@ def export_schemas(
 
 app.add_typer(core_app, name="core")
 app.add_typer(config_app, name="config")
+app.add_typer(policy_app, name="policy")
 app.add_typer(argus_app, name="argus")
 app.add_typer(athena_app, name="athena")
 app.add_typer(helios_app, name="helios")

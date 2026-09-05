@@ -36,6 +36,11 @@ Modules may impose tighter bounds. They must not silently clamp or widen an
 invalid operator value. Retried actions must be read-only/idempotent and retry
 only explicit transient failures.
 
+The ranges above are the **ceilings**, not the values. Operators set the values
+per engagement in one `olympus.policy.toml` — a file may lower any bound but
+never raise it past the ceiling, and one that tries is rejected at load time.
+See [editable execution policy](policy.md) and `olympus policy show`.
+
 ## Run status and coverage
 
 Every module that probes a target in a loop reports what it planned, what it
