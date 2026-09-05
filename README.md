@@ -73,7 +73,7 @@ $ olympus athena run plan.json --storage ./.athena
 | **Vulcan** | `olympus vulcan` | Aggregation, deduplication, ranking and report rendering. |
 | **Metis** | `olympus metis` | Deterministic capability routing, engagement plans, CTI cases, IOC correlation and operational reports. |
 | **core** | `olympus core` | Shared data-contract utilities (e.g. `export-schemas`). |
-| **AEGIS** | `olympus aegis` | Scope-gated scanner orchestration, capability readiness, durable SQLite jobs, cancellation, audit and explicit execution states. |
+| **AEGIS** | `olympus aegis` | Scope-gated scanner orchestration, capability readiness and maturity, durable SQLite jobs, cancellation, audit and explicit execution states. Native for 6 of 24 catalogued engines; `serve`/`migrate`/`workers` still need `vendor/`. |
 | **Unified TUI** | `olympus ui` | Keyboard-first interface over every real Olympus command, with streamed output and process cancellation. |
 
 > [!TIP]
@@ -119,10 +119,40 @@ olympus athena run examples/input/athena-plan.json --storage ./.athena --report
 olympus athena status <ASSESSMENT_ID> --storage ./.athena
 ```
 
-Athena uses the same canonical exit codes as every other module — `0` clean,
-`1` findings, `2` invalid input, `3` scope denial, `5` partial, `6` execution
-failure, `7` cancelled — so it scripts cleanly in CI. A partial run is never
-reported as a clean one; see [run status and coverage](docs/run-status.md).
+Athena uses the same canonical exit codes as every other module, so it scripts
+cleanly in CI:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Clean: full coverage, nothing to report. |
+| `1` | Findings the caller may want to act on. |
+| `2` | Usage or input error (bad flag, unreadable or invalid file, malformed scope). |
+| `3` | Blocked: the target is outside the authorized scope, and it was logged. |
+| `4` | Refused: an authorization or consent flag was required but not given. |
+| `5` | Partial: coverage was lost, so any findings are **not** exhaustive. |
+| `6` | Failed: nothing completed, so the result carries no information. |
+| `7` | Cancelled on request before finishing. |
+
+Codes `5` and `6` exist so a caller can tell "we looked everywhere and found
+nothing" from "we could not look". A run that produced findings *and* lost
+coverage exits `5`, not `1`: the findings are still printed, but the run must
+not be read as exhaustive. A partial run is never reported as a clean one; see
+[run status and coverage](docs/run-status.md).
+
+### Platforms actually tested
+
+Honesty over breadth — `requires-python = ">=3.11"` states what installs, not
+what is verified:
+
+| | Verified in CI | Not verified |
+| --- | --- | --- |
+| **OS** | Ubuntu (`ubuntu-latest`) | macOS, Windows |
+| **Python** | 3.11 | 3.12, 3.13, 3.14 |
+
+Olympus is developed and exercised on Linux. The core and CLI are written to be
+portable, and the sandbox layer (`olympus.aegis.sandbox`) is POSIX-specific by
+design — user drop and `setrlimit` have no Windows equivalent. Widening this
+matrix is tracked in [`ROADMAP_HARDENING.md`](ROADMAP_HARDENING.md) §5.4.
 
 ## ⚙️ Configuration
 
@@ -204,12 +234,35 @@ The standalone **ARGUS** migration is complete. Its maintained implementation is
 `src/olympus/argus/`, exposed only as `olympus argus`; the duplicated
 `vendor/argus` source and the `argus-native` passthrough have been removed.
 
-AEGIS is being migrated from the temporary vendored Vulnerability Assessment
-Platform compatibility layer to an Olympus-owned control plane. The native path
-already owns scope and authorization gates, scanner adapters, capability
-readiness, durable SQLite jobs, cancellation, audit and explicit execution
-states. The legacy web surface remains temporary until its required API,
-persistence and report contracts are replaced and verified.
+AEGIS is **still being migrated** from the temporary vendored Vulnerability
+Assessment Platform compatibility layer to an Olympus-owned control plane; it is
+not finished. The native path already owns scope and authorization gates,
+scanner adapters, capability readiness, durable SQLite jobs, cancellation, audit
+and explicit execution states, and `olympus aegis doctor`, `deps`, `info`,
+`scanners` and `capabilities` all run without the vendored tree. What is *not*
+native yet: `aegis serve`, `aegis migrate` and `aegis workers` still require
+`vendor/` and exit with code `2` without it, and the legacy web surface remains
+temporary until its API, persistence and report contracts are replaced and
+verified.
+
+**How much of the catalogue actually executes.** The 24-scanner registry is a
+catalogue, not an implementation claim. Today:
+
+| Maturity | Count | Meaning |
+| --- | --- | --- |
+| `catalog-only` | 18 | Registry entry only; nothing executes. |
+| `adapter-ready` | 0 | Adapter registered, parser unproven. |
+| `offline-tested` | 2 | Parser proven against recorded output (`testssl`, `whatweb`). |
+| `live-tested` | 4 | Run end to end against a real engine (`nmap`, `nikto`, `sqlmap`, `wafw00f`). |
+| **`production-ready`** | **0** | Live-tested **and** the full Definition of Done met. |
+
+No adapter is `production-ready` yet: the Definition of Done — per-adapter
+evidence manifest with digests, SBOM, vulnerability scan and documented version
+compatibility — is not met for any engine. `olympus aegis capabilities` reports
+this per engine, and a CI job can enforce it with
+`olympus aegis capabilities --min-maturity live-tested --count 4`. The
+declarations are cross-checked against the repository on every test run, so the
+table cannot quietly drift; see [`docs/scanner-maturity.md`](docs/scanner-maturity.md).
 
 Specialist scanner engines are **integrated and governed, not copied**. Olympus
 detects their installed versions, validates configuration, executes them within
@@ -220,7 +273,7 @@ licences and installation channels remain authoritative.
 olympus argus --help                       # native OSINT/recon surface
 olympus argus doctor                       # dependency/config readiness
 
-olympus aegis capabilities                 # configured/available/ready states
+olympus aegis capabilities                 # ready state here + project maturity
 olympus aegis jobs init                    # durable local job store
 olympus aegis jobs submit nmap --target example.com --scope scope.json --i-am-authorized
 olympus aegis jobs work                    # process one queued job

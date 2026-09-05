@@ -31,19 +31,27 @@ Il registro `src/olympus/integrations/scanners.py` dichiara **24 scanner**, ma i
 nativamente. Inoltre `testssl` e `whatweb` hanno solo il parser, non il test live.
 
 - [ ] `P1` Completare i 18 adapter mancanti (dettaglio in §3.1).
-- [ ] `P1` Test live autorizzati per `whatweb` e `testssl` (oggi "parser only").
-- [ ] `P1` `olympus aegis capabilities` deve esporre lo stato reale per ogni scanner
+- [ ] `P1` Test live autorizzati per `whatweb` e `testssl` (oggi "parser only"). Richiede un lab
+      autorizzato, quindi resta aperta. Nel frattempo `whatweb` — che non aveva **nessun** test
+      di parsing — ne ha ora tre, quindi la sua copertura offline è reale e non solo dichiarata.
+- [x] `P1` `olympus aegis capabilities` espone lo stato reale per ogni scanner
       (`catalog-only` / `adapter-ready` / `offline-tested` / `live-tested` / `production-ready`),
-      così il catalogo non promette più di quel che esegue.
+      su un asse **separato** dalla readiness di macchina. Le dichiarazioni sono verificate
+      contro il repository a ogni run di test (`verify_declarations`), quindi il catalogo non
+      può promettere più di quel che esegue. Documentazione:
+      [`docs/scanner-maturity.md`](docs/scanner-maturity.md).
 
 ## 1.2 — Coerenza README ↔ realtà
 
-- [ ] `P3` Il README parla di "native ARGUS and AEGIS" come se AEGIS fosse completo, ma la
-      migrazione dal VAP vendored è ancora in corso (`aegis serve/migrate/workers` richiedono
-      ancora `vendor/`). Allineare il testo allo stato effettivo.
-- [ ] `P3` Dichiarare esplicitamente nel README quanti adapter sono `production-ready`
-      (oggi 4/24 verificati live), invece di lasciarlo solo in `docs/scanner-matrix.md`.
-- [ ] `P3` Documentare OS/Python realmente testati, exit code e stati parziali.
+- [x] `P3` Il README dichiara ora che la migrazione AEGIS **non è finita**, e nomina esattamente
+      cosa non è nativo: `aegis serve`, `migrate` e `workers` richiedono ancora `vendor/` ed
+      escono con codice `2` senza di esso.
+- [x] `P3` Il README riporta la tabella di maturità completa: 18 `catalog-only`, 2
+      `offline-tested`, 4 `live-tested` e **0 `production-ready`**, con il motivo (Definition of
+      Done aperta: manca evidence manifest per adapter, SBOM, vulnerability scan).
+- [x] `P3` Documentati OS/Python realmente verificati in CI (solo Ubuntu + Python 3.11, contro un
+      `requires-python = ">=3.11"` che dichiara solo cosa si installa), la tabella completa degli
+      exit code — incluso il `4` che mancava — e il significato degli stati parziali `5`/`6`.
 
 ## 1.3 — Dipendenze e supply chain
 
@@ -306,7 +314,9 @@ la riorganizzazione del documento non chiude lavoro.
 | 2026-08-30 | Wheel senza vendor | verificato | Diagnostica non richiede più `vendor/`; comandi che lo richiedono escono con codice 2 |
 | 2026-08-30 | P1 stati/coverage Artemis/Helios | CI verde | `core.coverage`: stati CLEAN/FINDINGS/PARTIAL/FAILED, exit code 5/6/7 |
 | 2026-08-30 | P2 configurazione | CI verde | Run `#137`: precedenza CLI/env/TOML/default, `config validate` redatto, 1040 test |
-| _(prossima)_ | **Correzioni §1** | da iniziare | 18 adapter, coerenza README, dipendenze VAP, ritiro `vendor/` |
+| 2026-09-05 | **Correzioni §1.1 + §1.2** | test locali verdi, CI da confermare | `olympus.integrations.maturity`: scala `catalog-only`→`production-ready` su asse separato dalla readiness, `verify_declarations` che ri-deriva ogni claim dal repository (adapter registrato, evidenza esistente, `test_<scanner>_parser` presente, nessun `production-ready` con blocker aperto), istogramma in `capabilities` (schema `1.1.0`) e gate CI `--min-maturity/--count`. Tre test di parsing per `whatweb`, che non ne aveva nessuno. README allineato: migrazione AEGIS dichiarata incompleta, 0/24 `production-ready`, OS/Python realmente testati, tabella exit code completa. 1137 test |
+| _(prossima)_ | **Correzioni §1.3–§1.5** | da iniziare | dipendenze VAP e lock con hash, ritiro `vendor/`, P0 del web VAP legacy |
+| _(prossima)_ | **18 adapter §3.1** | da iniziare | il grosso di §1.1: adapter + parser + test fino a `production-ready` |
 | _(prossima)_ | **Nuovi tool §3** | da iniziare | naabu/dnsx/amass, Sigma/ATT&CK, STIX/MISP, EPSS/KEV, Trivy/Grype/Syft |
 | 2026-09-05 | **Policy editabile §4** | test locali verdi, CI da confermare | `olympus.core.policy`: `PolicyRuleset` Pydantic v2 versionato, profili come overlay di `[bounds.default]`, `MAX_*` come tetti rifiutati-non-clampati, precedenza CLI/env/file/default, `olympus policy show\|validate\|diff\|edit`, profilo `lab` con record di attivazione firmato e `is_authorized_destination` nella SSRF guard. Ruff pulito, mypy pulito sui moduli toccati, 1108 test |
 
@@ -314,6 +324,12 @@ la riorganizzazione del documento non chiude lavoro.
 configurazione da PR run `#137` (1040 test). Nessuna voce nuova si spunta senza codice, test e —
 per i tool — evidenza live.
 
-La tranche **§4** è stata verificata in locale (Ruff pulito, mypy pulito su
-`core/policy.py`, `core/addresses.py` e `athena/scope.py`, 1108 test verdi): la conferma in CI
-è la condizione per considerarla chiusa secondo la Definition of Done.
+Le tranche **§4** e **§1.1/§1.2** sono state verificate in locale (Ruff pulito, mypy pulito sui
+moduli toccati, 1108 e poi 1137 test verdi): la conferma in CI è la condizione per considerarle
+chiuse secondo la Definition of Done.
+
+**Sul conteggio `production-ready`.** §1.2 chiedeva di dichiarare "quanti adapter sono
+production-ready (oggi 4/24 verificati live)". I due numeri non coincidono: 4 adapter sono
+`live-tested`, ma **nessuno** è `production-ready`, perché la Definition of Done in fondo a questo
+documento è interamente aperta. Il README riporta entrambi i numeri con la loro definizione,
+invece di usare il più lusinghiero.
