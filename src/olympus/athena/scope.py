@@ -17,7 +17,7 @@ from olympus.core.addresses import (
     AddressResolutionError,
     AddressResolver,
     NonGlobalAddressError,
-    is_globally_routable,
+    is_authorized_destination,
     parse_address,
     resolve_authorized_addresses,
 )
@@ -63,7 +63,9 @@ def _reject_non_global_ip(host: str) -> None:
         address = parse_address(host)
     except NonGlobalAddressError:
         return  # not an IP literal; a hostname is resolved by the network layer
-    if not is_globally_routable(address):
+    # The policy-aware predicate, so an IP literal inside a declared lab range is
+    # treated exactly like the hostname form already is by resolve_global_addresses.
+    if not is_authorized_destination(address):
         raise SsrfBlockedError(
             f"target host {host} is a non-global IP address and is blocked (SSRF guard)"
         )

@@ -14,6 +14,12 @@ IPv6 multicast (``ff00::/8``) is likewise reported as global.
 
 Everything that reaches the network therefore goes through
 :func:`ensure_globally_routable`, which unwraps embedded IPv4 before judging.
+
+The single, explicit exception is the **lab allowlist**: an operator who owns a
+private range may declare it in ``[lab].allowed_networks`` of the policy file
+(see :mod:`olympus.core.policy`). :func:`is_authorized_destination` is the only
+entry point that honours it; :func:`is_globally_routable` stays a pure statement
+about the address itself and is never widened by configuration.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 #: Well-known NAT64 prefix (RFC 6052). ``64:ff9b:1::/48`` is already non-global.
 _NAT64_WELL_KNOWN = ipaddress.IPv6Network("64:ff9b::/96")
@@ -114,9 +121,64 @@ def ensure_globally_routable(raw: str) -> IPAddress:
     return address
 
 
+def active_lab_networks() -> tuple[IPNetwork, ...]:
+    """Return the private ranges the active policy declares as operator-owned.
+
+    Imported lazily so this module — the lowest layer of the SSRF guard — keeps
+    no import-time dependency on the policy loader. With no policy file the
+    result is empty and every check below behaves exactly as it always has.
+    """
+    from olympus.core.policy import active_policy
+
+    return active_policy().lab_networks()
+
+
+def _unwrapped(address: IPAddress) -> IPAddress:
+    """Return the address a packet actually reaches, unwrapping embedded IPv4."""
+    current = address
+    for _ in range(_MAX_UNWRAP_DEPTH):
+        nested = embedded_ipv4(current)
+        if nested is None:
+            return current
+        current = nested
+    return current
+
+
+def is_authorized_destination(
+    address: IPAddress,
+    lab_networks: Iterable[IPNetwork] | None = None,
+) -> bool:
+    """Return whether Olympus may contact ``address`` under the active policy.
+
+    A public address is authorized as usual. A private one is authorized only
+    when it falls inside a range the operator explicitly declared in the lab
+    profile — the wrapper forms are unwrapped first, so ``::ffff:10.10.0.1`` is
+    judged as ``10.10.0.1`` rather than slipping past the allowlist.
+    """
+    if is_globally_routable(address):
+        return True
+    networks = active_lab_networks() if lab_networks is None else tuple(lab_networks)
+    if not networks:
+        return False
+    candidate = _unwrapped(address)
+    return any(candidate in network for network in networks)
+
+
+def ensure_authorized_destination(
+    raw: str,
+    lab_networks: Iterable[IPNetwork] | None = None,
+) -> IPAddress:
+    """Parse and authorize one address, honouring the declared lab ranges."""
+    address = parse_address(raw)
+    if not is_authorized_destination(address, lab_networks):
+        raise NonGlobalAddressError(f"{address} is not an authorized destination")
+    return address
+
+
 def resolve_authorized_addresses(
     host: str,
     resolver: AddressResolver = socket.getaddrinfo,
+    lab_networks: Iterable[IPNetwork] | None = None,
 ) -> tuple[str, ...]:
     """Resolve ``host``, refusing the whole answer set if any address is unsafe.
 
@@ -137,7 +199,7 @@ def resolve_authorized_addresses(
             raise AddressResolutionError(
                 f"resolver returned an invalid address for {host}"
             ) from exc
-        if not is_globally_routable(address):
+        if not is_authorized_destination(address, lab_networks):
             raise NonGlobalAddressError(
                 f"host {host} resolves to non-global address {address}"
             )
