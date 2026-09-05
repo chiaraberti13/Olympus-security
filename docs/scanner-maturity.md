@@ -22,12 +22,19 @@ I due assi sono indipendenti e devono restarlo. Esempi concreti:
 
 - `nmap` è `live-tested` dal progetto, ma su una macchina senza il binario resta
   `dependency-missing` e **non** eseguibile;
-- `nuclei` può essere installato sulla tua macchina — quindi "disponibile" — e
+- `wpscan` può essere installato sulla tua macchina — quindi "disponibile" — e
   restare `catalog-only`, perché una `ScannerSpec` è una voce di catalogo, non
   un'implementazione.
 
-Un comando che collassasse i due assi direbbe "nuclei disponibile" e lascerebbe
+Un comando che collassasse i due assi direbbe "wpscan disponibile" e lascerebbe
 credere che Olympus sappia eseguirlo. Non lo sa.
+
+C'è un caso peggiore, e non è ipotetico: **`httpx` è anche il nome dell'eseguibile
+della libreria HTTP Python**. `shutil.which("httpx")` non sa distinguerli, quindi
+una macchina con quella libreria installata riporta lo scanner come "disponibile"
+mentre la sonda di ProjectDiscovery non c'è affatto. L'adapter rifiuta l'output
+che non è JSONL della sonda con un errore che *nomina* la collisione: un tool
+sbagliato non deve mai risultare una scansione pulita.
 
 ## La scala
 
@@ -42,10 +49,10 @@ credere che Olympus sappia eseguirlo. Non lo sa.
 ## Lo stato oggi
 
 ```text
-catalog-only     18
+catalog-only     14
 adapter-ready     0
 offline-tested    2   testssl, whatweb
-live-tested       4   nmap, nikto, sqlmap, wafw00f
+live-tested       8   nmap, nikto, sqlmap, wafw00f, httpx, nuclei, katana, dalfox
 production-ready  0
 ```
 
@@ -54,6 +61,20 @@ Definition of Done non è soddisfatta per nessun motore: mancano l'evidence
 manifest per adapter, l'SBOM e la scansione vulnerabilità. Dichiarare
 `production-ready` oggi sarebbe esattamente l'overpromise che la scala esiste per
 impedire.
+
+### Configurazione: nuclei e i suoi template
+
+nuclei è inutile senza template, e li cerca tramite `$HOME`. Sotto il sandbox
+AEGIS il processo gira come utente non privilegiato con una home diversa, quindi
+il checkout `nuclei-templates` dell'operatore è invisibile e il motore esce
+diverso da zero con "no templates provided for scan". La directory si dichiara
+esplicitamente:
+
+```bash
+export AEGIS_NUCLEI_TEMPLATES=/opt/nuclei-templates   # leggibile dall'utente sandbox
+olympus aegis run nuclei --target http://lab.interno --kind url \
+  --scope scope.json --i-am-authorized
+```
 
 `whatweb` merita una nota: l'unica esecuzione live catturata è **fallita** su un
 ambiente Ruby rotto (`docs/aegis-execution-evidence.md`), quindi l'adapter non ha
@@ -69,9 +90,10 @@ segnala ogni affermazione che lo supera:
 - una dichiarazione esiste solo per uno scanner effettivamente a catalogo;
 - qualsiasi stadio sopra `catalog-only` ha davvero un adapter registrato;
 - qualsiasi stadio sopra `catalog-only` cita un'evidenza, **e quel file esiste**;
-- `offline-tested` e oltre richiedono una funzione `test_<scanner>_parser*` in
-  `tests/unit/test_aegis_execution.py` — se il test non c'è, l'affermazione "una
-  regressione fa fallire la build" è falsa;
+- `offline-tested` e oltre richiedono una funzione `test_<scanner>_parser*` da
+  qualche parte in `tests/unit/` — se il test non c'è, l'affermazione "una
+  regressione fa fallire la build" è falsa. La ricerca copre l'intera suite, così
+  gli adapter si possono raggruppare per famiglia senza vincolarli a un file solo;
 - `production-ready` non convive con un blocker aperto;
 - un adapter registrato ma **non** dichiarato è anch'esso una deriva: sottostimare
   il progetto non è un default sicuro, è comunque un'informazione sbagliata.
@@ -86,8 +108,8 @@ l'evidenza — **mai** l'asserzione.
 # Ispezione: readiness + maturità per ogni motore
 olympus aegis capabilities
 
-# Gate: fallisce se meno di 4 integrazioni raggiungono live-tested
-olympus aegis capabilities --min-maturity live-tested --count 4
+# Gate: fallisce se meno di 8 integrazioni raggiungono live-tested
+olympus aegis capabilities --min-maturity live-tested --count 8
 ```
 
 Codici di uscita del gate:
